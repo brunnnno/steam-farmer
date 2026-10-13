@@ -419,6 +419,13 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (!achievementPending.has(key)) {
           releaseResource=budget.acquire('heavy');
           const readClient=clients.get(acc.id),readVersion=st.webSessionVersion;
+          const readStarted=Date.now();
+          const historyTask=requestedMethod!=='web'&&st.connected&&readClient
+            ?new Promise(resolve=>{
+              const timer=setTimeout(()=>resolve({unavailable:true}),2500);
+              Promise.resolve().then(()=>journal.forGame(st.steamId64,id)).then(receipts=>{clearTimeout(timer);resolve({receipts});},()=>{clearTimeout(timer);resolve({unavailable:true});});
+            })
+            :Promise.resolve({receipts:new Map()});
           const task = Promise.resolve().then(async () => {
             if(requestedMethod==='auto'&&st.connected&&readClient){try{const result=await protocolRead(readClient,id,{timeoutMs:2500});if(result.verified){method='protocol';return result;}}catch{}method='web';}
             else if(requestedMethod==='auto')method='web';
@@ -427,7 +434,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             result.readingMethod=method;
             if(!cfg.accounts.includes(acc)||states.get(acc.id)!==st||clients.get(acc.id)!==readClient||st.webSessionVersion!==readVersion)throw fail('The selected Steam session changed during verification. Refresh again.',409);
             let receipts=new Map(),historyUnavailable=false;
-            if(method==='protocol')try{receipts=await journal.forGame(st.steamId64,id);}catch{historyUnavailable=true;result.historyWarning='Persistent write history is unavailable. Achievement reads remain available, but activation is blocked.';}
+            if(method==='protocol'){const history=await historyTask;receipts=history.receipts||new Map();historyUnavailable=Boolean(history.unavailable);if(historyUnavailable)result.historyWarning='Persistent write history is unavailable. Achievement reads remain available, but activation is blocked.';}
             if(method==='protocol') for(const row of result.achievements||[]) {
               const receipt=receipts.get(row.apiname);
               if(receipt) row.lastWriteOutcome=receipt.outcome;
@@ -438,7 +445,8 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
               if(historyUnavailable&&row.unlocked!==true){row.compatibility={status:'insufficient_data',code:'history_unavailable',canUnlock:false,reason:result.historyWarning,action:'Restore the persistent history connection before activating achievements.'};if(row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false};}
             }
             achievementCache.set(key, result);
-            console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} webSession=${Boolean(st.webCookies)}`);
+            result.readDurationMs=Date.now()-readStarted;
+            console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} durationMs=${result.readDurationMs} webSession=${Boolean(st.webCookies)}`);
             if (result.outcome === 'catalog' && st.connected && Date.now() - st.lastWebRefresh > 120000) { st.lastWebRefresh = Date.now(); try { clients.get(acc.id)?.webLogOn(); } catch {} }
             return result;
           }).finally(() => achievementPending.delete(key));

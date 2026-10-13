@@ -3,6 +3,15 @@ const $ = id => document.getElementById(id);
 let csrf = '', activeAccountId = sessionStorage.getItem('sf_account') || '', accounts = [], active = null;
 let currentAchList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '', currentAchMethod = 'web';
 let experimentBusy = false;
+const achievementPreviews = new Map();
+function previewKey(account,id,method) { return JSON.stringify([account,active?.steamId64||active?.mySteamID||'',id,method]); }
+function rememberAchievements(key,data) {
+  const text=JSON.stringify(data);achievementPreviews.delete(key);
+  if(text.length*2>1024*1024)return;
+  achievementPreviews.set(key,{text,at:Date.now()});
+  let bytes=[...achievementPreviews.values()].reduce((sum,v)=>sum+v.text.length*2,0);
+  while(achievementPreviews.size>8||bytes>1024*1024){const first=achievementPreviews.keys().next().value;bytes-=achievementPreviews.get(first).text.length*2;achievementPreviews.delete(first);}
+}
 let filterStatus = 'all', filterRarity = 'all', currentSort = 'default', searchQuery = '';
 let filterCompatibility='all';
 let loginAttempt = null, loginTimer = null, loginTarget = null, loginSerial = 0, noticeTimer, statusBusy = false, searchSerial = 0, achSerial = 0;
@@ -17,7 +26,7 @@ async function api(endpoint, body) {
   }
   return data;
 }
-function showLock() { loginSerial++; csrf = ''; stopLoginPoll(); $('lockModal').style.display = 'flex'; $('addAccModal').style.display = 'none'; closeAchModal(); $('pinInput').value = ''; }
+function showLock() { achievementPreviews.clear();loginSerial++; csrf = ''; stopLoginPoll(); $('lockModal').style.display = 'flex'; $('addAccModal').style.display = 'none'; closeAchModal(); $('pinInput').value = ''; }
 async function checkAuth() { localStorage.removeItem('farmer_pin'); try { csrf = (await api('/api/panel/session')).csrf; $('lockModal').style.display = 'none'; await loadStatus(); } catch { showLock(); } }
 async function unlock() { try { csrf = (await api('/api/panel/login', { password: $('pinInput').value })).csrf; $('pinInput').value = ''; $('lockModal').style.display = 'none'; await loadStatus(); } catch (e) { notice(e.message); } }
 async function lock() { try { await api('/api/panel/logout', {}); showLock(); } catch (e) { notice(e.message); } }
@@ -159,19 +168,26 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
   $('achReadMode').value=method;
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';
   const serial = ++achSerial, account = achAccountId,readStarted=performance.now();
+  const cacheKey=previewKey(account,id,method),preview=achievementPreviews.get(cacheKey);
+  if(preview&&Date.now()-preview.at<300000){
+    currentAchMethod='cached';currentAchList=JSON.parse(preview.text).achievements||[];
+    $('achReadMessage').textContent='Previous reading — checking Steam now. Activation is unavailable until verification finishes.';
+    $('achPrivacyWarning').style.display='block';$('achievementSource').textContent='Previous reading · Updating…';renderAchModal();
+  }else if(preview)achievementPreviews.delete(cacheKey);
   $('gameRequirements').hidden=true;$('gameRequirements').open=false;loadGameRequirements(id,serial,account);
   try {
     const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':''}${method!=='web'?'&method='+encodeURIComponent(method):''}`);
     if (serial !== achSerial || account !== activeAccountId) return;
     currentAchMethod=data.readingMethod||method;
     currentAchList=(Array.isArray(data.achievements)?data.achievements:[]).map(a=>({ ...a, name:String(a.name||a.apiname||'Achievement'), description:String(a.description||''), unlocked:typeof a.unlocked==='boolean'?a.unlocked:null, percent:a.percent!=null && a.percent!=='' && Number.isFinite(Number(a.percent))?Number(a.percent):null }));
+    rememberAchievements(cacheKey,{achievements:currentAchList});
     $('achReadMessage').textContent=data.message || '';
     $('achPrivacyWarning').style.display=data.message ? 'block':'none';
     $('achGameTitle').textContent=title;
     $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')} · Read: ${((performance.now()-readStarted)/1000).toFixed(2)} s`;
     renderAchModal();
     if((filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
-  } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[])); } }
+  } catch(e) { if(serial===achSerial&&account===activeAccountId) { if(currentAchMethod==='cached'){$('achReadMessage').textContent='Previous reading only. Current verification failed: '+e.message;$('achievementSource').textContent='Previous reading · Verification failed';}else{$('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[]));} } }
 }
 async function loadGameRequirements(id,serial,account) {
   try {
@@ -218,6 +234,7 @@ function renderAchModal(page=0) {
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
   $('achProgressText').textContent=unknown===currentAchList.length && unknown>0 ? `${unknown} achievements · Personal state not verified` : `${confirmed}/${currentAchList.length-unknown} verified achievements unlocked${unknown ? ` · ${unknown} not verified` : ''}`;
   $('achProgressFill').style.width=(currentAchList.length?confirmed/currentAchList.length*100:0)+'%';
+  if(currentAchMethod==='cached')$('achProgressText').textContent='Previous reading · '+$('achProgressText').textContent;
   const availability=new Map(currentAchList.map(a=>[a,AchievementAvailability.classify(a,{method:currentAchMethod,allowActivation:active?.tokenSource==='environment'&&active?.connected!==false})]));
   const remaining=[...availability.values()].filter((v,i)=>currentAchList[i].unlocked!==true),count=status=>remaining.filter(v=>v.status===status).length;
   $('achCompatibilitySummary').textContent=currentAchList.length?(remaining.length===0?'All achievements are already unlocked.':`Pending: ${remaining.filter(v=>v.canAttempt).length} eligible to attempt · ${count('protected')} protected · ${count('unsupported')} unsupported · ${count('unknown')} unknown · ${count('rejected')+count('review')} need review. Eligibility is provisional; only a fresh Steam read can confirm a write.`):'';
@@ -297,7 +314,7 @@ async function completeSharedProgress(preview,{id,account,serial}){
   if(experimentBusy||serial!==achSerial||id!==currentAchAppId||account!==activeAccountId||currentAchMethod!=='protocol')return;
   const effects=preview.effects.map(e=>e.name+': '+e.effect+' (goal '+e.goal+')').join('\n');
   if(!confirm('Apply this reviewed shared-counter update?\n'+preview.counter.statName+': '+preview.counter.before+' → '+preview.counter.after+'\n'+effects+'\nThis changes Steam statistics, not verified game-save progress. No automatic retry will be sent.'))return;
-  experimentBusy=true;const title=currentAchGameName;
+  achievementPreviews.clear();experimentBusy=true;const title=currentAchGameName;
   try{const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:preview.apiname,mode:'shared',revision:preview.revision});notice(result.message);if(account===activeAccountId&&id===currentAchAppId)await openAchModal(id,title,true,'protocol');}
   catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
   finally{experimentBusy=false;if(account===activeAccountId&&id===currentAchAppId)renderAchModal();}
@@ -310,7 +327,7 @@ async function completeAchievementProgress(row){
     if(account!==activeAccountId||id!==currentAchAppId)return;
     const changes=preview.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join('\n');
     if(!confirm(`Complete "${preview.name}" in "${title}"?\n\n${changes}\n\n${preview.message}\nSteam will verify the reviewed changes and reject a stale preview. Compatibility remains provisional until Steam confirms.`))return;
-    const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname,mode:'progress',revision:preview.revision});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));
+    achievementPreviews.clear();const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname,mode:'progress',revision:preview.revision});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));
   }catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
   finally{experimentBusy=false;if(account===activeAccountId&&currentAchAppId===id&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
 }
@@ -318,7 +335,7 @@ async function unlockIndividualAchievement(row) {
   if(experimentBusy || currentAchMethod!=='protocol' || !row.compatibility?.canUnlock || !currentAchAppId) return;
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;
   if(!confirm(`Activate only "${row.name}" in "${title}" on the selected main Steam account? Steam will be re-read before and after one write. Compatibility is provisional until verified.`))return;
-  experimentBusy=true;renderAchModal();
+  achievementPreviews.clear();experimentBusy=true;renderAchModal();
   try {const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));}
   catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
   finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===id && $('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');else if($('achModal').style.display==='flex')renderAchModal();}

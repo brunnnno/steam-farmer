@@ -20,7 +20,7 @@ const row=(name,extra='')=>`<div class="achieveRow"><img src="https://example.te
 function source(name,url,body){return {body,finalUrl:url};}
 test('fuentes paralelas toleran API caída y enriquecen HTML personal con rareza global',async()=>{
   const called=[];let release;const gate=new Promise(r=>release=r);
-  const request=async(url,options)=>{called.push(url);assert.equal(options.timeoutMs,12000);await gate;
+  const request=async(url,options)=>{called.push(url);assert.equal(options.timeoutMs,6000);await gate;
     if(url.includes('GetGlobal'))throw Error('API down');
     if(url.includes('appdetails'))return source('',url,JSON.stringify({240:{success:true,data:{categories:[{id:22}]}}}));
     if(url.includes('xml=1'))return source('',url,'<error>unavailable</error>');

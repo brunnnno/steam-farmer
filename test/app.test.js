@@ -25,6 +25,18 @@ test('shared API stays read-only without persistent reservations and never bypas
   assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
 });
 const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
+test('persistent history starts concurrently with Steam reading and failures still block activation',async t=>{
+  let releaseSteam,historyStarted=false;
+  const steam=new Promise(resolve=>releaseSteam=resolve);
+  const journal={ready:async()=>{},status:()=>({available:false}),forGame:async()=>{historyStarted=true;throw Error('Unavailable');},close:async()=>{}};
+  const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]},{achievementJournal:journal,protocolReader:async()=>{
+    await steam;return {verified:true,achievements:[{apiname:'REAL',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}}]};
+  }});
+  await f.login();await f.request('/api/status');Object.assign(f.app.states.get('a'),{connected:true});f.app.clients.set('a',new FakeUser({}));
+  const pending=f.request('/api/achievements?accountId=a&appid=550&method=protocol');
+  await new Promise(resolve=>setTimeout(resolve,30));assert.equal(historyStarted,true);releaseSteam();
+  const {data}=await pending;assert.equal(data.achievements[0].compatibility.canUnlock,false);assert.match(data.historyWarning,/activation is blocked/);assert.ok(Number.isFinite(data.readDurationMs));
+});
 function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:TOKEN_EXPIRY})).toString('base64url')}.signature`; }
 class FakeLogin extends EventEmitter {
   static latest;

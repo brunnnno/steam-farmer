@@ -9,6 +9,24 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('reopening shows bounded previous reading immediately but blocks writes until fresh verification',async t=>{
+  const row={apiname:'REAL',name:'Old reading',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}};
+  let resolveRead,reads=0;const pending=new Promise(resolve=>resolveRead=resolve);
+  const w=ui(t,url=>url.includes('/api/achievements?')?(++reads===1?response([row]):pending):{});
+  w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');w.testUI.close();
+  const fresh=w.testUI.open(550,'Game',true,'protocol');
+  assert.match(w.document.getElementById('achListContainer').textContent,/Old reading/);
+  assert.match(w.document.getElementById('achProgressText').textContent,/Previous reading/);
+  w.confirm=()=>{throw Error('Stale data must not allow confirmation');};await w.testUI.unlock(row);await w.testUI.completeProgress({...row,progressSupport:{canComplete:true}});
+  resolveRead(response([{...row,name:'Fresh reading'}]));await fresh;
+  assert.match(w.document.getElementById('achListContainer').textContent,/Fresh reading/);assert.doesNotMatch(w.document.getElementById('achProgressText').textContent,/Previous/);
+});
+test('failed verification retains previous list with blocked actions and never crosses account boundaries',async t=>{
+  let reads=0;const w=ui(t,url=>{if(!url.includes('/api/achievements?'))return {};if(++reads===1)return response([{name:'Private previous list',apiname:'REAL',unlocked:true}]);throw Error('Steam unavailable');});
+  await w.testUI.open(550,'Game',false,'protocol');w.testUI.close();await w.testUI.open(550,'Game',true,'protocol');
+  assert.match(w.document.getElementById('achListContainer').textContent,/Private previous list/);assert.match(w.document.getElementById('achReadMessage').textContent,/verification failed/);
+  w.testUI.select('b');await w.testUI.open(550,'Game',false,'protocol');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Private previous list/);
+});
 test('game banners use bounded alternate sources and a designed placeholder after exhaustion',async t=>{
   const account={id:'a',name:'Main',games:[550],gameNames:{550:'Left 4 Dead 2'},connected:true,tokenSource:'environment',cardDropGames:[],sleepMode:{}};
   const w=ui(t,()=>({accounts:[account],presets:[],timezone:'UTC'}));w.testUI.authenticate();await w.testUI.load();const img=w.document.querySelector('.card-banner');
