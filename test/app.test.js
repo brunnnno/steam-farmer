@@ -125,11 +125,11 @@ test('Render origen automático, Secure cookie y CSRF detrás del proxy',async t
   assert.equal((await f.request('/api/panel/login',{password:PASSWORD},{headers:{Origin:'https://different.example'}})).response.status,403);
 });
 test('token privado de Render sobrevive recreación de datos sin renovación ni publicación',async t=>{
-  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();
+  const savedToken=token(), previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=savedToken;
   let f;try{f=await fixture(t,{}, {connect:true});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
-  await f.login();assert.equal(FakeUser.latest.options.renewRefreshTokens,false);assert.equal(FakeUser.latest.details.refreshToken,token());FakeUser.latest.emit('refreshToken','unexpected-new-token');assert.equal(f.app.vault.get('main'),null);const status=await f.request('/api/status');assert.equal(status.data.accounts[0].tokenSource,'environment');
-  assert.ok(!JSON.stringify(status.data).includes(token()));
-  assert.ok(!fs.readFileSync(path.join(f.directory,'config.json'),'utf8').includes(token()));
+  await f.login();assert.equal(FakeUser.latest.options.renewRefreshTokens,false);assert.equal(FakeUser.latest.details.refreshToken,savedToken);FakeUser.latest.emit('refreshToken','unexpected-new-token');assert.equal(f.app.vault.get('main'),null);const status=await f.request('/api/status');assert.equal(status.data.accounts[0].tokenSource,'environment');
+  assert.ok(!JSON.stringify(status.data).includes(savedToken));
+  assert.ok(!fs.readFileSync(path.join(f.directory,'config.json'),'utf8').includes(savedToken));
   assert.equal((await f.request('/api/steam/login',{accountId:'main',user:'owner',password:'pw'})).response.status,409);
   assert.equal((await f.request('/api/steam/logout',{accountId:'main'})).response.status,409);
   assert.equal((await f.request('/api/account/remove',{accountId:'main'})).response.status,409);
@@ -157,4 +157,12 @@ test('connection status confirms token account, persona and web session without 
   const result=await f.request('/api/status');const a=result.data.accounts.find(a=>a.id===done.data.accountId);
   assert.equal(a.connected,true);assert.equal(a.tokenAccountMatches,true);assert.equal(a.webSessionReady,true);assert.equal(a.linkedSteamId,'76561198000000001');assert.equal(a.profileName,'Steam profile name');assert.ok(!JSON.stringify(result.data).includes('SECRET'));
   assert.equal((await f.request('/api/steam/web-session',{accountId:a.id})).response.status,200);
+});
+test('public static assets support conditional caching while private APIs stay uncached', async t => {
+  const f = await fixture(t);
+  const first = await fetch(f.base + '/app.js'); assert.equal(first.status, 200);
+  const tag = first.headers.get('etag'); assert.ok(tag); assert.match(first.headers.get('cache-control'), /must-revalidate/);
+  const second = await fetch(f.base + '/app.js', { headers: { 'If-None-Match': tag } });
+  assert.equal(second.status, 304); assert.equal(await second.text(), '');
+  await f.login(); const status = await f.request('/api/status'); assert.equal(status.response.headers.get('cache-control'), 'no-store');
 });

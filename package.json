@@ -2,14 +2,14 @@
   "name": "steam-farmer",
   "version": "2.0.0",
   "private": true,
-  "description": "Panel personal para gestionar sesiones Steam y verificar logros reales",
+  "description": "Personal Steam session dashboard with verified achievement reading",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "start": "node bot.js",
     "test": "node --test",
-    "check": "node --check bot.js && node --check public/app.js"
+    "check": "node --check bot.js && node --check public/app.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js"
   },
   "dependencies": {
     "cheerio": "^1.1.0",

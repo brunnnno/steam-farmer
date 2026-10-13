@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let csrf = '', activeAccountId = sessionStorage.getItem('sf_account') || '', accounts = [], active = null;
-let currentAchList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '', selectedApinames = new Set();
+let currentAchList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '';
 let filterStatus = 'all', filterRarity = 'all', currentSort = 'default', searchQuery = '';
 let loginAttempt = null, loginTimer = null, loginTarget = null, loginSerial = 0, noticeTimer, statusBusy = false, searchSerial = 0, achSerial = 0;
 function notice(message) { $('notice').textContent = message; $('notice').hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').hidden = true, 10000); }
@@ -29,7 +29,7 @@ async function action(endpoint, body = {}, message) { try { const r = await reqA
 function element(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function button(label, callback, className = 'btn-action-sm') { const b = element('button', label, className); b.addEventListener('click', callback); return b; }
 function image(src, className) {
-  const img = element('img', undefined, className); img.alt = ''; try { const u = new URL(src); if (u.protocol === 'https:') img.src = u.href; } catch {}
+  const img = element('img', undefined, className); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; try { const u = new URL(src); if (u.protocol === 'https:') img.src = u.href; } catch {}
   img.addEventListener('error', () => img.hidden = true); return img;
 }
 async function loadStatus() {
@@ -42,7 +42,7 @@ async function loadStatus() {
     $('webhookInput').placeholder = data.webhookConfigured ? 'Webhook configured. Paste a new one to replace it.' : 'https://discord.com/api/webhooks/...';
     if (document.activeElement !== $('timezoneInput')) $('timezoneInput').value = data.timezone;
     $('achQueueVal').textContent = 'Actual Steam state';
-    if (!active) { $('connectionDetails').textContent=''; $('userLabel').textContent = 'Add your Steam account to get started'; $('statusText').textContent = 'No account'; $('badgeStatus').className = 'badge-status paused'; $('gamesGrid').replaceChildren(); $('timerVal').textContent = '00h 00m 00s'; $('hoursVal').textContent = '0.0 estimated hrs'; $('gamesCountVal').textContent = '0 / 32'; $('capacityPercent').textContent = '0%'; $('capacityFill').style.width = '0%'; return; }
+    if (!active) { $('connectionDetails').textContent=''; $('userLabel').textContent = 'Add your Steam account to get started'; $('statusText').textContent = 'No account'; $('badgeStatus').className = 'badge-status paused'; $('gamesGrid').replaceChildren(); gamesSnapshot=''; $('timerVal').textContent = '00h 00m 00s'; $('hoursVal').textContent = '0.0 estimated hrs'; $('gamesCountVal').textContent = '0 / 32'; $('capacityPercent').textContent = '0%'; $('capacityFill').style.width = '0%'; return; }
     $('userLabel').textContent = [active.name,active.profileName || active.user].filter(Boolean).join(' · ');
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${active.linkedSteamId?' · Steam ID: '+active.linkedSteamId:''}`;
     $('statusText').textContent = !active.connected ? (active.error || 'Disconnected') : active.isCollisionPaused ? 'Playing on another device' : active.isSleepPaused ? 'Sleep schedule active' : active.isPaused ? 'Paused' : active.cardFarming && !active.cardsReady ? 'Checking card drops' : active.isFarming ? 'Activity sent to Steam' : 'No active games';
@@ -59,12 +59,15 @@ async function loadStatus() {
     renderGames(active.games);
   } catch (e) { notice(e.message); } finally { statusBusy = false; }
 }
+let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '';
 function renderAccountsTabs(list, selected) {
+  const snapshot = JSON.stringify([selected,list.map(a=>[a.id,a.name,a.games.length])]); if(snapshot===tabsSnapshot)return; tabsSnapshot=snapshot;
   $('accountsTabsContainer').replaceChildren(...list.map(a => button(`${a.name} (${a.games.length})`, () => switchAccount(a.id), 'acc-pill' + (a.id === selected ? ' active' : ''))));
 }
 function switchAccount(id) { if (id === activeAccountId) return; activeAccountId = id; sessionStorage.setItem('sf_account', id); active = accounts.find(a=>a.id===id); closeAchModal(); loadStatus(); }
-function renderPresets(list) { $('presetsContainer').replaceChildren(element('span','Presets:')); for (const p of list) $('presetsContainer').append(button(p.name, () => applyPreset(p.key), 'chip')); }
+function renderPresets(list) { const snapshot=JSON.stringify(list);if(snapshot===presetsSnapshot)return;presetsSnapshot=snapshot; $('presetsContainer').replaceChildren(element('span','Presets:')); for (const p of list) $('presetsContainer').append(button(p.name, () => applyPreset(p.key), 'chip')); }
 function renderGames(games) {
+  const snapshot=JSON.stringify([activeAccountId,games,active.gameNames]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
   const grid = $('gamesGrid'); grid.replaceChildren();
   if (!games.length) { grid.append(element('p','Add games by title or AppID.')); return; }
   for (const id of games) {
@@ -110,7 +113,7 @@ async function openAchModal(id,title,forceRefresh=false) {
   }
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
-  currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; selectedApinames.clear(); currentAchList=[];
+  currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none';
   const serial = ++achSerial, account = achAccountId;
   try {
@@ -120,7 +123,7 @@ async function openAchModal(id,title,forceRefresh=false) {
     $('achReadMessage').textContent=data.message || '';
     $('achPrivacyWarning').style.display=data.message ? 'block':'none';
     $('achGameTitle').textContent=title;
-    $('estimatedTimeText').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')}`;
+    $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')}`;
     renderAchModal();
   } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message)); } }
 }
@@ -148,9 +151,7 @@ function renderAchModal() {
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified')); cont.append(row);
   }
   if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
-  $('selectAllCheckbox').disabled=true; $('selectedCountText').textContent='Read from Steam';
 }
-function toggleSelectAll() {} // Read-only achievements have no write selection.
 async function addGame(id,name) { const account=activeAccountId; const result=await action('/api/add',{appid:Number(id),name:name||''}); if(result && account===activeAccountId) $('searchInput').value=''; }
 function removeGame(id){return action('/api/remove',{appid:id});}
 function clearAll(){if(confirm('Remove all games from the manual list?'))return action('/api/clear-all');}
@@ -171,10 +172,11 @@ $('searchInput').addEventListener('input',()=>{
 $('searchInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&/^\d+$/.test($('searchInput').value.trim()))addGame(Number($('searchInput').value));});
 $('pinInput').addEventListener('keydown',event=>{if(event.key==='Enter')unlock();});
 document.addEventListener('click',event=>{if(!$('searchResults').contains(event.target)&&event.target!==$('searchInput'))$('searchResults').style.display='none';});
-setInterval(()=>{const start=active?.sessionStartTime, count=active?.runningGames?.length||0;const seconds=start&&active.isFarming?Math.max(0,Math.floor((Date.now()-start)/1000)):0;$('timerVal').textContent=`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m ${seconds%60}s`;$('hoursVal').textContent=(seconds/3600*count).toFixed(1)+' estimated hrs';},1000);
+setInterval(()=>{if(document.hidden)return;const start=active?.sessionStartTime, count=active?.runningGames?.length||0;const seconds=start&&active.isFarming?Math.max(0,Math.floor((Date.now()-start)/1000)):0;$('timerVal').textContent=`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m ${seconds%60}s`;$('hoursVal').textContent=(seconds/3600*count).toFixed(1)+' estimated hrs';},1000);
 document.addEventListener('keydown',event=>{if(event.key==='Escape' && $('achModal').style.display==='flex')closeAchModal();});
 $('achModal').addEventListener('click',event=>{if(event.target===$('achModal'))closeAchModal();});
-setInterval(loadStatus,5000);
+setInterval(()=>{if(!document.hidden)return loadStatus();},10000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)return loadStatus();});
 document.querySelector('[data-event-0]').addEventListener('click', function(event) { unlock(); });
 document.querySelector('[data-event-1]').addEventListener('click', function(event) { submitGuard(); });
 document.querySelector('[data-event-2]').addEventListener('click', function(event) { submitAddAccount(); });
@@ -189,7 +191,6 @@ document.querySelector('[data-event-10]').addEventListener('click', function(eve
 document.querySelector('[data-event-11]').addEventListener('click', function(event) { setFilter('rarity', 'rare'); });
 document.querySelector('[data-event-12]').addEventListener('change', function(event) { setSort(this.value); });
 document.querySelector('[data-event-13]').addEventListener('input', function(event) { onSearchInput(this.value); });
-document.querySelector('[data-event-14]').addEventListener('change', function(event) { toggleSelectAll(this.checked); });
 document.querySelector('[data-event-15]').addEventListener('click', function(event) { openAddAccModal(); });
 document.querySelector('[data-event-16]').addEventListener('click', function(event) { reloginAccount(); });
 document.querySelector('[data-event-17]').addEventListener('click', function(event) { logoutSteam(); });
