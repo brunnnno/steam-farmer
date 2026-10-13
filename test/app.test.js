@@ -205,6 +205,16 @@ test('individual unlock API preserves authentication, one-target validation, jou
   assert.ok(!f.app.cfg.achievementWrites['76561198000000001:550:SECOND']);
   const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.data.achievements[0].compatibility.validatedOnAccount,true);
 });
+test('progress preview is authenticated and read-only; activation requires its revision and keeps the journal',async t=>{
+  function kv(obj){const p=[];for(const[k,v]of Object.entries(obj))p.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));p.push(Buffer.from([8]));return Buffer.concat(p);}
+  const snapshot={eresult:1,game_id:'550',crc_stats:12,schema:kv({'550':{stats:{'7':{type:'4',bits:{'0':{name:'TARGET',progress:{max_val:'1',value:{operation:'statvalue',operand1:'COUNT'}}}}},'9':{type:'INT',name:'COUNT'}}}}),stats:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:0}]};
+  const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let writes=0,received;
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{progressSnapshotReader:async()=>snapshot,individualWriter:async(_,id,apiname,options)=>{writes++;received=options;options.beforeSend({appid:id,apiname,progressChanges:[{statName:'COUNT',before:0,after:1}]});return {outcome:'confirmed',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  const route='/api/achievement/progress-preview?accountId=main&appid=550&apiname=TARGET';assert.equal((await f.request(route)).response.status,401);await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
+  const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.progressChanges[0].after,1);assert.equal(writes,0);const body={accountId:'main',appid:550,apiname:'TARGET',mode:'progress'};
+  assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);assert.equal(writes,0);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,200);assert.equal(received.allowProgress,true);assert.equal(received.expectedRevision,preview.data.revision);assert.equal(writes,1);assert.equal((await f.request(route)).response.status,409);
+});
 test('post-reconnect persistence check reads Model Mania and sends no achievement write',async t=>{
   const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let writes=0;
   let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[550],gameNames:{550:'L4D2'}}]},{connect:true,protocolReader:async(_,id)=>({achievements:id===3764200?[{apiname:'46',name:'Model Mania',unlocked:true}]:[],verified:true,diagnostics:{serverControlled:0}})});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}

@@ -4,7 +4,7 @@ function ui(t, responder) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
-  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement};`);
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
@@ -79,4 +79,15 @@ test('publisher requirements show explanatory context as text without inventing 
 test('unknown personal states display the reason and next step without requiring hover or an unlock button',async t=>{
   const w=ui(t,()=>response([{name:'Unknown',unlocked:null,compatibility:{status:'insufficient_data',canUnlock:false,reason:'No personal state from Steam',action:'Open the official game and refresh'}}]));
   await w.testUI.open(123,'Game',true,'protocol');const text=w.document.getElementById('achListContainer').textContent;assert.match(text,/No personal state from Steam/);assert.match(text,/official game/);assert.doesNotMatch(text,/Unlock achievement/);
+});
+test('progress completion previews exact counter changes and cancellation sends no write',async t=>{
+  const target={name:'Progress',apiname:'TARGET',unlocked:false,hasProgressDependency:true,compatibility:{canUnlock:false,status:'dependency'},progressSupport:{canComplete:true}};
+  const urls=[];const w=ui(t,url=>{urls.push(url);return url.startsWith('/api/achievement/progress-preview')?{name:'Progress',revision:'a'.repeat(64),progressChanges:[{statName:'COUNT',before:3,after:10}],message:'Changes Steam statistics.'}:response([target]);});w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});let confirmation;w.confirm=text=>{confirmation=text;return false;};
+  await w.testUI.open(550,'Game',true,'protocol');await w.testUI.completeProgress(target);assert.match(confirmation,/COUNT: 3 → 10/);assert.ok(!urls.includes('/api/achievement/unlock'));
+});
+test('confirmed progress completion submits the selected target and reviewed revision only',async t=>{
+  const target={name:'Progress',apiname:'TARGET',unlocked:false,hasProgressDependency:true,compatibility:{canUnlock:false,status:'dependency'},progressSupport:{canComplete:true}};
+  const w=ui(t,()=>response([target]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});w.confirm=()=>true;await w.testUI.open(550,'Game',true,'protocol');let submitted;
+  w.fetch=async(url,options)=>({ok:true,json:async()=>url.startsWith('/api/achievement/progress-preview')?{name:'Progress',revision:'b'.repeat(64),progressChanges:[{statName:'COUNT',before:3,after:10}],message:'Changes Steam stats.'}:url==='/api/achievement/unlock'?(submitted=JSON.parse(options.body),{message:'Verified'}):response([target])});
+  await w.testUI.completeProgress(target);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'TARGET',mode:'progress',revision:'b'.repeat(64)});
 });

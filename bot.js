@@ -6,9 +6,9 @@ const crypto = require('node:crypto');
 const SteamUser = require('steam-user');
 const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require('steam-session');
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
-const { readProtocol } = require('./lib/steam-protocol');
+const { readProtocol,requestSnapshot } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
-const { unlockAchievement } = require('./lib/achievement-writer');
+const { unlockAchievement,prepare } = require('./lib/achievement-writer');
 const { gameRequirements } = require('./lib/game-requirements');
 const { scanCandidates } = require('./lib/achievement-candidates');
 const { runReadOnlyProbes } = require('./lib/achievement-probes');
@@ -60,6 +60,7 @@ function createApp(options = {}) {
   const Session = options.LoginSession || LoginSession;
   const steamRead = options.achievements || achievements;
   const protocolRead = options.protocolReader || readProtocol;
+  const progressSnapshotRead=options.progressSnapshotReader || requestSnapshot;
   const experimentWrite = options.experimentWriter || unlockModelMania;
   const individualWrite = options.individualWriter || unlockAchievement;
   const requirementsRead = options.requirementsReader || gameRequirements;
@@ -366,6 +367,7 @@ function createApp(options = {}) {
               if(receipt) row.lastWriteOutcome=receipt.outcome;
               if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
               if(receipt && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,status:receipt.outcome==='rejected'?'steam_rejected':receipt.outcome==='unknown'||receipt.outcome==='requested'?'pending_verification':'attempted',canUnlock:false,reason:receipt.message||'A write was already attempted for this achievement. The result must be checked; automatic retries are disabled.',code:receipt.diagnostic?.code||'previous_attempt',action:receipt.diagnostic?.action||'Refresh to verify the actual Steam state. A repeated write requires review.'};
+              if(receipt&&row.unlocked!==true&&row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,reason:row.compatibility.reason};
             }
             achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} webSession=${Boolean(st.webCookies)}`);
@@ -376,11 +378,25 @@ function createApp(options = {}) {
         }
         return json(res, 200, await achievementPending.get(key));
       }
+      if(url.pathname==='/api/achievement/progress-preview'&&req.method==='GET'){
+        const acc=getAccount(req,url),st=stateFor(acc.id);
+        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Progress preview requires the available connected main Steam account.',409);
+        rate(`progress-preview:${acc.id}`,10,60000);
+        const id=appId(url.searchParams.get('appid')),apiName=text(url.searchParams.get('apiname')||'',256),client=clients.get(acc.id);
+        if(cfg.achievementWrites?.[st.steamId64+':'+id+':'+apiName])throw fail('A write was already attempted for this achievement. Refresh to verify; retries require review.',409);
+        const identity=client.steamID?.toString(),snapshot=await progressSnapshotRead(client,id);
+        if(clients.get(acc.id)!==client||client.steamID?.toString()!==identity||!st.connected||st.isCollisionPaused)throw fail('The Steam session changed during the preview.',409);
+        const plan=prepare(snapshot,id,apiName,{allowProgress:true});
+        if(!plan.payload)throw fail('This achievement is already unlocked.',409);
+        return json(res,200,{appid:id,apiname:apiName,name:plan.target.name,revision:plan.revision,progressChanges:plan.progressChanges,message:'This operation changes the selected Steam achievement and its linked counter. Game saves and publisher progress are not verified.'});
+      }
       if (url.pathname === '/api/achievement/unlock' && req.method === 'POST') {
         const acc=getAccount(req,url,data),st=stateFor(acc.id);
         if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches)throw fail('Individual activation requires the connected main account managed by Render.',409);
         if(st.isCollisionPaused)throw fail('Stop playing on the other device before unlocking an achievement.',409);
         const id=appId(data.appid),apiName=text(data.apiname,256);
+        const mode=data.mode||'achievement';if(!['achievement','progress'].includes(mode))throw fail('Unknown activation mode.');
+        if(mode==='progress'&&(typeof data.revision!=='string'||!/^[a-f0-9]{64}$/.test(data.revision)))throw fail('Review a fresh progress preview before confirming.');
         if(!apiName||data.achievements!==undefined||data.unlock===false)throw fail('Select exactly one achievement to activate.');
         rate(`individual:${acc.id}`,5,60000);
         if(experimentBusy.has(acc.id))throw fail('An achievement activation is already running.',409);
@@ -388,7 +404,7 @@ function createApp(options = {}) {
         experimentBusy.add(acc.id);
         const auditKey=st.steamId64+':'+id+':'+apiName;
         try {
-          const result=await individualWrite(client,id,apiName,{beforeSend:evidence=>{
+          const result=await individualWrite(client,id,apiName,{allowProgress:mode==='progress',expectedRevision:mode==='progress'?data.revision:undefined,beforeSend:evidence=>{
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('The Steam session changed.',409);
             cfg.achievementWrites ||= {};
             const original=cfg.achievementExperiments?.[st.steamId64+':'+id];

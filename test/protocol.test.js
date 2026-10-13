@@ -44,7 +44,7 @@ test('protocol timeout and disconnection release pending callbacks',async()=>{
   const pending=readProtocol(c,550);c.emit('disconnected');await assert.rejects(pending,/disconnected/);assert.equal(c._jobs.size,0);
 });
 test('hidden attributes and numeric progress are read independently from write permissions',()=>{
-  const data=kv({'550':{stats:{'7':{type:'4',bits:{'0':{name:'HIDDEN',display:{hidden:'1',name:{english:'Hidden'}},progress:{max_val:'10',value:{operand1:'COUNTER'}}}}},'9':{type:'INT',name:'COUNTER'}}}});
+  const data=kv({'550':{stats:{'7':{type:'4',bits:{'0':{name:'HIDDEN',display:{hidden:'1',name:{english:'Hidden'}},progress:{max_val:'10',value:{operation:'statvalue',operand1:'COUNTER'}}}}},'9':{type:'INT',name:'COUNTER'}}}});
   const r=parseSnapshot(snap({schema:data,stats:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:3}]}),550);const a=r.achievements[0];
   assert.equal(a.hidden,true);assert.equal(a.serverControlled,false);assert.equal(a.compatibility.status,'dependency');assert.equal(a.progressDetails.currentValue,3);assert.equal(a.progressDetails.maximum,10);
 });

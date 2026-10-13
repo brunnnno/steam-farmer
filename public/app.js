@@ -165,7 +165,7 @@ function renderAchModal() {
     if(a.hidden===true)info.append(element('small',' · Hidden achievement'));
     if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}${a.progressDetails.statName?' ('+a.progressDetails.statName+')':''}`));
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
-    if(a.hasProgressDependency) info.append(element('small',' · Progress dependency: experimental write unavailable'));
+    if(a.hasProgressDependency) info.append(element('small',' · Linked progress statistic'));
     if(currentAchMethod==='protocol' && a.compatibility) {
       const labels={provisional:'Provisional compatibility',restricted:'Restricted',dependency:'Progress dependent',insufficient_data:'Insufficient data',steam_rejected:'Steam rejected the write',pending_verification:'Verification pending',attempted:'Previously attempted'};
       const label=element('div',a.compatibility.validatedOnAccount?'Verified on this account':labels[a.compatibility.status]||'Insufficient data','ach-compatibility');
@@ -173,12 +173,25 @@ function renderAchModal() {
       if(a.unlocked===false && active?.tokenSource==='environment') {
         const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));
         unlock.disabled=experimentBusy || !a.compatibility.canUnlock;unlock.title=a.compatibility.reason;info.append(unlock);
+        if(a.hasProgressDependency){const progress=button(experimentBusy?'Checking Steam…':'Preview progress completion',()=>completeAchievementProgress(a));progress.disabled=experimentBusy||!a.progressSupport?.canComplete;progress.title=a.progressSupport?.reason||'Progress completion is unavailable.';info.append(progress);if(!a.progressSupport?.canComplete)info.append(element('small',a.progressSupport?.reason||'The linked counter has not been checked.','ach-write-reason'));}
       }
       if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.reason,'ach-write-reason'),element('small',a.compatibility.action||'','ach-write-reason'));
     } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Use Verify directly to check activation compatibility.','ach-write-reason'));
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
   }
   if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+}
+async function completeAchievementProgress(row){
+  if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canComplete||!currentAchAppId)return;
+  const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;experimentBusy=true;renderAchModal();
+  try{
+    const preview=await api('/api/achievement/progress-preview?accountId='+encodeURIComponent(account)+'&appid='+id+'&apiname='+encodeURIComponent(row.apiname));
+    if(account!==activeAccountId||id!==currentAchAppId)return;
+    const changes=preview.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join('\n');
+    if(!confirm(`Complete "${preview.name}" in "${title}"?\n\n${changes}\n\n${preview.message}\nSteam will verify the reviewed changes and reject a stale preview. Compatibility remains provisional until Steam confirms.`))return;
+    const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname,mode:'progress',revision:preview.revision});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));
+  }catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
+  finally{experimentBusy=false;if(account===activeAccountId&&currentAchAppId===id&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
 }
 async function unlockIndividualAchievement(row) {
   if(experimentBusy || currentAchMethod!=='protocol' || !row.compatibility?.canUnlock || !currentAchAppId) return;
