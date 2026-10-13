@@ -25,6 +25,11 @@ test('shared API stays read-only without persistent reservations and never bypas
   assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
 });
 const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
+test('rarity metadata cache does not substitute an API-only result for a title-enriched XML lookup',async t=>{
+  const modes=[];const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]},{percentagesReader:async(id,options)=>{modes.push(options.includeTitles);return {appid:id,percentages:{API:10},...(options.includeTitles?{titlePercentages:{title:10}}:{})};}});
+  await f.login();const route='/api/achievement/percentages?accountId=a&appid=550';await f.request(route);
+  assert.equal((await f.request(route+'&titles=1')).data.titlePercentages.title,10);await f.request(route+'&titles=1');assert.deepEqual(modes,[false,true]);
+});
 test('decimal library search is authenticated, owned-only, cached and bound to its library revision',async t=>{
   const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f,ownedCalls=0,reads=0;
   try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{protocolReader:async()=>{reads++;return {achievements:[]};}});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}

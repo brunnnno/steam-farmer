@@ -76,7 +76,7 @@ function createApp(options = {}) {
   const experimentWrite = options.experimentWriter || unlockModelMania;
   const individualWrite = options.individualWriter || unlockAchievement;
   const requirementsRead = options.requirementsReader || gameRequirements;
-  const percentagesRead=options.percentagesReader||globalPercentages;
+  const percentagesRead=options.percentagesReader||((id,options)=>globalPercentages(id,undefined,options));
   const requirementsCache = new ResultCache({maxEntries:32,maxBytes:128*1024,ttl:3600000}),requirementsPending=new Map();
   const experimentBusy = new Set();
   const achievementCache = new ResultCache({maxBytes:2*1024*1024,maxEntries:24}), achievementPending = new Map();
@@ -403,11 +403,12 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       if(url.pathname==='/api/achievement/percentages'&&req.method==='GET'){
         getAccount(req,url);const id=appId(url.searchParams.get('appid'));rate(`percentages:${token}`,20,60000);
-        const cached=percentageCache.get(String(id));if(cached)return json(res,200,cached);
-        if(!percentagePending.has(id))percentagePending.set(id,(async()=>{
-          const result=await percentagesRead(id);percentageCache.set(String(id),result);return result;
-        })().finally(()=>percentagePending.delete(id)));
-        return json(res,200,await percentagePending.get(id));
+        const includeTitles=url.searchParams.get('titles')==='1',key=String(id)+(includeTitles?':titles':':api');
+        const cached=percentageCache.get(key);if(cached)return json(res,200,cached);
+        if(!percentagePending.has(key))percentagePending.set(key,(async()=>{
+          const result=await percentagesRead(id,{includeTitles});if(Object.keys(result.percentages||{}).length||Object.keys(result.titlePercentages||{}).length)percentageCache.set(key,result);return result;
+        })().finally(()=>percentagePending.delete(key)));
+        return json(res,200,await percentagePending.get(key));
       }
       if (url.pathname === '/api/achievements' && req.method === 'GET') {
         rate(`ach:${token}`, 40); const acc = getAccount(req, url); const st = stateFor(acc.id);

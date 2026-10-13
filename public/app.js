@@ -186,7 +186,7 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
     $('achGameTitle').textContent=title;
     $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')} · Read: ${((performance.now()-readStarted)/1000).toFixed(2)} s`;
     renderAchModal();
-    if((filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
+    if((filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
   } catch(e) { if(serial===achSerial&&account===activeAccountId) { if(currentAchMethod==='cached'){$('achReadMessage').textContent='Previous reading only. Current verification failed: '+e.message;$('achievementSource').textContent='Previous reading · Verification failed';}else{$('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[]));} } }
 }
 async function loadGameRequirements(id,serial,account) {
@@ -206,22 +206,28 @@ function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(cu
 function setFilter(type,val) {
   if(type==='status')filterStatus=val;else filterRarity=filterRarity===val?'all':val;
   renderAchModal();
-  if(type==='rarity'&&filterRarity!=='all'&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
+  if(type==='rarity'&&filterRarity!=='all'&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
 let percentageRequest=null,percentageFetchedSerial=-1;
 function setSort(val) {
   currentSort=val;renderAchModal();
-  if(['percentage_desc','rarity_common','rarity_rare'].includes(val)&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
+  if(['percentage_desc','rarity_common','rarity_rare'].includes(val)&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
 async function loadAchievementPercentages(){
   const serial=achSerial,id=currentAchAppId,account=achAccountId,key=serial+':'+account+':'+id;
   if(!id||percentageRequest===key||percentageFetchedSerial===serial)return;percentageRequest=key;renderAchModal();
   try{
-    const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}`);
+    const includeTitles=currentAchMethod!=='protocol'||currentAchList.some(a=>!a.apiname);
+    const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}${includeTitles?'&titles=1':''}`);
     if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
     if(!result.percentages||typeof result.percentages!=='object'||Array.isArray(result.percentages))throw Error('Steam did not return usable rarity percentages.');
     percentageFetchedSerial=serial;
-    currentAchList=currentAchList.map(a=>{const value=a.apiname&&Object.hasOwn(result.percentages,a.apiname)?result.percentages[a.apiname]:a.percent;const p=typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:a.percent;return {...a,percent:p,tier:p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common'};});renderAchModal();
+    const normalize=value=>String(value).trim().replace(/\s+/g,' ').toLowerCase(),apis=new Map(),titles=new Map();
+    for(const [name,value]of Object.entries(result.percentages)){const key=normalize(name);apis.set(key,apis.has(key)?null:value);}
+    for(const row of currentAchList){const key=normalize(row.name);titles.set(key,(titles.get(key)||0)+1);}
+    currentAchList=currentAchList.map(a=>{let value=a.apiname&&Object.hasOwn(result.percentages,a.apiname)?result.percentages[a.apiname]:a.apiname?apis.get(normalize(a.apiname)):null;
+      if(value==null&&titles.get(normalize(a.name))===1)value=result.titlePercentages?.[normalize(a.name)];
+      const p=typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:a.percent;return {...a,percent:p,tier:p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common'};});renderAchModal();
     if(currentAchList.every(a=>a.percent===null))notice('Steam did not return percentages for these achievements. Unknown values remain at the end.');
   }catch(e){if(serial===achSerial)notice(e.message);}finally{if(percentageRequest===key)percentageRequest=null;if(serial===achSerial&&account===activeAccountId&&id===currentAchAppId)renderAchModal();}
 }

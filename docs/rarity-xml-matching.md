@@ -1,0 +1,11 @@
+# Rarity for community achievement lists
+
+The Left 4 Dead 2 screenshot showed a verified Steam Community XML list with all rarity values unknown. Public Steam API and global community payloads retrieved on 2026-10-13 each supplied 101 percentage entries. Parsing those captured payloads with the updated helper produced 101 API percentages and 101 unique English-title percentages (39 below 5%, 37 from 5% to below 15%, 20 from 15% to below 40%). The user's raw XML was not captured, so the exact identifier variation is not proven.
+
+Rarity lookups now tolerate case variations in API names only when the folded key is unique. Community/XML reading additionally requests global Steam Community percentages keyed by unique normalized English titles. Duplicate upstream titles or duplicate personal titles cannot be used for title matching. These matches update percent/tier only; API identifiers, achievement state, dates, progress and write compatibility are never changed or inferred from titles. True zero remains valid and unknown values remain unknown.
+
+Rows without API names now trigger rarity lookup too. The metadata mode has a separate cache/pending key from API-only responses. Direct protocol reads continue using the API-only lookup, avoiding an extra community request. Both optional sources retain 5-second/512-KiB limits, execute in parallel and tolerate one unavailable source. Empty results are not cached for an hour. No delay is added to initial achievement reading; lookup happens on demand for rarity/sorting.
+
+Local Node outbound requests timed out during one live probe; independently downloaded public Steam responses were used for parser validation. No authenticated user achievement read or write was performed during this fix. Full UI/network verification after publication still needs the user's panel.
+
+Remaining activation work: implement and validate FLOAT writes on an explicitly reviewed real example; extend shared support beyond one new unlock; evaluate multi-counter/complex expressions and AVGRATE independently. Publisher/server-controlled permissions remain unavailable to client writes. Existing recorded success in several games does not imply universal compatibility.
