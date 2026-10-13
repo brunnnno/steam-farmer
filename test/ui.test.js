@@ -9,6 +9,31 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('rarity buttons fetch missing direct-read percentages once and use the latest selected tier',async t=>{
+  const calls=[],rows=['Zero','Epic','Epic upper','Rare','Rare upper','Common','Unknown'].map((name,i)=>({apiname:'A'+i,name,unlocked:i===0,percent:null}));
+  let resolveLookup;const lookup=new Promise(resolve=>{resolveLookup=resolve;});
+  const w=ui(t,url=>{calls.push(url);return url.includes('/percentages?')?lookup:response(rows);});await w.testUI.open(440,'TF2',false,'protocol');
+  w.document.querySelector('[data-val="epic"]').click();assert.match(w.document.getElementById('achListContainer').textContent,/Loading rarity/);
+  w.document.querySelector('[data-val="rare"]').click();await new Promise(r=>setImmediate(r));assert.equal(calls.filter(url=>url.includes('/percentages?')).length,1);
+  resolveLookup({percentages:{A0:0,A1:5,A2:14.999,A3:15,A4:39.999,A5:40}});await new Promise(r=>setImmediate(r));
+  const names=()=>[...w.document.querySelectorAll('.ach-title')].map(el=>el.textContent);
+  assert.deepEqual(names(),['Rare','Rare upper']);w.document.querySelector('[data-val="epic"]').click();assert.deepEqual(names(),['Epic','Epic upper']);
+  w.document.querySelector('[data-val="mythic"]').click();assert.deepEqual(names(),['Zero']);assert.equal(w.document.querySelectorAll('.verified').length,1);
+  assert.equal(calls.filter(url=>url.includes('/api/achievements?')).length,1);assert.ok(!calls.some(url=>url.includes('/unlock')));
+});
+test('missing global percentages explain empty rarity results without inventing zero rarity',async t=>{
+  const w=ui(t,url=>url.includes('/percentages?')?{percentages:{}}:response([{apiname:'UNKNOWN',name:'Real achievement',unlocked:true,percent:null}]));
+  await w.testUI.open(550,'Game',false,'protocol');w.document.querySelector('[data-val="mythic"]').click();await new Promise(r=>setImmediate(r));
+  assert.equal(w.document.querySelectorAll('.ach-title').length,0);assert.match(w.document.getElementById('achListContainer').textContent,/has not supplied rarity percentages/);
+  assert.equal(w.document.getElementById('achRarityMessage').hidden,false);assert.match(w.document.getElementById('achRarityMessage').textContent,/not treated as 0%/);
+  w.document.querySelector('[data-val="mythic"]').click();assert.equal(w.document.querySelectorAll('.ach-title').length,1);assert.match(w.document.getElementById('achListContainer').textContent,/Unknown rarity/);
+});
+test('stale percentage lookup never populates a different game after using rarity filters',async t=>{
+  let resolveLookup;const lookup=new Promise(resolve=>{resolveLookup=resolve;});
+  const w=ui(t,url=>url.includes('/percentages?')?lookup:response([{apiname:'SAME',name:url.includes('appid=440')?'Old game':'New game',unlocked:false,percent:null}]));
+  await w.testUI.open(440,'Old',false,'protocol');w.document.querySelector('[data-val="rare"]').click();await w.testUI.open(550,'New',false,'protocol');
+  resolveLookup({percentages:{SAME:20}});await new Promise(r=>setImmediate(r));assert.match(w.document.getElementById('achListContainer').textContent,/New game/);assert.match(w.document.getElementById('achListContainer').textContent,/Unknown rarity/);
+});
 test('shared update displays every effect and cancellation never sends a write',async t=>{
   const calls=[],row={name:'Doctor',apiname:'DOCTOR',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewShared:true}};
   const preview={appid:440,apiname:'DOCTOR',name:'Doctor',canActivate:true,revision:'a'.repeat(64),counter:{statName:'HEALED',before:0,after:25000},effects:[{apiname:'DOCTOR',name:'Doctor',goal:25000,effect:'would_unlock'},{apiname:'CHIEF',name:'Chief',goal:1000000,effect:'progress_only'}],message:'Review all effects.'};

@@ -163,6 +163,7 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
     $('achGameTitle').textContent=title;
     $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')} · Read: ${((performance.now()-readStarted)/1000).toFixed(2)} s`;
     renderAchModal();
+    if((filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
   } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[])); } }
 }
 async function loadGameRequirements(id,serial,account) {
@@ -179,24 +180,34 @@ async function loadGameRequirements(id,serial,account) {
 }
 function closeAchModal() { document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren(); }
 function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true,$('achReadMode').value); }
-function setFilter(type,val) { if(type==='status') filterStatus=val; else filterRarity=filterRarity===val?'all':val; renderAchModal(); }
-let percentageRequest=null;
+function setFilter(type,val) {
+  if(type==='status')filterStatus=val;else filterRarity=filterRarity===val?'all':val;
+  renderAchModal();
+  if(type==='rarity'&&filterRarity!=='all'&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
+}
+let percentageRequest=null,percentageFetchedSerial=-1;
 function setSort(val) {
   currentSort=val;renderAchModal();
   if(['percentage_desc','rarity_common','rarity_rare'].includes(val)&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
 }
 async function loadAchievementPercentages(){
   const serial=achSerial,id=currentAchAppId,account=achAccountId,key=serial+':'+account+':'+id;
-  if(!id||percentageRequest===key)return;percentageRequest=key;
+  if(!id||percentageRequest===key||percentageFetchedSerial===serial)return;percentageRequest=key;renderAchModal();
   try{
     const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}`);
     if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
-    currentAchList=currentAchList.map(a=>{const p=a.apiname&&Object.hasOwn(result.percentages,a.apiname)?result.percentages[a.apiname]:a.percent;return {...a,percent:p,tier:p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common'};});renderAchModal();
+    if(!result.percentages||typeof result.percentages!=='object'||Array.isArray(result.percentages))throw Error('Steam did not return usable rarity percentages.');
+    percentageFetchedSerial=serial;
+    currentAchList=currentAchList.map(a=>{const value=a.apiname&&Object.hasOwn(result.percentages,a.apiname)?result.percentages[a.apiname]:a.percent;const p=typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:a.percent;return {...a,percent:p,tier:p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common'};});renderAchModal();
     if(currentAchList.every(a=>a.percent===null))notice('Steam did not return percentages for these achievements. Unknown values remain at the end.');
-  }catch(e){if(serial===achSerial)notice(e.message);}finally{if(percentageRequest===key)percentageRequest=null;}
+  }catch(e){if(serial===achSerial)notice(e.message);}finally{if(percentageRequest===key)percentageRequest=null;if(serial===achSerial&&account===activeAccountId&&id===currentAchAppId)renderAchModal();}
 }
 function onSearchInput(val) { searchQuery=val.trim().toLowerCase(); renderAchModal(); }
 function renderAchModal(page=0) {
+  const rarityMissing=currentAchList.filter(a=>a.percent===null).length,rarityLoading=percentageRequest===achSerial+':'+achAccountId+':'+currentAchAppId;
+  const rarityRelevant=filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort);
+  $('achRarityMessage').hidden=!rarityRelevant||!rarityMissing;
+  $('achRarityMessage').textContent=rarityLoading?'Loading community unlock percentages from Steam…':rarityMissing===currentAchList.length?'Steam rarity percentages are unavailable. Unknown rarity is not treated as 0%.':`${rarityMissing} achievements have unknown rarity and ${filterRarity!=='all'?'are excluded from rarity filters':'remain last in percentage sorting'}.`;
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
   $('achProgressText').textContent=unknown===currentAchList.length && unknown>0 ? `${unknown} achievements · Personal state not verified` : `${confirmed}/${currentAchList.length-unknown} verified achievements unlocked${unknown ? ` · ${unknown} not verified` : ''}`;
   $('achProgressFill').style.width=(currentAchList.length?confirmed/currentAchList.length*100:0)+'%';
@@ -234,7 +245,7 @@ function renderAchModal(page=0) {
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
   }
   if(pages>1){const nav=element('div',undefined,'ach-pagination');if(page>0)nav.append(button('Previous',()=>{renderAchModal(page-1);cont.scrollTop=0;}));nav.append(element('span',`Page ${page+1} of ${pages} · ${list.length} matching achievements`));if(page+1<pages)nav.append(button('Next',()=>{renderAchModal(page+1);cont.scrollTop=0;}));cont.append(nav);}
-  if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+  if(!list.length) { const message=element('p',filterRarity!=='all'&&rarityLoading?'Loading rarity percentages from Steam…':filterRarity!=='all'&&rarityMissing===currentAchList.length&&currentAchList.length?'Steam has not supplied rarity percentages for this list. Try again later or use Show all.':currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
 }
 async function refreshWriteHistory(){
   if(!activeAccountId)return;
