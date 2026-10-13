@@ -47,7 +47,6 @@ const PRESETS = {
   }
 };
 
-// Cliente HTTP con soporte de cookies y seguimiento de redirecciones
 function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   if (typeof customHeaders === 'function') {
     cb = customHeaders;
@@ -97,7 +96,6 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   }
 }
 
-// Webhook de Discord con proxy anti-1015
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
@@ -164,7 +162,6 @@ client.on('loggedOn', () => {
     guardarConfig();
   }
   client.setPersona(cfg.personaState);
-  // Solicita la sesión web para generar cookies de autenticación
   try { client.webLogOn(); } catch (e) {}
   resolverNombresFaltantes();
   actualizarFarmeo();
@@ -173,13 +170,11 @@ client.on('loggedOn', () => {
 
 client.on('webSession', (sessionID, cookies) => {
   webCookies = cookies.join('; ');
-  console.log('[+] Sesión web de Steam autenticada con éxito.');
   if (cfg.cardFarming) escanearCromos();
 });
 
 client.on('error', (e) => console.error('Error Steam:', e.message));
 
-// Anti-Colisión Instantáneo
 client.on('playingElsewhere', () => {
   console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC. Pausando bot...');
   isCollisionPaused = true;
@@ -195,7 +190,6 @@ client.on('playingElsewhere', () => {
   }, 10 * 60 * 1000);
 });
 
-// Comandos por Chat de Steam
 client.on('friendMessage', (steamID, message) => {
   const msg = message.trim().toLowerCase();
   const args = msg.split(' ');
@@ -219,7 +213,6 @@ client.on('friendMessage', (steamID, message) => {
   }
 });
 
-// Motor de logros orgánicos
 setInterval(() => {
   if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
   const now = Date.now();
@@ -353,7 +346,6 @@ function getTag(body, tag) {
   return content;
 }
 
-// Extractor XML de perfil
 function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   const achievements = [];
   const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
@@ -399,7 +391,6 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   return achievements;
 }
 
-// Extractor HTML por bloques
 function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   const list = [];
   const parts = html.split('<div class="achieveRow">');
@@ -446,9 +437,8 @@ function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   return list;
 }
 
-// Extractor que consulta tanto perfil personal como catálogo global
+// Extractor con detección de cuenta privada
 function obtenerLogrosJuego(appid, cb) {
-  // 1. Obtener porcentajes globales
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -465,36 +455,42 @@ function obtenerLogrosJuego(appid, cb) {
     const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
     const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
 
-    // 2. Consulta de logros personales por XML
     const targetXmlUrl = userSteamId
       ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
       : `https://steamcommunity.com/my/stats/${appid}/?xml=1`;
 
     fetchWithRedirects(targetXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
-      if (!errXml && xmlData && xmlData.includes('<achievement') && !xmlData.includes('<error>')) {
-        const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
-        if (list.length > 0) return cb(list);
+      let isProfilePrivate = false;
+      if (xmlData && (xmlData.includes('profile is private') || xmlData.includes('Specified profile could not be found') || xmlData.includes('<error>'))) {
+        isProfilePrivate = true;
       }
 
-      // 3. Fallback: Página web de estadísticas de usuario autenticado
+      if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
+        const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
+        if (list.length > 0) return cb({ achievements: list, isPrivate: false });
+      }
+
       const targetUserHtml = userSteamId
         ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?tab=achievements&l=spanish`
         : `https://steamcommunity.com/my/stats/${appid}/?tab=achievements&l=spanish`;
 
       fetchWithRedirects(targetUserHtml, xmlHeaders, 5, (errUHtml, uHtmlData) => {
-        if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow')) {
-          const listU = parseAchievementsFromHtml(uHtmlData, percentMap, unlockedLocally);
-          if (listU.length > 0) return cb(listU);
+        if (uHtmlData && (uHtmlData.includes('profile_private') || uHtmlData.includes('Este perfil es privado') || uHtmlData.includes('This profile is private'))) {
+          isProfilePrivate = true;
         }
 
-        // 4. Fallback final: Catálogo público global de Steam
+        if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow') && !isProfilePrivate) {
+          const listU = parseAchievementsFromHtml(uHtmlData, percentMap, unlockedLocally);
+          if (listU.length > 0) return cb({ achievements: listU, isPrivate: false });
+        }
+
         const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
         fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
           if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
             const listG = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
-            if (listG.length > 0) return cb(listG);
+            if (listG.length > 0) return cb({ achievements: listG, isPrivate: isProfilePrivate });
           }
-          cb([]);
+          cb({ achievements: [], isPrivate: isProfilePrivate });
         });
       });
     });
@@ -540,11 +536,11 @@ const server = http.createServer((req, res) => {
 
   if (parsedUrl.pathname === '/api/achievements' && req.method === 'GET') {
     const appid = parseInt(parsedUrl.query.appid, 10);
-    if (!appid) return res.end('[]');
+    if (!appid) return res.end(JSON.stringify({ achievements: [], isPrivate: false }));
 
-    obtenerLogrosJuego(appid, (list) => {
+    obtenerLogrosJuego(appid, (result) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(list));
+      res.end(JSON.stringify(result));
     });
     return;
   }
@@ -850,6 +846,12 @@ const server = http.createServer((req, res) => {
     .ach-progress-bar-wrap { width: 220px; height: 8px; background: rgba(0,0,0,0.4); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); margin-top: 6px; }
     .ach-progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width 0.3s ease; }
     
+    .privacy-banner {
+      background: rgba(245, 158, 11, 0.12); border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 12px 24px; display: none; color: #fde68a; font-size: 0.85rem; line-height: 1.4;
+    }
+    .privacy-banner strong { color: #fff; }
+
     .ach-toolbar {
       padding: 12px 24px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--card-border);
       display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
@@ -982,6 +984,10 @@ const server = http.createServer((req, res) => {
           </div>
         </div>
         <button class="btn-action-sm" onclick="closeAchModal()">✕ Cerrar</button>
+      </div>
+
+      <div class="privacy-banner" id="achPrivacyWarning">
+        ⚠️ <strong>Aviso de Privacidad:</strong> Tus <em>«Detalles de los juegos»</em> están configurados en <strong>Privado</strong> o <em>Solo amigos</em> en Steam. El bot muestra el catálogo general, pero Steam no permite leer qué logros tienes conseguidos hasta que cambies esa opción a <strong>Público</strong> en tu perfil de Steam.
       </div>
 
       <div class="ach-toolbar">
@@ -1266,7 +1272,6 @@ const server = http.createServer((req, res) => {
       });
     }
 
-    // Modal de Logros
     async function openAchModal(appid, title) {
       currentAchAppId = appid;
       currentAchGameName = title;
@@ -1278,13 +1283,19 @@ const server = http.createServer((req, res) => {
       document.getElementById('achGameTitle').innerText = title;
       document.getElementById('achProgressText').innerText = 'Consultando base de datos de Steam...';
       document.getElementById('achProgressFill').style.width = '0%';
-      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Cargando catálogo completo de trofeos y sincronizando tu perfil...</p>';
+      document.getElementById('achPrivacyWarning').style.display = 'none';
+      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Cargando catálogo de trofeos y verificando privacidad...</p>';
       document.getElementById('achModal').style.display = 'flex';
       updateBatchToolbar();
 
       try {
         var res = await fetch('/api/achievements?appid=' + appid);
-        currentAchList = await res.json();
+        var data = await res.json();
+        
+        currentAchList = Array.isArray(data) ? data : (data.achievements || []);
+        var isPrivate = data.isPrivate || false;
+
+        document.getElementById('achPrivacyWarning').style.display = isPrivate ? 'block' : 'none';
         renderAchModal();
       } catch (e) {
         document.getElementById('achProgressText').innerText = 'Error al cargar';
@@ -1438,7 +1449,7 @@ const server = http.createServer((req, res) => {
             row.querySelector('.ach-checkbox').checked = true;
           } else {
             row.classList.remove('selected');
-            row.querySelector('.ach-checkbox').false;
+            row.querySelector('.ach-checkbox').checked = false;
           }
         }
       });
@@ -1507,7 +1518,6 @@ const server = http.createServer((req, res) => {
       loadStatus();
     }
 
-    // Buscador interactivo
     var debounceTimer = null;
     var searchInput = document.getElementById('searchInput');
     var searchResults = document.getElementById('searchResults');
