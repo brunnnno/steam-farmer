@@ -30,7 +30,7 @@ test('one progress action dispatches supported and shared counters to their exis
 });
 test('decimal preview shows decoded values and schema limits without confirmation or write controls',async t=>{
   const calls=[],row={apiname:'DECIMAL',name:'Distance',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency',canUnlock:false},progressSupport:{canPreviewFloat:true,canComplete:false,code:'float_review_only'},progressDetails:{currentValue:1.25,maximum:10.5}};
-  const w=ui(t,url=>{calls.push(url);return url.includes('/float-progress-preview?')?{name:'Distance',counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},canActivate:false,message:'Read-only decimal preview. No changes.'}:response([row]);});
+  const w=ui(t,url=>{calls.push(url);return url.includes('/float-progress-preview?')?{name:'Distance',counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},canActivate:false,message:'Read-only progress review. No changes.'}:response([row]);});
   w.testUI.activate({tokenSource:'environment',connected:true});w.confirm=()=>{throw Error('Read-only review must not ask for confirmation');};await w.testUI.open(550,'Game',false,'protocol');
   const button=[...w.document.querySelectorAll('#achListContainer button')].find(b=>b.textContent==='Review progress');assert.ok(button);button.click();await new Promise(resolve=>setImmediate(resolve));
   const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Review progress/);assert.match(panel.textContent,/1.25/);assert.match(panel.textContent,/10.5/);assert.match(panel.textContent,/Allowed range: 0 to 100/);assert.doesNotMatch(panel.textContent,/FLOAT|decimal/i);assert.equal(w.document.getElementById('floatSearchStart'),null);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);assert.ok(!calls.some(url=>url.includes('/unlock')));
@@ -118,6 +118,21 @@ test('shared update submission uses only the reviewed revision and requires expl
   const w=ui(t,url=>url.includes('shared-progress-preview')?preview:response([row]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});await w.testUI.open(440,'TF2',false,'protocol');await w.testUI.reviewShared(row);w.confirm=()=>true;
   let submitted;w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock')submitted=JSON.parse(options.body);return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
   w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:440,apiname:'DOCTOR',mode:'shared',revision:'a'.repeat(64)});
+});
+test('decimal update requires an exact review, respects cancellation and posts only the reviewed revision',async t=>{
+  const row={name:'Distance',apiname:'DECIMAL',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewFloat:true}};
+  const preview={appid:550,apiname:'DECIMAL',name:'Distance',canActivate:true,revision:'b'.repeat(64),counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},message:'Review the exact counter change.'};
+  const w=ui(t,url=>url.includes('float-progress-preview')?preview:response([row]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
+  const review=w.document.querySelector('#achListContainer button');assert.equal(review.textContent,'Review progress');review.click();await new Promise(r=>setImmediate(r));
+  let submitted,count=0,confirmation='';w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock'){submitted=JSON.parse(options.body);count++;}return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
+  w.confirm=text=>{confirmation=text;return false;};w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,0);assert.match(confirmation,/DISTANCE: 1.25 → 10.5/);assert.match(confirmation,/Only this counter will be sent/);assert.match(confirmation,/Steam may unlock this linked achievement/);
+  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,1);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'DECIMAL',mode:'float',revision:'b'.repeat(64)});
+});
+test('decimal confirmation cannot submit after account or reading context changes',async t=>{
+  const row={name:'Distance',apiname:'DECIMAL',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewFloat:true}};
+  const preview={appid:550,apiname:'DECIMAL',name:'Distance',canActivate:true,revision:'b'.repeat(64),counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0}};
+  const w=ui(t,url=>url.includes('float-progress-preview')?preview:response([row]));w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');w.document.querySelector('#achListContainer button').click();await new Promise(r=>setImmediate(r));
+  const confirm=w.document.querySelector('#sharedProgressActions button');w.testUI.select('other');w.confirm=()=>{throw Error('Stale review cannot confirm');};confirm.click();await new Promise(r=>setImmediate(r));
 });
 test('compatibility filter includes bit and progress attempts but excludes protected, shared and unknown',async t=>{
   const calls=[],rows=[

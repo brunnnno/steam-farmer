@@ -292,16 +292,26 @@ async function reviewFloatProgress(row){
     if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
     const p=review.counter,summary=$('sharedProgressSummary');summary.replaceChildren();
     document.querySelector('#sharedProgressReview .eyebrow').textContent='PROGRESS REVIEW';document.querySelector('#sharedProgressReview h3').textContent='Review progress';
-    summary.append(element('span','Preview only','eyebrow'),element('h3',review.name));
+    summary.append(element('span','Review before confirming','eyebrow'),element('h3',review.name));
     const flow=element('div',undefined,'shared-counter-flow');
-    for(const [label,value]of [['Current',p.before],['Target preview',p.after]]){const box=element('div',undefined,'shared-counter-value');box.append(element('small',label),element('strong',String(value)));flow.append(box);}
+    for(const [label,value]of [['Current',p.before],['Proposed',p.after]]){const box=element('div',undefined,'shared-counter-value');box.append(element('small',label),element('strong',String(value)));flow.append(box);}
     summary.append(flow,element('small',`Goal: ${p.goal}`,'shared-counter-meta'));
     const effects=$('sharedProgressEffects');effects.replaceChildren();
     const card=element('article',undefined,'shared-effect-card progress_only');
     card.append(element('strong','Progress limits'),element('p',`Allowed range: ${p.min} to ${p.max}`),element('p',p.maxChange>0?'Maximum change: '+p.maxChange:'No maximum change declared'));
-    effects.append(card);$('sharedProgressActions').replaceChildren();$('sharedProgressMessage').textContent='You can review this progress, but activation is not supported yet. No changes have been sent to Steam.';
+    effects.append(card);$('sharedProgressActions').replaceChildren();$('sharedProgressMessage').textContent=review.message+' No changes have been sent to Steam.';
+    if(review.canActivate===true)$('sharedProgressActions').append(button('Confirm reviewed progress update',()=>completeFloatProgress(review,{id,account,serial}),'btn-main shared-confirm'));
     $('sharedProgressReview').hidden=false;document.querySelector('.ach-modal-card').classList.add('shared-review-open');
   }catch(e){if(serial===achSerial&&account===activeAccountId)notice(e.message);}
+}
+async function completeFloatProgress(preview,{id,account,serial}){
+  if(experimentBusy||serial!==achSerial||id!==currentAchAppId||account!==activeAccountId||currentAchMethod!=='protocol'||preview.canActivate!==true)return;
+  const p=preview.counter,title=currentAchGameName;
+  if(!confirm(`Apply the reviewed progress update for "${preview.name}" in "${title}"?\n\n${p.statName}: ${p.before} → ${p.after}\nGoal: ${p.goal}\n\nOnly this counter will be sent. Steam may unlock this linked achievement. The exact value and all other statistics will be checked afterwards. Game-save progress is not verified. No automatic retry will be sent.`))return;
+  achievementPreviews.clear();experimentBusy=true;$('sharedProgressActions').replaceChildren();
+  try{const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:preview.apiname,mode:'float',revision:preview.revision});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));}
+  catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
+  finally{experimentBusy=false;if(account===activeAccountId&&id===currentAchAppId&&serial===achSerial&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
 }
 async function refreshWriteHistory(){
   if(!activeAccountId)return;

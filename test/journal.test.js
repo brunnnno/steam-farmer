@@ -42,3 +42,14 @@ test('database errors block intent without falling back locally or exposing conn
 test('journal stores receipt fields rather than credentials or arbitrary transport payloads',async()=>{
   const journal=new AchievementJournal({cfg:{},save(){}});await journal.reserve(account,550,'TARGET',{...evidence(),refreshToken:'secret',payload:{settor_steam_id:account},password:'secret'});const r=await journal.get(account,550,'TARGET');assert.ok(!('refreshToken'in r));assert.ok(!('payload'in r));assert.ok(!('password'in r));
 });
+test('decimal intents require persistent storage and retain typed values across journal instances',async()=>{
+  const change={type:'FLOAT',statId:9,statName:'DISTANCE',before:1.25,after:10.5,beforeRaw:0x3fa00000,afterRaw:0x41280000};
+  const intent={...evidence(),revision:'a'.repeat(64),progressChanges:[change]};
+  const local=new AchievementJournal({cfg:{},save(){throw Error('No local fallback');}});await assert.rejects(local.reserve(account,550,'TARGET',intent),/persistent/);
+  const db=database(),first=new AchievementJournal({cfg:{},save(){},pool:db.pool});await first.reserve(account,550,'TARGET',intent);
+  const restored=new AchievementJournal({cfg:{},save(){},pool:db.pool});assert.deepEqual((await restored.get(account,550,'TARGET')).progressChanges,[change]);
+  const result={...intent,outcome:'confirmed',after:true,acknowledgement:{result:1,stale:false,rejectedStats:[]},unexpectedStatChanges:[],otherAchievementChanges:[],progressVerification:[{type:'FLOAT',statId:9,observedRaw:change.afterRaw,verified:true}]};
+  for(const bad of [{...result,progressVerification:undefined},{...result,progressVerification:[{...result.progressVerification[0],observedRaw:change.afterRaw-1}]},{...result,revision:'b'.repeat(64)},{...result,progressChanges:[{...change,afterRaw:123}]},{...result,acknowledgement:{result:1,stale:true,rejectedStats:[]}},{...result,otherAchievementChanges:['OTHER']}]){await assert.rejects(restored.finish(account,550,'TARGET',bad),/exact recorded/);assert.equal((await first.get(account,550,'TARGET')).outcome,'requested');}
+  const persisted=db.records.get(account+':550:TARGET').receipt;persisted.progressChanges=persisted.progressChanges.map(p=>Object.fromEntries(Object.entries(p).reverse()));
+  await restored.finish(account,550,'TARGET',result);assert.deepEqual((await first.get(account,550,'TARGET')).progressVerification,result.progressVerification);
+});

@@ -49,7 +49,7 @@ test('decimal preview requires the connected main account, rejects session chang
   const route='/api/achievement/float-progress-preview?accountId=main&appid=550&apiname=DECIMAL';assert.equal((await f.request(route)).response.status,401);await f.login();await f.request('/api/status');assert.equal((await f.request(route)).response.status,409);
   Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true});f.app.clients.set('main',new FakeUser({}));
   const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.counter.before,1.25);assert.equal(preview.data.counter.after,10.5);assert.equal(preview.data.canActivate,false);
-  assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'DECIMAL',mode:'float',revision:preview.data.revision})).response.status,400);
+  assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'DECIMAL',mode:'float',revision:preview.data.revision})).response.status,503);
   change=true;assert.equal((await f.request(route)).response.status,409);assert.equal(writes,0);
 });
 test('persistent history starts concurrently with Steam reading and failures still block activation',async t=>{
@@ -63,6 +63,23 @@ test('persistent history starts concurrently with Steam reading and failures sti
   const pending=f.request('/api/achievements?accountId=a&appid=550&method=protocol');
   await new Promise(resolve=>setTimeout(resolve,30));assert.equal(historyStarted,true);releaseSteam();
   const {data}=await pending;assert.equal(data.achievements[0].compatibility.canUnlock,false);assert.match(data.historyWarning,/activation is blocked/);assert.ok(Number.isFinite(data.readDurationMs));
+});
+test('decimal API binds the review to fresh data and reserves persistent evidence before one typed write',async t=>{
+  function kv(obj){const chunks=[];for(const[k,v]of Object.entries(obj))chunks.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));chunks.push(Buffer.from([8]));return Buffer.concat(chunks);}
+  const snapshot={eresult:1,game_id:'550',crc_stats:12,schema:kv({'550':{stats:{7:{type:'4',bits:{0:{name:'DECIMAL',progress:{max_val:'10.5',value:{operation:'statvalue',operand1:'DISTANCE'}}}}},9:{type:'FLOAT',name:'DISTANCE'}}}}),stats:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:0x3fa00000}]};
+  let intent,result,writes=0,failHistory=false;const order=[];
+  const journal={ready:async()=>{},close:async()=>{},status:()=>({persistent:true,available:!failHistory}),get:async()=>{if(failHistory)throw Object.assign(Error('Unavailable'),{status:503});return intent;},reserve:async(_,id,name,evidence)=>{order.push('reserve');intent={...evidence,outcome:'requested'};},finish:async(_,id,name,value)=>{order.push('finish');result=value;}};
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f;
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{achievementJournal:journal,progressSnapshotReader:async()=>snapshot,individualWriter:async(client,id,name,options)=>{
+    assert.equal(options.floatProgress,true);assert.equal(options.allowProgress,false);
+    let reads=0;return require('../lib/achievement-writer').unlockAchievement(client,id,name,{...options,read:async()=>{order.push('read');return ++reads===1?snapshot:{...snapshot,crc_stats:13,stats:[{stat_id:7,stat_value:1},{stat_id:9,stat_value:0x41280000}]};},send:async(_,payload)=>{assert.ok(intent);assert.deepEqual(payload.stats,[{stat_id:9,stat_value:0x41280000}]);order.push('send');writes++;return {game_id:'550',eresult:1};}});
+  }});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  await f.login();await f.request('/api/status');const client=new FakeUser({});client._send=()=>{};f.app.clients.set('main',client);Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});
+  const route='/api/achievement/float-progress-preview?accountId=main&appid=550&apiname=DECIMAL';let preview=await f.request(route);assert.equal(preview.data.canActivate,true);assert.equal(writes,0);
+  const body={accountId:'main',appid:550,apiname:'DECIMAL',mode:'float'};assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,revision:'b'.repeat(64)})).response.status,409);assert.equal(writes,0);order.length=0;
+  failHistory=true;assert.equal((await f.request(route)).data.canActivate,false);assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);assert.equal(intent,undefined);order.length=0;
+  failHistory=false;const write=await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision});assert.equal(write.response.status,200);assert.equal(write.data.outcome,'confirmed');assert.equal(result.progressVerification[0].observedRaw,0x41280000);assert.equal(writes,1);assert.deepEqual(order,['read','reserve','send','read','finish']);assert.equal((await f.request(route)).data.canActivate,false);
 });
 function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:TOKEN_EXPIRY})).toString('base64url')}.signature`; }
 class FakeLogin extends EventEmitter {

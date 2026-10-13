@@ -13,7 +13,7 @@
     if(c.status==='insufficient_data')return result('unknown','Compatibility unknown',c.reason||'Steam did not provide sufficient verified definitions and personal state.');
     if(row.unlocked!==false)return result('unknown','Compatibility unknown',c.reason||'Steam did not return a verified locked personal state.');
     if(row.hasProgressDependency){
-      if(p.canPreviewFloat===true)return result('review','Progress available for review','This progress can be inspected. Activation is not supported yet.');
+      if(p.canPreviewFloat===true)return result('review','Progress available for review','Review the exact counter change and persistent history before any attempt. Steam must still accept and verify it.');
       if(p.canComplete===true)return result('progress','Progress eligible for preview',p.reason||'The current schema supports a single-counter preview. Steam must still accept and verify the update.','progress');
       if(p.canPreviewShared===true)return row.sharedSupport?.canComplete===true?result('progress','Shared progress eligible after review','The reviewed effects and persistent reservations allow an attempt. Steam must still accept and verify every effect.','shared'):result('review','Shared counter: review required',p.reason||'Review every related effect and persistent reservation availability before a shared update.');
       if(['complex_progress','unsupported_progress_type','aggregated_progress','progress_bounds','shared_progress_stat','shared_float_progress','float_progress_bounds'].includes(p.code))return result('unsupported','Progress not supported yet',p.reason);
