@@ -8,7 +8,7 @@ const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require(
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
 const { readProtocol,requestSnapshot } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
-const { unlockAchievement,prepare } = require('./lib/achievement-writer');
+const { unlockAchievement,prepare,prepareShared } = require('./lib/achievement-writer');
 const { gameRequirements } = require('./lib/game-requirements');
 const { scanCandidates } = require('./lib/achievement-candidates');
 const { runReadOnlyProbes,runSharedImpactProbes } = require('./lib/achievement-probes');
@@ -453,7 +453,14 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if(!identity)throw fail('Steam is disconnected.',409);
         const snapshot=await progressSnapshotRead(client,id);
         if(clients.get(acc.id)!==client||client.steamID?.toString()!==identity||!st.connected||st.isCollisionPaused)throw fail('Steam changed during the impact review.',409);
-        return json(res,200,sharedPreview(snapshot,id,name));
+        const review=sharedPreview(snapshot,id,name);
+        try{
+          prepareShared(snapshot,id,name,{expectedRevision:review.revision});
+          const members=review.effects.filter(e=>e.unlocked===false).map(e=>e.apiname);
+          if((await journal.sharedConflicts(identity,id,members)).length)throw fail('A related achievement has a previous or unresolved write. Review history before any shared update.',409);
+          review.canActivate=true;review.message='Persistent group reservations are available. Review every effect; one achievement would unlock and all related progress will be verified.';
+        }catch(e){review.canActivate=false;review.message=e.status?e.message:'Shared-counter activation cannot be verified right now. No write is permitted.';}
+        return json(res,200,review);
       }
       if(url.pathname==='/api/achievement/history'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id),identity=st.steamId64||acc.mySteamID;
@@ -478,8 +485,8 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches)throw fail('Individual activation requires the connected main account managed by Render.',409);
         if(st.isCollisionPaused)throw fail('Stop playing on the other device before unlocking an achievement.',409);
         const id=appId(data.appid),apiName=text(data.apiname,256);
-        const mode=data.mode||'achievement';if(!['achievement','progress'].includes(mode))throw fail('Unknown activation mode.');
-        if(mode==='progress'&&(typeof data.revision!=='string'||!/^[a-f0-9]{64}$/.test(data.revision)))throw fail('Review a fresh progress preview before confirming.');
+        const mode=data.mode||'achievement';if(!['achievement','progress','shared'].includes(mode))throw fail('Unknown activation mode.');
+        if(mode!=='achievement'&&(typeof data.revision!=='string'||!/^[a-f0-9]{64}$/.test(data.revision)))throw fail('Review a fresh progress preview before confirming.');
         if(!apiName||data.achievements!==undefined||data.unlock===false)throw fail('Select exactly one achievement to activate.');
         rate(`individual:${acc.id}`,5,60000);
         if(experimentBusy.has(acc.id))throw fail('An achievement activation is already running.',409);
@@ -487,16 +494,17 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         experimentBusy.add(acc.id);
         let reserved=false;
         try {
-          const result=await individualWrite(client,id,apiName,{allowProgress:mode==='progress',expectedRevision:mode==='progress'?data.revision:undefined,beforeSend:async evidence=>{
+          const result=await individualWrite(client,id,apiName,{allowProgress:mode==='progress',sharedProgress:mode==='shared',expectedRevision:mode!=='achievement'?data.revision:undefined,beforeSend:async evidence=>{
             await persistence?.flush();
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('The Steam session changed.',409);
             if(await journal.get(st.steamId64,id,apiName))throw fail('A write was already attempted for this achievement. Automatic retries are disabled.',409);
             if(st.lastAchievementWrite && Date.now()-st.lastAchievementWrite<60000)throw fail('Wait one minute between achievement writes.',429);
-            await journal.reserve(st.steamId64,id,apiName,evidence);reserved=true;st.lastAchievementWrite=Date.now();
+            if(mode==='shared')await journal.reserveShared(st.steamId64,id,apiName,evidence);else await journal.reserve(st.steamId64,id,apiName,evidence);
+            reserved=true;st.lastAchievementWrite=Date.now();
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('Steam changed while the write intent was being recorded. No write was sent.',409);
             console.log('[Achievement activation requested] '+JSON.stringify(evidence));
           }});
-          if(reserved)try{await journal.finish(st.steamId64,id,apiName,result);}catch{result.historyPersisted=false;result.message+=' The result could not be saved to history; the recorded intent remains pending. Do not retry.';}
+          if(reserved)try{if(mode==='shared')await journal.finishShared(st.steamId64,id,apiName,result);else await journal.finish(st.steamId64,id,apiName,result);}catch{result.historyPersisted=false;result.message+=' The result could not be saved to history; the recorded intent remains pending. Do not retry.';}
           console.log('[Achievement activation result] '+JSON.stringify(result));
           return json(res,200,result);
         } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}

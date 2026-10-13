@@ -206,7 +206,7 @@ function renderAchModal(page=0) {
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
   let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<15||filterRarity==='rare'&&a.percent>=15&&a.percent<40)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
-  list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&v.status!=='unknown'&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
+  list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&!['unknown','review'].includes(v.status)&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
   if(currentSort==='locked_first'||currentSort==='unlocked_first') list.sort((a,b)=>Number(a.unlocked===true)-Number(b.unlocked===true));
   if(currentSort==='unlocked_first') list.reverse();
@@ -240,7 +240,7 @@ async function refreshWriteHistory(){
   if(!activeAccountId)return;
   const account=activeAccountId;
   try{const result=await api('/api/achievement/history?accountId='+encodeURIComponent(account));if(account!==activeAccountId)return;const list=$('historyList');list.replaceChildren();
-    for(const receipt of result.entries){const item=element('div',undefined,'ach-impact-effect');item.append(element('strong',receipt.name||receipt.apiname||'Recorded attempt'),element('span',receipt.outcome||'Unknown result'));if(receipt.checkedAt)item.append(element('small',new Date(receipt.checkedAt).toLocaleString('en-US')));if(receipt.progressChanges?.length)item.append(element('small',receipt.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join(' · ')));list.append(item);}
+    for(const receipt of result.entries){const item=element('div',undefined,'ach-impact-effect');item.append(element('strong',receipt.name||receipt.apiname||'Recorded attempt'),element('span',receipt.outcome||'Unknown result'));if(receipt.checkedAt)item.append(element('small',new Date(receipt.checkedAt).toLocaleString('en-US')));if(receipt.progressChanges?.length)item.append(element('small',receipt.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join(' · ')));if(receipt.sharedEffects?.length)for(const effect of receipt.sharedEffects){const verified=receipt.sharedVerification?.find(v=>v.apiname===effect.apiname)?.verified===true;item.append(element('small',`${effect.name||effect.apiname}: ${effect.effect} · ${effect.before} → ${effect.after} · ${verified?'Verified effect':'Recorded intent; not confirmed'}`));}list.append(item);}
     if(!result.entries.length)list.append(element('p','No recorded attempts are available for this account. This does not mean no achievements were activated before history was connected.'));
   }catch(e){notice(e.message);}
 }
@@ -252,10 +252,21 @@ async function reviewSharedProgress(row){
     const list=$('sharedProgressEffects');list.replaceChildren();const labels={would_unlock:'Would unlock',already_unlocked:'Already unlocked',progress_only:'Progress would change',unknown:'Impact unknown',restricted:'Restricted'};
     for(const effect of result.effects){const item=element('div',undefined,'ach-impact-effect');item.append(element('strong',effect.name),element('span',labels[effect.effect]||'Impact unknown'),element('small',`Goal: ${effect.goal??'unknown'}${effect.hidden?' · Hidden achievement':''}`));list.append(item);}
     $('sharedProgressMessage').textContent=result.message+' No changes have been sent to Steam.';$('sharedProgressReview').hidden=false;
+    const target=currentAchList.find(a=>a.apiname===row.apiname);if(target){target.sharedSupport={canComplete:result.canActivate===true};renderAchModal();}
+    if(result.canActivate===true){const activate=button('Confirm reviewed shared update',()=>completeSharedProgress(result,{id,account,serial}));list.append(activate);}
   }catch(e){notice(e.message);}
 }
 $('historyRefresh').addEventListener('click',refreshWriteHistory);
 $('closeSharedReview').addEventListener('click',()=>{$('sharedProgressReview').hidden=true;});
+async function completeSharedProgress(preview,{id,account,serial}){
+  if(experimentBusy||serial!==achSerial||id!==currentAchAppId||account!==activeAccountId||currentAchMethod!=='protocol')return;
+  const effects=preview.effects.map(e=>e.name+': '+e.effect+' (goal '+e.goal+')').join('\n');
+  if(!confirm('Apply this reviewed shared-counter update?\n'+preview.counter.statName+': '+preview.counter.before+' → '+preview.counter.after+'\n'+effects+'\nThis changes Steam statistics, not verified game-save progress. No automatic retry will be sent.'))return;
+  experimentBusy=true;const title=currentAchGameName;
+  try{const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:preview.apiname,mode:'shared',revision:preview.revision});notice(result.message);if(account===activeAccountId&&id===currentAchAppId)await openAchModal(id,title,true,'protocol');}
+  catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
+  finally{experimentBusy=false;if(account===activeAccountId&&id===currentAchAppId)renderAchModal();}
+}
 async function completeAchievementProgress(row){
   if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canComplete||!currentAchAppId)return;
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;experimentBusy=true;renderAchModal();

@@ -14,7 +14,7 @@ test('permissions, history and unknown personal state override optimistic eligib
 });
 test('progress distinguishes supported exclusive counter, protection, unsupported and missing data',()=>{
   const row={...base,hasProgressDependency:true};
-  for(const [progressSupport,status,canAttempt] of [[{canComplete:true},'progress',true],[{canPreviewShared:true},'unsupported',false],[{code:'protected_progress_stat',canComplete:true},'protected',false],[{code:'complex_progress'},'unsupported',false],[{code:'progress_bounds'},'unsupported',false],[{code:'progress_value_unavailable'},'unknown',false],[{code:'insufficient_progress_data'},'unknown',false]]){
+  for(const [progressSupport,status,canAttempt] of [[{canComplete:true},'progress',true],[{canPreviewShared:true},'review',false],[{code:'protected_progress_stat',canComplete:true},'protected',false],[{code:'complex_progress'},'unsupported',false],[{code:'progress_bounds'},'unsupported',false],[{code:'progress_value_unavailable'},'unknown',false],[{code:'insufficient_progress_data'},'unknown',false]]){
     const result=classify({...row,progressSupport},direct);assert.equal(result.status,status);assert.equal(result.canAttempt,canAttempt);
   }
 });

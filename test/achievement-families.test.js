@@ -37,7 +37,7 @@ const cases=[
   ['counter maximum change',{progress:true,counter:{maxchange:'2'}},'unsupported',false],
   ['invalid counter constraints',{progress:true,counter:{min:'invalid'}},'unknown',false],
   ['complex progress expression',{progress:true,bit:{progress:{max_val:'10',value:{operation:'add',operand1:'COUNT',operand2:'OTHER'}}}},'unsupported',false],
-  ['shared counter',{progress:true,extraBits:{'1':{name:'OTHER',progress:{max_val:'20',value:{operation:'statvalue',operand1:'COUNT'}}}}},'unsupported',false],
+  ['shared counter',{progress:true,extraBits:{'1':{name:'OTHER',progress:{max_val:'20',value:{operation:'statvalue',operand1:'COUNT'}}}}},'review',false],
   ['progress without CRC',{progress:true,crc:null},'unknown',false],
   ['duplicate progress API name',{progress:true,extraBits:{'1':{name:'TARGET'}}},'unknown',false]
 ];

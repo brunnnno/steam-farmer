@@ -14,7 +14,7 @@
     if(row.unlocked!==false)return result('unknown','Compatibility unknown',c.reason||'Steam did not return a verified locked personal state.');
     if(row.hasProgressDependency){
       if(p.canComplete===true)return result('progress','Progress eligible for preview',p.reason||'The current schema supports a single-counter preview. Steam must still accept and verify the update.','progress');
-      if(p.canPreviewShared===true)return result('unsupported','Shared counter: review only',p.reason||'Group activation is not supported; its effects can be reviewed without writing.');
+      if(p.canPreviewShared===true)return row.sharedSupport?.canComplete===true?result('progress','Shared progress eligible after review','The reviewed effects and persistent reservations allow an attempt. Steam must still accept and verify every effect.','shared'):result('review','Shared counter: review required',p.reason||'Review every related effect and persistent reservation availability before a shared update.');
       if(['complex_progress','unsupported_progress_type','aggregated_progress','progress_bounds','shared_progress_stat'].includes(p.code))return result('unsupported','Progress not supported yet',p.reason);
       return result('unknown','Progress compatibility unknown',p.reason||c.reason||'The linked progress counter has not been verified.');
     }

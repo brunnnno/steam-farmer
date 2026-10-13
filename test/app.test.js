@@ -9,6 +9,21 @@ const { createApp } = require('../bot');
 const { atomicWrite, Vault, appId, hour, sleepNow } = require('../lib/core');
 const { parseXml, parseHtml, parseCards } = require('../lib/steam-data');
 const PASSWORD = 'panel-test-password-123';
+test('shared API stays read-only without persistent reservations and never bypasses them',async t=>{
+  function kv(obj){const p=[];for(const[k,v]of Object.entries(obj))p.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));p.push(Buffer.from([8]));return Buffer.concat(p);}
+  const bit=(name,goal)=>({name,progress:{max_val:String(goal),value:{operation:'statvalue',operand1:'HEALED'}}});
+  const snapshot={eresult:1,game_id:'440',crc_stats:12,schema:kv({'440':{stats:{'7':{type:'4',bits:{'0':bit('DOCTOR',25000),'1':bit('CHIEF',1000000)}},'9':{type:'INT',name:'HEALED'}}}}),stats:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:0}]};
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f,writes=0;
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{progressSnapshotReader:async()=>snapshot,individualWriter:async(_,id,name,options)=>{
+    assert.equal(options.sharedProgress,true);const plan=require('../lib/achievement-writer').prepareShared(snapshot,id,name,{expectedRevision:options.expectedRevision});
+    await options.beforeSend({appid:id,apiname:name,checkedAt:new Date().toISOString(),sharedEffects:plan.sharedEffects,groupMembers:plan.groupMembers});writes++;return {outcome:'confirmed'};
+  }});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  const route='/api/achievement/shared-progress-preview?accountId=main&appid=440&apiname=DOCTOR';assert.equal((await f.request(route)).response.status,401);
+  await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
+  const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.canActivate,false);assert.equal(preview.data.effects.length,2);
+  const body={accountId:'main',appid:440,apiname:'DOCTOR',mode:'shared'};assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
+});
 const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
 function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:TOKEN_EXPIRY})).toString('base64url')}.signature`; }
 class FakeLogin extends EventEmitter {
