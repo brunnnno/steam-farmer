@@ -15,6 +15,7 @@ const { runReadOnlyProbes,runSharedImpactProbes } = require('./lib/achievement-p
 const {AchievementJournal}=require('./lib/achievement-journal');
 const {AppState}=require('./lib/app-state');
 const {sharedPreview,floatPreview}=require('./lib/achievement-progress');
+const {ownedFloatLibrary,scanFloatBatch}=require('./lib/float-discovery');
 const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
 const {globalPercentages}=require('./lib/steam-percentages');
@@ -79,6 +80,7 @@ function createApp(options = {}) {
   const requirementsCache = new ResultCache({maxEntries:32,maxBytes:128*1024,ttl:3600000}),requirementsPending=new Map();
   const experimentBusy = new Set();
   const achievementCache = new ResultCache({maxBytes:2*1024*1024,maxEntries:24}), achievementPending = new Map();
+  const floatLibraryCache=new ResultCache({maxBytes:256*1024,maxEntries:3,ttl:1800000});
   const budget=options.resourceBudget||new ResourceBudget();
   const startupDiagnostics=options.startupDiagnostics??(process.env.STEAM_STARTUP_DIAGNOSTICS==='1');
   const namePending=new Map();
@@ -363,7 +365,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Invalid session. Reload the dashboard.', 403);
         data = await readBody(req);
       }
-      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement-experiment','/api/achievement/history'].includes(url.pathname))releaseResource=budget.acquire('heavy');
+      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement-experiment','/api/achievement/history'].includes(url.pathname))releaseResource=budget.acquire('heavy');
       else if(['/api/search','/api/game-requirements','/api/achievement/percentages'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
@@ -476,6 +478,20 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         rate(`achievement-history:${token}`,20,60000);
         const before=url.searchParams.get('before');if(before&&!Number.isFinite(Date.parse(before)))throw fail('Invalid history date.');
         return json(res,200,{storage:journal.status(),entries:identity?await journal.list(identity,{before}):[],limit:100});
+      }
+      if(url.pathname==='/api/achievement/float-search'&&req.method==='GET'){
+        const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||!identity)throw fail('Decimal search requires the connected main Steam account.',409);
+        rate(`float-search:${acc.id}`,12,60000);
+        const position=url.searchParams.get('cursor')||'0';if(!/^\d{1,4}$/.test(position))throw fail('Invalid decimal search position.');const cursor=Number(position);
+        const key=JSON.stringify([acc.id,identity,st.webSessionVersion]);let library=floatLibraryCache.get(key);
+        if(!library){library=await ownedFloatLibrary(client);floatLibraryCache.set(key,library);if(!floatLibraryCache.get(key))throw fail('This library exceeds the bounded decimal search cache.',409);}
+        if(cursor>0&&url.searchParams.get('revision')!==library.revision)throw fail('The library changed or the search expired. Start a new decimal search.',409);
+        if(cursor>library.games.length)throw fail('Invalid decimal search position.');
+        const result=await scanFloatBatch(client,library,cursor,{read:protocolRead});
+        if(!cfg.accounts.includes(acc)||clients.get(acc.id)!==client||client.steamID?.toString()!==identity||!st.connected||!st.tokenAccountMatches)throw fail('Steam changed during decimal search.',409);
+        console.log('[Decimal search] '+JSON.stringify({checkedAt:result.checkedAt,cursor:result.cursor,nextCursor:result.nextCursor,totalGames:result.totalGames,failedReads:result.games.filter(g=>!g.readable).length,candidates:result.candidates,writesSent:0}));
+        return json(res,200,result);
       }
       if(url.pathname==='/api/achievement/float-progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);

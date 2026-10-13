@@ -1,0 +1,11 @@
+# Finding a real decimal achievement
+
+Previous candidate logs kept only four generic progress examples, which happened to be INT counters. They do not establish that the user's library has no FLOAT achievement. Sniper: Ghost Warrior's two review candidates, Sniper Expert and Sniper Master, use the shared INT stat_headshots counter. No live FLOAT candidate has been confirmed yet.
+
+The folded **Find decimal achievements** tool searches Steam-confirmed owned games. Each user click performs at most four batches of eight games, stops when a decimal preview candidate is found, and keeps its cursor for a later click. Played games are prioritized without assuming any specific title uses FLOAT. No search runs during normal startup or achievement opening. Stop, panel locking or account changes prevent pending results from rendering under another account.
+
+GET /api/achievement/float-search requires the authenticated connected server-managed main account, uses heavy admission and a twelve-request-per-minute limit. A 256 KiB cache retains at most three lightweight library lists for thirty minutes, scoped to account, Steam identity and web-session version. Continuations require a matching library revision. Direct reads are sequential, bounded to 1.2 seconds each, and candidates are taken only from actual FLOAT definitions. Missing or timed-out readings remain unknown and cannot prove incompatibility. A later ordinary direct reading can use its longer timeout to inspect such a game.
+
+Results include game, achievement, statistic, current value, goal and preview eligibility/reason. Shared, protected, already-unlocked and missing-state FLOATs can be identified without being offered as writable targets. Candidate retention is capped at sixteen with preview-eligible candidates first. The tool provides game-opening controls only, never a confirmation or write request. Logs record bounded candidate summaries so a follow-up can identify the exact example without exposing the whole library.
+
+No live search was run during development because the authenticated panel session is on the user's computer. Once published, the user can start the search from the panel and the resulting read-only evidence can be inspected. The FLOAT writer remains disabled.

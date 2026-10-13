@@ -3,6 +3,32 @@ const $ = id => document.getElementById(id);
 let csrf = '', activeAccountId = sessionStorage.getItem('sf_account') || '', accounts = [], active = null;
 let currentAchList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '', currentAchMethod = 'web';
 let experimentBusy = false;
+let floatSearchRun=0,floatSearchBusy=false,floatSearchState=null;
+const floatAccountKey=()=>JSON.stringify([activeAccountId,active?.linkedSteamId||'']);
+function resetFloatSearch(){floatSearchRun++;floatSearchBusy=false;floatSearchState={key:floatAccountKey(),cursor:0,revision:'',failures:0,items:[],complete:false};$('floatSearchResults').replaceChildren();$('floatSearchStatus').textContent='No decimal search has been run.';$('floatSearchStart').textContent='Search my library';$('floatSearchStart').disabled=false;$('floatSearchStop').hidden=true;}
+async function searchFloatAchievements(){
+  if(floatSearchBusy)return;
+  if(active?.tokenSource!=='environment'||!active?.connected){notice('Connect the main Steam account before searching decimal counters.');return;}
+  if(floatSearchState?.key!==floatAccountKey())resetFloatSearch();
+  const state=floatSearchState,run=++floatSearchRun;floatSearchBusy=true;$('floatSearchStart').disabled=true;$('floatSearchStop').hidden=false;
+  try{
+    for(let batch=0;batch<4&&!state.complete;batch++){
+      if(run!==floatSearchRun||state.key!==floatAccountKey())return;
+      $('floatSearchStatus').textContent=`Checking Steam definitions… ${state.cursor} games attempted.`;
+      const result=await api('/api/achievement/float-search?accountId='+encodeURIComponent(activeAccountId)+'&cursor='+state.cursor+(state.revision?'&revision='+state.revision:''));
+      if(run!==floatSearchRun||state.key!==floatAccountKey())return;
+      state.cursor=result.nextCursor;state.revision=result.revision;state.complete=result.complete;state.failures+=result.games.filter(g=>!g.readable).length;
+      for(const item of result.candidates)if(!state.items.some(p=>p.appid===item.appid&&p.apiname===item.apiname))state.items.push(item);
+      state.items.sort((a,b)=>Number(b.canPreview)-Number(a.canPreview));state.items=state.items.slice(0,16);
+      const list=$('floatSearchResults');list.replaceChildren();
+      for(const item of state.items){const card=element('article',undefined,'shared-effect-card');card.append(element('strong',item.game+' · '+item.name),element('p',`${item.statName}: ${item.before??'unknown'} / ${item.goal??'unknown'} · FLOAT`),element('small',item.reason));card.append(button(item.canPreview?'Open decimal preview candidate':'Inspect game',async()=>{await openAchModal(item.appid,item.game,false,'protocol');if(state.key===floatAccountKey()&&currentAchAppId===item.appid){$('achSearchInput').value=item.name;onSearchInput(item.name);}}));list.append(card);}
+      $('floatSearchStatus').textContent=`${state.cursor}/${result.totalGames} games attempted · ${state.failures} unreadable (not ruled out). ${state.items.length?'Decimal counters found.':state.complete?'No FLOAT found in the readable definitions.':'No decimal counter found yet.'}`;
+      if(result.candidates.some(item=>item.canPreview)||state.complete)break;
+      if(batch<3)await new Promise(resolve=>setTimeout(resolve,5200));
+    }
+  }catch(e){if(run===floatSearchRun)$('floatSearchStatus').textContent='Search paused: '+e.message;}
+  finally{if(run===floatSearchRun){floatSearchBusy=false;$('floatSearchStop').hidden=true;$('floatSearchStart').disabled=state.complete;$('floatSearchStart').textContent=state.complete?'Search complete':'Search next games';}}
+}
 const achievementPreviews = new Map();
 function previewKey(account,id,method) { return JSON.stringify([account,active?.steamId64||active?.mySteamID||'',id,method]); }
 function rememberAchievements(key,data) {
@@ -26,7 +52,7 @@ async function api(endpoint, body) {
   }
   return data;
 }
-function showLock() { achievementPreviews.clear();loginSerial++; csrf = ''; stopLoginPoll(); $('lockModal').style.display = 'flex'; $('addAccModal').style.display = 'none'; closeAchModal(); $('pinInput').value = ''; }
+function showLock() { resetFloatSearch();achievementPreviews.clear();loginSerial++; csrf = ''; stopLoginPoll(); $('lockModal').style.display = 'flex'; $('addAccModal').style.display = 'none'; closeAchModal(); $('pinInput').value = ''; }
 async function checkAuth() { localStorage.removeItem('farmer_pin'); try { csrf = (await api('/api/panel/session')).csrf; $('lockModal').style.display = 'none'; await loadStatus(); } catch { showLock(); } }
 async function unlock() { try { csrf = (await api('/api/panel/login', { password: $('pinInput').value })).csrf; $('pinInput').value = ''; $('lockModal').style.display = 'none'; await loadStatus(); } catch (e) { notice(e.message); } }
 async function lock() { try { await api('/api/panel/logout', {}); showLock(); } catch (e) { notice(e.message); } }
@@ -51,6 +77,7 @@ async function loadStatus() {
     const data = await api('/api/status'); accounts = data.accounts;
     if (!accounts.some(a => a.id === activeAccountId)) activeAccountId = accounts[0]?.id || '';
     sessionStorage.setItem('sf_account', activeAccountId); active = accounts.find(a => a.id === activeAccountId) || null;
+    if(floatSearchState&&floatSearchState.key!==floatAccountKey())resetFloatSearch();
     renderAccountsTabs(accounts, activeAccountId); renderPresets(data.presets);
     $('accountMenu').hidden=!active;
     for(const event of [17,18])document.querySelector('[data-event-'+event+']').hidden=!active||active.tokenSource==='environment';
@@ -330,6 +357,9 @@ async function reviewSharedProgress(row){
   }catch(e){notice(e.message);}
 }
 $('historyRefresh').addEventListener('click',refreshWriteHistory);
+$('floatSearchStart').addEventListener('click',searchFloatAchievements);
+$('floatSearchReset').addEventListener('click',resetFloatSearch);
+$('floatSearchStop').addEventListener('click',()=>{floatSearchRun++;floatSearchBusy=false;$('floatSearchStop').hidden=true;$('floatSearchStart').disabled=false;$('floatSearchStatus').textContent='Search stopped. A request already sent can finish on the server; no activation was requested.';});
 $('closeSharedReview').addEventListener('click',()=>{$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');});
 async function completeSharedProgress(preview,{id,account,serial}){
   if(experimentBusy||serial!==achSerial||id!==currentAchAppId||account!==activeAccountId||currentAchMethod!=='protocol')return;
