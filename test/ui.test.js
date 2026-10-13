@@ -76,3 +76,7 @@ test('publisher requirements show explanatory context as text without inventing 
   await w.testUI.open(123,'Game');await new Promise(resolve=>setImmediate(resolve));
   const context=w.document.getElementById('gameRequirements');assert.equal(context.hidden,false);assert.equal(context.open,true);assert.match(context.textContent,/does not establish/);assert.equal(context.querySelector('b'),null);
 });
+test('unknown personal states display the reason and next step without requiring hover or an unlock button',async t=>{
+  const w=ui(t,()=>response([{name:'Unknown',unlocked:null,compatibility:{status:'insufficient_data',canUnlock:false,reason:'No personal state from Steam',action:'Open the official game and refresh'}}]));
+  await w.testUI.open(123,'Game',true,'protocol');const text=w.document.getElementById('achListContainer').textContent;assert.match(text,/No personal state from Steam/);assert.match(text,/official game/);assert.doesNotMatch(text,/Unlock achievement/);
+});
