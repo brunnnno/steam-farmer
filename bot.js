@@ -10,6 +10,7 @@ const { readProtocol } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement } = require('./lib/achievement-writer');
 const { gameRequirements } = require('./lib/game-requirements');
+const { scanCandidates } = require('./lib/achievement-candidates');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
@@ -121,7 +122,7 @@ function createApp(options = {}) {
     client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
-      st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.achievementPersistence = null; st.steamId64 = client.steamID.toString();
+      st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.achievementPersistence = null; st.candidateScanStarted = false; st.steamId64 = client.steamID.toString();
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
       acc.mySteamID = st.steamId64; save();
@@ -132,6 +133,12 @@ function createApp(options = {}) {
     });
     client.on('accountInfo', name => { if (isCurrent()) st.profileName = name || ''; });
     client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); st.webSessionVersion++; console.log(`[Steam] ${acc.id}: authenticated web session ready`);
+      if(isEnvironmentAccount(acc)&&typeof client.getUserOwnedApps==='function'&&!st.candidateScanStarted){
+        st.candidateScanStarted=true;
+        const timer=setTimeout(()=>{if(!isCurrent()||!st.connected)return;st.achievementCandidates={state:'running'};
+          scanCandidates(client,[3764200,3932890,...acc.games]).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
+        },8000);timer.unref();
+      }
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0] || 3764200;
       if (checkApp && st.connected && client.steamID && !st.linkCheckStarted) { st.linkCheckStarted = true;
         if (isEnvironmentAccount(acc) && typeof client._send === 'function') protocolRead(client,3764200).then(result=>{
@@ -318,7 +325,7 @@ function createApp(options = {}) {
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual', achievementBatchWrite:false } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual', achievementBatchWrite:false } });
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }

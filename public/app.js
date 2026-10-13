@@ -162,6 +162,8 @@ function renderAchModal() {
     row.append(image(a.unlocked?a.iconOpen:a.iconClosed));
     const info=element('div',undefined,'ach-info'); info.append(element('div',a.name,'ach-title'),element('div',a.description,'ach-desc'),element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
     if(a.unlockTimestamp) info.append(element('small',' · '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'))); else if(a.unlockDate) info.append(element('small',a.unlockDate));
+    if(a.hidden===true)info.append(element('small',' · Hidden achievement'));
+    if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}${a.progressDetails.statName?' ('+a.progressDetails.statName+')':''}`));
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
     if(a.hasProgressDependency) info.append(element('small',' · Progress dependency: experimental write unavailable'));
     if(currentAchMethod==='protocol' && a.compatibility) {
