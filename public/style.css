@@ -318,3 +318,14 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 @media(max-width:900px) { .header-actions { justify-content:flex-start; max-width:100%; }.badge-status { justify-content:flex-start; }.stats-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { body { padding:20px 12px; }.container { gap:18px; }.dashboard-panel,.controls { padding:18px 14px; }.brand h1 { font-size:34px; }.stat-item { padding:14px; }.stat-item value { font-size:16px; }.section-note { line-height:1.6; }.accounts-bar { padding:12px; gap:12px; }.header-actions { gap:7px; }.ach-header { padding:14px; }.advanced-settings summary span { display:block; margin:6px 0 0; }.ach-state { margin-left:64px; }.ach-item { flex-wrap:wrap; }.ach-toolbar { padding:14px; }.modal-box { width:100%; }.ach-source { padding:12px 14px; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none !important; animation:none !important; scroll-behavior:auto !important; }.card:hover { transform:none; } }
+@media(max-width:600px) {
+  .ach-modal-card { padding:0; }
+  .ach-item { display:grid; grid-template-columns:50px minmax(0,1fr); align-items:start; gap:10px 12px; }
+  .ach-item img { grid-column:1; grid-row:1; }
+  .ach-info { grid-column:2; min-width:0; width:100%; overflow-wrap:break-word; }
+  .ach-title { display:block; }
+  .ach-state { grid-column:2; justify-self:start; margin-left:0; }
+  .ach-info button { white-space:normal; text-align:left; margin-top:10px; }
+  .ach-toolbar > div:last-child { width:100%; min-width:0; flex-wrap:wrap; }
+  .ach-toolbar select,.ach-toolbar input { min-width:0; flex:1 1 140px; }
+}
