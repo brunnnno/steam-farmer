@@ -10,7 +10,7 @@ cfg.webPin = String(cfg.webPin || '1234');
 cfg.discordWebhook = cfg.discordWebhook || '';
 cfg.accounts = cfg.accounts || [];
 
-// Automatic backward-compatibility migration for legacy single-account configs
+// Backward-compatibility migration for legacy single-account configs
 if (cfg.accounts.length === 0 && (cfg.user || cfg.refreshToken)) {
   cfg.accounts.push({
     id: 'main',
@@ -46,19 +46,6 @@ function saveConfig() {
     console.error('Error saving config.json:', err.message);
   }
 }
-
-// Canonical valve aliases for community lookups
-const VALVE_ALIASES = {
-  550: 'L4D2',
-  440: 'TF2',
-  730: 'CSGO',
-  240: 'CSS',
-  220: 'HL2',
-  620: 'Portal2',
-  500: 'L4D',
-  300: 'DODS',
-  10: 'CS'
-};
 
 const PRESETS = {
   competitive: {
@@ -243,7 +230,7 @@ function initializeAccount(acc) {
     }, 10 * 60 * 1000);
   });
 
-  // Steam Chat remote control for this specific account
+  // Steam Chat remote control
   client.on('friendMessage', (steamID, message) => {
     const msg = message.trim().toLowerCase();
     const args = msg.split(' ');
@@ -321,7 +308,6 @@ function updateFarming(acc) {
 
   if (!state.isPaused && !state.isCollisionPaused && !state.isSleepPaused && acc.games.length > 0) {
     const list = acc.games.map(Number).filter(n => !isNaN(n) && n > 0);
-    // Custom non-steam text passed in gamesPlayed
     if (acc.customStatus && acc.customStatus.trim() !== '') {
       list.push(acc.customStatus.trim());
     }
@@ -367,7 +353,6 @@ function scanCards(acc, cb) {
   }).on('error', () => { if (cb) cb([]); });
 }
 
-// Global 60s ticker for Sleep schedule across all accounts
 setInterval(() => {
   const hour = new Date().getHours();
   cfg.accounts.forEach(acc => {
@@ -388,7 +373,6 @@ setInterval(() => {
   });
 }, 60 * 1000);
 
-// Global 30s ticker for achievement queue across all accounts
 setInterval(() => {
   const now = Date.now();
   cfg.accounts.forEach(acc => {
@@ -426,7 +410,7 @@ setInterval(() => {
 }, 30 * 1000);
 
 function getTag(body, tag) {
-  const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
+  const regex = new RegExp('<' + tag + '>([\\s\\S]*?)<\\/' + tag + '>', 'i');
   const match = regex.exec(body);
   if (!match) return '';
   let content = match[1].trim();
@@ -481,20 +465,20 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   return achievements;
 }
 
+// Extractor HTML seguro sin expresiones regulares complejas
 function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
   const list = [];
-  const regexBlock = /<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["'][^>]*>([\s\S]*?)(?=(?:<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*["']|<div\s+id=["']footer["']|$))/gi;
-  let match;
+  const parts = html.split(/class=["'][^"']*achieveRow/i);
 
-  while ((match = regexBlock.exec(html)) !== null) {
-    const classAttr = match[1];
-    const block = match[2];
+  for (let i = 1; i < parts.length; i++) {
+    const block = parts[i];
+    const prevChunk = parts[i - 1].slice(-80);
 
-    const imgM = /<img\b[^>]*src=["']([^"']+)["']/i.exec(block);
-    const h3M = /<h3>([\s\S]*?)<\/h3>/i.exec(block);
-    const h5M = /<h5>([\s\S]*?)<\/h5>/i.exec(block);
-    const pctM = /class=["'][^"']*achievePercent[^"']*["'][^>]*>\s*([0-9.]+)\s*%/i.exec(block);
-    const dateM = /class=["'][^"']*achieveUnlockTime[^"']*["'][^>]*>([\s\S]*?)<\/div>/i.exec(block);
+    const imgM = block.match(/<img\b[^>]*src=["']([^"']+)["']/i);
+    const h3M = block.match(/<h3>([\s\S]*?)<\/h3>/i);
+    const h5M = block.match(/<h5>([\s\S]*?)<\/h5>/i);
+    const pctM = block.match(/class=["'][^"']*achievePercent[^"']*["'][^>]*>\s*([0-9.]+)\s*%/i);
+    const dateM = block.match(/class=["'][^"']*achieveUnlockTime[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
 
     if (h3M) {
       const name = h3M[1].replace(/<[^>]+>/g, '').trim();
@@ -511,7 +495,7 @@ function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
       else if (pct < 40.0) { tier = '🔵 Rare'; colorHex = 0x38bdf8; }
 
       const rawDate = dateM ? dateM[1].replace(/<[^>]+>/g, '').replace(/Unlocked\s*/i, '').replace(/Desbloqueado el\s*/i, '').trim() : null;
-      const isUnlocked = classAttr.includes('unlocked') || Boolean(rawDate) || unlockedSet.has(name) || unlockedSet.has(apiname);
+      const isUnlocked = prevChunk.includes('unlocked') || Boolean(rawDate) || unlockedSet.has(name) || unlockedSet.has(apiname);
 
       list.push({
         apiname: apiname,
@@ -532,7 +516,6 @@ function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
   return list;
 }
 
-// Master Achievement Loader for given Account
 function getAchievementsForAccount(acc, appid, cb) {
   const cacheKey = `${acc.id}_${appid}`;
   const unlockedLocally = (acc.unlockedAchievements && acc.unlockedAchievements[appid]) || [];
@@ -561,7 +544,6 @@ function getAchievementsForAccount(acc, appid, cb) {
       }
     } catch (e) {}
 
-    // Use direct numeric AppID for exact lookup
     const targetXmlUrl = userSteamId
       ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
       : `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
@@ -598,7 +580,6 @@ function getAchievementsForAccount(acc, appid, cb) {
           }
         }
 
-        // Global Steam Catalog fallback
         const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
         fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
           if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
@@ -633,7 +614,6 @@ const server = http.createServer((req, res) => {
     }));
   }
 
-  // Steam Store Game Search
   if (parsedUrl.pathname === '/api/search' && req.method === 'GET') {
     const query = parsedUrl.query.term;
     if (!query) return res.end('[]');
@@ -653,7 +633,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Achievement Loader endpoint
   if (parsedUrl.pathname === '/api/achievements' && req.method === 'GET') {
     const appid = parseInt(parsedUrl.query.appid, 10);
     const acc = getActiveAccount();
@@ -670,7 +649,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // General Status Endpoint (multi-account summary + active account details)
   if (parsedUrl.pathname === '/api/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     const acc = getActiveAccount();
@@ -717,7 +695,6 @@ const server = http.createServer((req, res) => {
     }));
   }
 
-  // Protected Actions API
   if (req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -725,7 +702,6 @@ const server = http.createServer((req, res) => {
       try {
         const data = JSON.parse(body || '{}');
 
-        // PIN validation
         if (cfg.webPin && String(data.pin) !== String(cfg.webPin)) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Incorrect PIN' }));
@@ -736,7 +712,6 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true }));
         }
 
-        // Account Switching
         if (parsedUrl.pathname === '/api/account/switch') {
           const target = cfg.accounts.find(a => a.id === data.accountId);
           if (target) {
@@ -747,7 +722,6 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true, activeAccountId: cfg.activeAccountId }));
         }
 
-        // Add New Account
         if (parsedUrl.pathname === '/api/account/add') {
           const newId = 'acc_' + Date.now();
           const newAcc = {
@@ -775,7 +749,6 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true, accountId: newId }));
         }
 
-        // Remove Account
         if (parsedUrl.pathname === '/api/account/remove') {
           if (cfg.accounts.length <= 1) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -799,7 +772,6 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true, activeAccountId: cfg.activeAccountId }));
         }
 
-        // Below actions apply to the Active Account
         const acc = getActiveAccount();
         const state = acc ? (accountStates[acc.id] || {}) : {};
 
@@ -811,7 +783,6 @@ const server = http.createServer((req, res) => {
               return res.end(JSON.stringify({ error: 'Limit of 32 games reached for this account.' }));
             }
             acc.games.push(appid);
-            // Instant unlock collision
             state.isPaused = false;
             state.isCollisionPaused = false;
             if (state.collisionTimer) clearTimeout(state.collisionTimer);
@@ -863,7 +834,6 @@ const server = http.createServer((req, res) => {
           }
         }
 
-        // Toggle / Resume button with immediate collision lock release
         if (parsedUrl.pathname === '/api/toggle') {
           state.isPaused = !state.isPaused;
           if (!state.isPaused) {
@@ -1013,7 +983,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Modern Spacious English Frontend HTML/CSS/JS
+  // Frontend HTML
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="en">
@@ -1051,7 +1021,6 @@ const server = http.createServer((req, res) => {
     }
     .container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 32px; }
 
-    /* Modals */
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(7, 10, 19, 0.94);
@@ -1070,7 +1039,6 @@ const server = http.createServer((req, res) => {
       border: 1px solid var(--card-border); color: #fff; font-size: 1rem; outline: none;
     }
 
-    /* Multi-Account Bar */
     .accounts-bar {
       display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;
       padding: 12px 18px; background: rgba(18, 24, 38, 0.5); border: 1px solid var(--card-border);
@@ -1090,7 +1058,6 @@ const server = http.createServer((req, res) => {
     .acc-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
     .acc-pill.active .dot { background: var(--success); }
 
-    /* Header */
     header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
     .brand h1 { font-size: 1.85rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .brand p { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; }
@@ -1104,7 +1071,6 @@ const server = http.createServer((req, res) => {
     .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
 
-    /* Spacious Dashboard Panel */
     .dashboard-panel {
       background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px);
       border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 24px;
@@ -1119,7 +1085,6 @@ const server = http.createServer((req, res) => {
     .progress-bar-bg { width: 100%; height: 10px; background: rgba(0, 0, 0, 0.5); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
     .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #818cf8); transition: width 0.4s ease; }
 
-    /* Controls Panel */
     .controls {
       background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px);
       border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px;
@@ -1162,7 +1127,6 @@ const server = http.createServer((req, res) => {
     .search-info { flex: 1; font-size: 0.9rem; font-weight: 600; }
     .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
 
-    /* Spacious Game Cards Grid */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
     .card {
       background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px;
@@ -1181,7 +1145,6 @@ const server = http.createServer((req, res) => {
     .btn-ach { background: rgba(56, 189, 248, 0.12); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.25); }
     .btn-ach:hover { background: var(--primary); color: #04111d; }
 
-    /* Spacious Achievement Modal */
     .ach-modal-card {
       background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);
       width: 96%; max-width: 960px; max-height: 92vh; border-radius: 24px;
@@ -1234,7 +1197,6 @@ const server = http.createServer((req, res) => {
   </style>
 </head>
 <body>
-  <!-- PIN Lock Modal -->
   <div id="lockModal" class="modal-overlay">
     <div class="modal-box" style="text-align:center;">
       <h2>🔒 Enterprise Panel</h2>
@@ -1244,7 +1206,6 @@ const server = http.createServer((req, res) => {
     </div>
   </div>
 
-  <!-- Add Account Modal -->
   <div id="addAccModal" class="modal-overlay">
     <div class="modal-box">
       <h2>+ Add Steam Account</h2>
@@ -1259,7 +1220,6 @@ const server = http.createServer((req, res) => {
     </div>
   </div>
 
-  <!-- Achievements Modal -->
   <div id="achModal" class="modal-overlay">
     <div class="ach-modal-card">
       <div class="ach-header">
@@ -1325,7 +1285,6 @@ const server = http.createServer((req, res) => {
   </div>
 
   <div class="container">
-    <!-- Multi-Account Navigation Bar -->
     <div class="accounts-bar">
       <div style="display:flex; align-items:center; gap:12px;">
         <span style="font-size:0.8rem; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Active Profile:</span>
