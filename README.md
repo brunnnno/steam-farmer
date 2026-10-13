@@ -22,7 +22,9 @@ The dashboard connects the main account automatically. Other accounts can sign i
 
 Use `/healthz` for UptimeRobot. It checks web-server availability, not Steam connectivity. The panel displays Steam and web-session status separately.
 
-Render Free has an ephemeral filesystem. Environment variables survive deployments; locally saved sessions and panel settings can be lost on restarts, redeploys or suspension. Put the desired default games and schedule in `config.json` without secrets. UptimeRobot does not make local storage persistent. Steam can expire or revoke a token.
+Render Free has an ephemeral filesystem. For durable memory, apply `migrations/001-persistent-memory.sql` on a direct PostgreSQL connection after testing on an isolated branch. Configure `APP_DATABASE_URL` (pooled), `ACHIEVEMENT_DATABASE_URL` (pooled, same database), and `APP_STATE_KEY` (a private base64-encoded 32-byte random key) in Render. Never commit or rotate that key casually: it is needed to decrypt saved settings and additional Steam sessions. UptimeRobot does not make local storage persistent. Steam can still expire or revoke a token.
+
+With these variables configured, startup restores encrypted configuration and saved additional-account tokens **before** connecting Steam. Game lists, schedules, manual pause, panel password hashes and other preferences survive redeployment. The environment-managed main token stays in Render. Configuration writes use optimistic database versions; a stale instance cannot overwrite a newer instance. Database or key failures block startup/mutations instead of silently replacing stored data with defaults. Successful settings responses wait for database confirmation. Browser dashboard sessions and live connections are intentionally recreated, not persisted.
 
 ## Achievements
 

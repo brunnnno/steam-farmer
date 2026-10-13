@@ -13,6 +13,7 @@ const { gameRequirements } = require('./lib/game-requirements');
 const { scanCandidates } = require('./lib/achievement-candidates');
 const { runReadOnlyProbes,runSharedImpactProbes } = require('./lib/achievement-probes');
 const {AchievementJournal}=require('./lib/achievement-journal');
+const {AppState}=require('./lib/app-state');
 const {sharedPreview}=require('./lib/achievement-progress');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
@@ -31,7 +32,7 @@ function createApp(options = {}) {
   const directory = options.directory || process.env.DATA_DIR || path.join(__dirname, 'data');
   const configFile = path.join(directory, 'config.json');
   const template = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
-  const cfg = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : structuredClone(template);
+  const cfg = options.config || (fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : structuredClone(template));
   cfg.accounts ||= []; cfg.timezone ||= 'America/Montevideo';
   new Intl.DateTimeFormat('en', { timeZone: cfg.timezone });
   const environmentToken = process.env.STEAM_REFRESH_TOKEN || '';
@@ -40,7 +41,10 @@ function createApp(options = {}) {
   if (environmentToken && !cfg.accounts.some(acc => acc.id === environmentAccountId)) cfg.accounts.push({ id: environmentAccountId, name: 'Main account', user: '', games: [], gameNames: {} });
   const isEnvironmentAccount = acc => Boolean(environmentToken && acc.id === environmentAccountId);
   const vault = new Vault(directory);
-  const save = () => atomicWrite(configFile, cfg);
+  if(options.restoredTokens){vault.records={};for(const [id,token]of Object.entries(options.restoredTokens))vault.set(id,token);atomicWrite(vault.file,vault.records);}
+  const persistence=options.persistence;
+  if(persistence)cfg.persistenceCheckpoint ||= crypto.randomUUID();
+  const save = () => {persistence?.assert();atomicWrite(configFile, cfg);persistence?.save(cfg,vault);};
   // Migrate runtime credentials away from config; never persist passwords or local achievement overlays.
   if (!cfg.accounts.length && cfg.user) cfg.accounts.push({ id: crypto.randomUUID(), name: cfg.user, user: cfg.user, games: cfg.games || [], gameNames: cfg.gameNames || {}, refreshToken: cfg.refreshToken });
   for (const acc of cfg.accounts) {
@@ -57,6 +61,7 @@ function createApp(options = {}) {
     if (!process.env.PANEL_PASSWORD && !options.silent) console.log(`Initial dashboard password (save it): ${password}`);
   }
   save();
+  vault.onChange=save;
   const journal=options.achievementJournal || new AchievementJournal({cfg,save,url:process.env.ACHIEVEMENT_DATABASE_URL||''});
   journal.ready().then(()=>{if(!options.silent)console.log('[Achievement journal] '+JSON.stringify(journal.status()));}).catch(()=>{if(!options.silent)console.log('[Achievement journal] Persistent history unavailable; activation is blocked.');});
   const sessions = new Map(), attempts = new Map(), rates = new Map(), clients = new Map(), states = new Map();
@@ -82,6 +87,7 @@ function createApp(options = {}) {
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
   function farming(acc) {
+    if(persistence && !persistence.available)return;
     const st = stateFor(acc.id); syncSleep(acc);
     const client = clients.get(acc.id); if (!client) return;
     let games = acc.cardFarming ? (st.cardsReady ? st.cardDropGames.slice(0, 32).map(g => g.appid) : []) : acc.games;
@@ -119,7 +125,7 @@ function createApp(options = {}) {
     finally { st.scanning = false; }
   }
   function connect(acc) {
-    if (closing || clients.has(acc.id)) return;
+    if (closing || clients.has(acc.id) || (persistence && !persistence.available)) return;
     const st = stateFor(acc.id); const token = isEnvironmentAccount(acc) ? environmentToken : vault.get(acc.id);
     if (!token || !validClientToken(token)) { st.error = 'Please sign in again.'; return; }
     const client = new User({ renewRefreshTokens: !isEnvironmentAccount(acc), autoRelogin: false, dataDirectory: path.join(directory, 'steam-cache') });
@@ -131,7 +137,7 @@ function createApp(options = {}) {
       st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.achievementPersistence = null; st.candidateScanStarted = false; st.steamId64 = client.steamID.toString();
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
-      acc.mySteamID = st.steamId64; save();
+      acc.mySteamID = st.steamId64;try{save();}catch{disconnect(acc.id);return;}
       st.isCollisionPaused = Boolean(client.playingState?.blocked);
       client.setPersona(acc.personaState ?? SteamUser.EPersonaState.Online); farming(acc);
       notify(`${acc.name} connected`, 'Steam session connected.');
@@ -179,7 +185,7 @@ function createApp(options = {}) {
       const command = message.trim().toLowerCase();
       if (command === '!pause') st.isPaused = true;
       if (command === '!resume') st.isPaused = false;
-      if (command === '!pause' || command === '!resume') farming(acc);
+      if (command === '!pause' || command === '!resume') {acc.paused=st.isPaused;try{save();}catch{disconnect(acc.id);return;}farming(acc);}
       if (['!pause', '!resume', '!status', '!help'].includes(command)) {
         try { client.chatMessage(steamid, `SteamFarmer: ${st.connected ? 'connected' : 'disconnected'}, ${st.isFarming ? 'activity sent' : 'paused'}. Commands: !status !pause !resume`); } catch {}
       }
@@ -226,7 +232,13 @@ function createApp(options = {}) {
     if (!publicGet && req.headers.origin && req.headers.origin !== expected) throw fail('Origin not allowed.', 403);
     if (!publicGet && req.headers['sec-fetch-site'] === 'cross-site') throw fail('Cross-site request rejected.', 403);
   }
-  function json(res, status, body) { if (!res.writableEnded && !res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); } }
+  async function json(res, status, body) {
+    if(body?.achievementHistoryStorage)body.applicationStorage=persistence?.status()||{mode:'local',persistent:false,available:true};
+    if(status<400 && persistence && (body?.success===true || body?.phase==='authenticated')){
+      try{await persistence.flush();}catch{status=503;body={error:'Persistent storage failed. The change was not confirmed as saved. Restart after checking Neon.'};}
+    }
+    if (!res.writableEnded && !res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); }
+  }
   async function readBody(req) {
     if (!(req.headers['content-type'] || '').startsWith('application/json')) throw fail('application/json is required.', 415);
     let size = 0, body = '';
@@ -257,7 +269,7 @@ function createApp(options = {}) {
     const alive = () => attempts.get(a.id) === a && ['starting', 'guard', 'waiting'].includes(a.phase) && sessions.has(owner) && !closing;
     login.on('timeout', () => { if (alive()) { a.phase = 'expired'; a.error = 'Login attempt expired. Please try again.'; } });
     login.on('error', () => { if (alive()) { a.phase = 'failed'; a.error = 'Steam rejected the login or is unavailable.'; } });
-    login.on('authenticated', () => {
+    login.on('authenticated', async () => {
       if (!alive()) return;
       try {
         const steamid = login.steamID.toString();
@@ -269,7 +281,7 @@ function createApp(options = {}) {
         acc ||= { id: crypto.randomUUID(), name, user: login.accountName, games: [], gameNames: {}, personaState: SteamUser.EPersonaState.Online, cardFarming: false, sleepMode: { enabled: false, start: 3, end: 8 }, customStatus: '', chatAdmins: [] };
         vault.set(acc.id, login.refreshToken);
         acc.mySteamID = steamid; acc.user = login.accountName;
-        if (fresh) cfg.accounts.push(acc); save(); disconnect(acc.id); connect(acc);
+        if (fresh) cfg.accounts.push(acc); save();if(persistence)await persistence.flush(); disconnect(acc.id); connect(acc);
         a.accountId = acc.id; a.phase = 'authenticated';
       } catch { a.phase = 'failed'; a.error = 'Could not save the session or the account does not match the selected profile.'; }
     });
@@ -304,6 +316,7 @@ function createApp(options = {}) {
         res.writeHead(200, { 'Content-Type': item.type + '; charset=utf-8' }); return res.end(item.body);
       }
       const ip = req.socket.remoteAddress; rate(`api:${ip}`, 180);
+      if(req.method==='POST')await persistence?.flush();
       if (url.pathname === '/api/panel/login' && req.method === 'POST') {
         rate(`panel:${ip}`, 5, 5 * 60000);
         const data = await readBody(req);
@@ -427,6 +440,7 @@ function createApp(options = {}) {
         let reserved=false;
         try {
           const result=await individualWrite(client,id,apiName,{allowProgress:mode==='progress',expectedRevision:mode==='progress'?data.revision:undefined,beforeSend:async evidence=>{
+            await persistence?.flush();
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('The Steam session changed.',409);
             if(await journal.get(st.steamId64,id,apiName))throw fail('A write was already attempted for this achievement. Automatic retries are disabled.',409);
             if(st.lastAchievementWrite && Date.now()-st.lastAchievementWrite<60000)throw fail('Wait one minute between achievement writes.',429);
@@ -451,13 +465,14 @@ function createApp(options = {}) {
         let reserved=false;
         try {
           const result=await experimentWrite(client,{expectedApiname:data.apiname,beforeSend:async evidence=>{
+            await persistence?.flush();
             if(clients.get(acc.id)!==client || !st.connected || st.isCollisionPaused) throw fail('The Steam session changed.',409);
             const key=st.steamId64+':'+TARGET.appid;
             cfg.achievementExperiments ||= {};
             if(cfg.achievementExperiments[key]) throw fail('One write was already attempted for this account. Refresh to verify; retries require a new review.',409);
             await journal.reserve(st.steamId64,TARGET.appid,data.apiname,evidence);reserved=true;
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('Steam changed while the write intent was being recorded. No write was sent.',409);
-            cfg.achievementExperiments[key]={...evidence,outcome:'requested'};save();
+            cfg.achievementExperiments[key]={...evidence,outcome:'requested'};save();await persistence?.flush();
             console.log('[Achievement experiment requested] '+JSON.stringify(evidence));
           }});
           if(reserved)try{await journal.finish(st.steamId64,TARGET.appid,data.apiname,result);}catch{result.historyPersisted=false;result.message=(result.message||'Steam returned a result.')+' The result could not be saved to history; the intent remains pending. Do not retry.';}
@@ -494,7 +509,7 @@ function createApp(options = {}) {
         case '/api/remove': { const id = appId(data.appid); acc.games = acc.games.filter(g => g !== id); delete acc.gameNames[id]; save(); farming(acc); break; }
         case '/api/clear-all': acc.games = []; acc.gameNames = {}; save(); farming(acc); break;
         case '/api/apply-preset': { const p = PRESETS[data.presetKey]; if (!p) throw fail('Invalid preset.'); acc.games = [...new Set([...acc.games, ...p.games])].slice(0, 32); save(); farming(acc); resolveNames(acc).catch(() => {}); break; }
-        case '/api/toggle': st.isPaused = !st.isPaused; farming(acc); break;
+        case '/api/toggle': st.isPaused = !st.isPaused; acc.paused=st.isPaused;save();farming(acc); break;
         case '/api/persona': acc.personaState = acc.personaState === 7 ? 1 : 7; if (st.connected) clients.get(acc.id).setPersona(acc.personaState); save(); break;
         case '/api/custom-status': acc.customStatus = text(data.status || '', 64); save(); farming(acc); break;
         case '/api/toggle-cards': acc.cardFarming = !acc.cardFarming; save(); farming(acc); if (acc.cardFarming) scan(acc).catch(() => {}); break;
@@ -524,8 +539,10 @@ function createApp(options = {}) {
     for (const [key, r] of rates) if (r.until <= Date.now()) rates.delete(key);
   }, 30000)];
   timers.forEach(t => t.unref());
+  for(const acc of cfg.accounts)stateFor(acc.id).isPaused=Boolean(acc.paused);
+  if(persistence)persistence.onFailure=()=>{for(const id of clients.keys())disconnect(id);};
   if (options.connect !== false) cfg.accounts.forEach(connect);
-  return { server, cfg, vault, clients, states, attempts, sessions, journal, close: async () => { closing = true; timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear();requirementsCache.clear(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); await journal.close(); } };
+  return { server, cfg, vault, clients, states, attempts, sessions, journal, persistence, startConnections:()=>{persistence?.assert();cfg.accounts.forEach(connect);}, close: async () => { closing = true; timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear();requirementsCache.clear(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); await journal.close(); } };
 }
 if (require.main === module) {
   const port = Number(process.env.PORT || 8000);
@@ -535,8 +552,24 @@ if (require.main === module) {
   if (host !== '127.0.0.1' && !publicOrigin) throw new Error('Configure PUBLIC_ORIGIN for remote access.');
   if (publicOrigin && !publicOrigin.startsWith('https://')) throw new Error('The public origin must use HTTPS.');
   if (process.env.RENDER && !process.env.PANEL_PASSWORD) throw new Error('Set PANEL_PASSWORD in Render Environment (at least 12 characters).');
-  const app = createApp();
-  app.server.listen(port, host, () => console.log(`SteamFarmer: ${publicOrigin || `http://${host}:${port}`} · health /healthz`));
-  for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => app.close().then(() => process.exit(0)));
+  createPersistentApp().then(app=>{
+    app.server.listen(port, host, () => console.log(`SteamFarmer: ${publicOrigin || `http://${host}:${port}`} · health /healthz`));
+    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => app.close().then(() => process.exit(0)).catch(()=>process.exit(1)));
+  }).catch(()=>{console.error('[Application memory] Startup blocked: configuration could not be restored or saved. Check Neon connectivity and APP_STATE_KEY; existing data was not replaced.');process.exitCode=1;});
 }
-module.exports = { createApp };
+async function createPersistentApp(options={}){
+  const url=process.env.APP_DATABASE_URL||'';
+  if(!url && !options.persistence)return createApp(options);
+  const persistence=options.persistence || new AppState({url,key:process.env.APP_STATE_KEY});
+  try{
+    const restored=await persistence.load();
+    const app=createApp({...options,connect:false,persistence,config:restored?.config,restoredTokens:restored?.tokens});
+    await persistence.flush();await app.journal.ready();
+    if(!options.silent)console.log('[Application memory] '+JSON.stringify({...persistence.status(),accounts:app.cfg.accounts.length,checkpoint:app.cfg.persistenceCheckpoint||null}));
+    // Keep the synchronous factory used by tests; bootstrap restores before connecting.
+    const close=app.close;app.close=async()=>{try{await close();}finally{await persistence.close();}};
+    if(options.connect!==false)app.startConnections();
+    return app;
+  }catch(err){await persistence.close().catch(()=>{});throw err;}
+}
+module.exports = { createApp,createPersistentApp };

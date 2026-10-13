@@ -44,7 +44,8 @@ async function loadStatus() {
     if (document.activeElement !== $('timezoneInput')) $('timezoneInput').value = data.timezone;
     $('achQueueVal').textContent = 'Actual Steam state';
     const storage=data.achievementHistoryStorage;
-    $('historyStorage').textContent=storage?.persistent?(storage.available?'Persistent write history connected.':'Persistent history unavailable. Achievement activation is blocked until it recovers.'):'Local history only. Records can be lost when the host restarts or redeploys; persistent storage has not been connected.';
+    const memory=data.applicationStorage;
+    $('historyStorage').textContent=storage?.persistent?(storage.available?(memory?.persistent&&memory.available?'Persistent memory connected: write history and encrypted configuration saved.':'Persistent write history connected; configuration is still local.'):'Persistent history unavailable. Achievement activation is blocked.'):'Local history only. Records can be lost when the host restarts or redeploys.';
     if (!active) { $('connectionDetails').textContent=''; $('userLabel').textContent = 'Add your Steam account to get started'; $('statusText').textContent = 'No account'; $('badgeStatus').className = 'badge-status paused'; $('gamesGrid').replaceChildren(); gamesSnapshot=''; $('timerVal').textContent = '00h 00m 00s'; $('hoursVal').textContent = '0.0 estimated hrs'; $('gamesCountVal').textContent = '0 / 32'; $('capacityPercent').textContent = '0%'; $('capacityFill').style.width = '0%'; return; }
     $('userLabel').textContent = [active.name,active.profileName || active.user].filter(Boolean).join(' · ');
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${active.linkedSteamId?' · Steam ID: '+active.linkedSteamId:''}`;
