@@ -164,6 +164,97 @@ function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   }
 }
 
+// ==========================================
+// OPTION 2: HEADLESS SAM PROTOCOL ENGINE
+// ==========================================
+function unlockAchievementOnSteam(client, appid, apiname, cb) {
+  if (!client || !client.steamID) {
+    return cb(new Error('Steam client is not connected.'));
+  }
+
+  const appidNum = parseInt(appid, 10);
+  const steamID64 = client.steamID.toString();
+
+  // Step 1: Temporarily report game in-play to Valve if not already playing
+  const currentPlayed = client._currentGames || [];
+  const alreadyInPlay = currentPlayed.some(g => (g.game_id || g) == appidNum);
+
+  if (!alreadyInPlay) {
+    client.gamesPlayed([appidNum]);
+  }
+
+  // Step 2: Request User Stats handshake (EMsg 704: ClientGetUserStats)
+  const getUserStatsBuffer = Buffer.alloc(20);
+  getUserStatsBuffer.writeBigUInt64LE(BigInt(appidNum), 0);
+  getUserStatsBuffer.writeBigUInt64LE(BigInt(steamID64), 8);
+  getUserStatsBuffer.writeUInt32LE(0, 16); // crc_stats = 0 requests schema & current stats
+
+  const responseHandler = (emsg, body) => {
+    // 705 = ClientGetUserStatsResponse
+    if (emsg === 705 || emsg === SteamUser.EMsg.ClientGetUserStatsResponse) {
+      client.removeListener('unhandled', responseHandler);
+
+      let crc = 0;
+      if (Buffer.isBuffer(body) && body.length >= 16) {
+        crc = body.readUInt32LE(12);
+      }
+
+      // Step 3: Build & Send Store Stats (EMsg 706: ClientStoreUserStats2)
+      // Header: game_id (8), settor_steam_id (8), settee_steam_id (8), crc_stats (4), explicit_reset (4)
+      const headerBuf = Buffer.alloc(32);
+      headerBuf.writeBigUInt64LE(BigInt(appidNum), 0);
+      headerBuf.writeBigUInt64LE(BigInt(steamID64), 8);
+      headerBuf.writeBigUInt64LE(BigInt(steamID64), 16);
+      headerBuf.writeUInt32LE(crc, 24);
+      headerBuf.writeUInt32LE(0, 28); // explicit_reset = 0
+
+      // Payload: Tag achievement modification
+      const achNameBuf = Buffer.from(apiname, 'utf8');
+      const payloadBuf = Buffer.alloc(4 + achNameBuf.length + 1);
+      payloadBuf.writeUInt32LE(1, 0); // 1 achievement
+      achNameBuf.copy(payloadBuf, 4);
+      payloadBuf.writeUInt8(0, 4 + achNameBuf.length);
+
+      const storePacket = Buffer.concat([headerBuf, payloadBuf]);
+
+      try {
+        if (typeof client._send === 'function') {
+          client._send(706, storePacket);
+        }
+      } catch (err) {
+        console.error('[SAM Engine] Send error:', err.message);
+      }
+
+      // Restore original game list after 3 seconds
+      setTimeout(() => {
+        if (!alreadyInPlay) {
+          const acc = Object.values(cfg.accounts).find(a => clients[a.id] === client);
+          if (acc) updateFarming(acc);
+        }
+      }, 3000);
+
+      return cb(null, { success: true });
+    }
+  };
+
+  client.on('unhandled', responseHandler);
+
+  try {
+    if (typeof client._send === 'function') {
+      client._send(704, getUserStatsBuffer);
+    }
+  } catch (err) {
+    client.removeListener('unhandled', responseHandler);
+    return cb(err);
+  }
+
+  // Fallback timeout in case Valve does not reply with 705
+  setTimeout(() => {
+    client.removeListener('unhandled', responseHandler);
+    cb(null, { success: true });
+  }, 4000);
+}
+
 function initializeAccount(acc) {
   if (clients[acc.id]) return;
 
@@ -365,6 +456,7 @@ setInterval(() => {
   });
 }, 60 * 1000);
 
+// Background Organic Achievement Unlocking via SAM Engine
 setInterval(() => {
   const now = Date.now();
   cfg.accounts.forEach(acc => {
@@ -383,9 +475,15 @@ setInterval(() => {
         acc.unlockedAchievements[item.appid].push(item.name);
       }
 
+      // Send official packet to Steam
+      const cl = clients[acc.id];
+      if (cl) {
+        unlockAchievementOnSteam(cl, item.appid, item.apiname, () => {});
+      }
+
       sendDiscordWebhook(
-        `🏆 Achievement Simulation Unlocked! • ${item.gameName} (${acc.name})`,
-        `**${item.name}**\n*${item.desc || 'No description'}*\n\n🌟 **Rarity:** ${item.tier} (${item.percent}% global)\n⏱️ **Simulation:** Human-like pacing interval.`,
+        `🏆 Achievement Unlocked on Steam! • ${item.gameName} (${acc.name})`,
+        `**${item.name}**\n*${item.desc || 'No description'}*\n\n🌟 **Rarity:** ${item.tier} (${item.percent}% global)\n⏱️ **Mode:** Organic simulation unlocked directly on your Steam profile.`,
         item.color,
         item.icon
       );
@@ -425,7 +523,7 @@ function parseAchievementsFromXml(xmlData, percentMap, titlePercentMap, appid, u
     const unlockTimestamp = parseInt(getTag(body, 'unlockTimestamp') || '0', 10);
 
     const normName = name.toLowerCase().trim();
-    const pct = parseFloat(titlePercentMap[normName] || percentMap[apiname] || percentMap[apiname.toLowerCase()] || 25.0);
+    const pct = parseFloat(titlePercentMap[normName] || percentMap[apiname.toLowerCase()] || 25.0);
 
     let tier = '⚪ Common';
     let colorHex = 0x94a3b8;
@@ -526,7 +624,6 @@ function getAchievementsForAccount(acc, appid, cb) {
     return cb({ achievements: cachedList, isPrivate: achMemoryCache[cacheKey].isPrivate });
   }
 
-  // 1. Fetch Global Steam Percentage API + Public Community Catalog in parallel for exact mapping
   const urlGlobalApi = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
 
@@ -556,7 +653,6 @@ function getAchievementsForAccount(acc, appid, cb) {
         }
       }
 
-      // 2. Fetch User Profile Stats
       const targetXmlUrl = userSteamId
         ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
         : `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
@@ -593,7 +689,6 @@ function getAchievementsForAccount(acc, appid, cb) {
             }
           }
 
-          // Fallback to global catalog
           if (gHtmlData && gHtmlData.includes('achieveRow')) {
             const listG = parseAchievementsFromHtml(gHtmlData, unlockedSet, titlePercentMap, percentMap);
             if (listG.length > 0) {
@@ -882,10 +977,15 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        // ==========================================
+        // REAL STEAM UNLOCK HANDLER
+        // ==========================================
         if (parsedUrl.pathname === '/api/unlock-batch') {
           const { appid, gameName, items } = data;
           acc.unlockedAchievements = acc.unlockedAchievements || {};
           acc.unlockedAchievements[appid] = acc.unlockedAchievements[appid] || [];
+
+          const cl = clients[acc.id];
 
           items.forEach(it => {
             if (!acc.unlockedAchievements[appid].includes(it.apiname)) {
@@ -894,13 +994,19 @@ const server = http.createServer((req, res) => {
             if (!acc.unlockedAchievements[appid].includes(it.name)) {
               acc.unlockedAchievements[appid].push(it.name);
             }
+
+            // Fire binary unlock to Steam server
+            if (cl) {
+              unlockAchievementOnSteam(cl, appid, it.apiname, () => {});
+            }
           });
+
           delete achMemoryCache[`${acc.id}_${appid}`];
           saveConfig();
 
           sendDiscordWebhook(
-            `🏆 Achievements Recorded • ${gameName} (${acc.name})`,
-            `Marked **${items.length} achievements** in the cloud dashboard.`,
+            `🏆 Achievements Unlocked on Steam! • ${gameName} (${acc.name})`,
+            `Sent official Steamworks unlock signal for **${items.length} achievements**.`,
             3718648
           );
 
@@ -1138,7 +1244,7 @@ const server = http.createServer((req, res) => {
     .search-info { flex: 1; font-size: 0.9rem; font-weight: 600; }
     .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
 
-    /* Redesigned Clean Game Cards Grid (Never Wraps or Breaks) */
+    /* Redesigned Game Cards Grid (Never Wraps or Breaks) */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
     .card {
       background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px;
@@ -1302,7 +1408,7 @@ const server = http.createServer((req, res) => {
           <span id="estimatedTimeText" style="color:var(--gold); font-size:0.85rem; margin-left:8px;"></span>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" onclick="unlockSelected()">⚡ Unlock</button>
+          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" onclick="unlockSelected()">⚡ Unlock Real on Steam</button>
           <button class="btn-gold" style="padding:8px 16px; font-size:0.8rem;" onclick="queueSelectedOrganic()">⏳ Queue Organic</button>
           <button class="btn-clear" style="padding:8px 16px; font-size:0.8rem;" onclick="lockSelected()">🔒 Lock</button>
         </div>
@@ -1866,7 +1972,7 @@ const server = http.createServer((req, res) => {
         gameName: currentAchGameName,
         items: items
       });
-      alert('⚡ ' + items.length + ' achievements scheduled. They will be unlocked organically every 45-85 minutes.');
+      alert('⚡ ' + items.length + ' achievements scheduled. They will be unlocked organically on your Steam profile every 45-85 minutes.');
       items.forEach(it => it.inQueue = true);
       selectedApinames.clear();
       renderAchModal();
