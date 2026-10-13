@@ -574,6 +574,7 @@ budget.run(()=>runReadOnlyProbes(client)).then(result=>{if(isCurrent()&&st.conne
   }, 30000)];
   if(!options.silent)timers.push(setInterval(()=>{const m=process.memoryUsage();console.log('[Resources] '+JSON.stringify({rssMiB:Number((m.rss/1048576).toFixed(1)),heapMiB:Number((m.heapUsed/1048576).toFixed(1)),externalMiB:Number((m.external/1048576).toFixed(1)),...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes}));},60000));
   timers.forEach(t => t.unref());
+  if(!options.silent)console.log('[Resource budget] '+JSON.stringify({...budget.status(),heapLimitMiB:Math.round(require('node:v8').getHeapStatistics().heap_size_limit/1048576),startupDiagnostics,steamConnectionLimit:3}));
   for(const acc of cfg.accounts)stateFor(acc.id).isPaused=Boolean(acc.paused);
   if(persistence)persistence.onFailure=()=>{for(const id of clients.keys())disconnect(id);};
   if (options.connect !== false) cfg.accounts.forEach(connect);
