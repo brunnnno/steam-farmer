@@ -43,27 +43,36 @@ const PRESETS = {
   }
 };
 
+// Función de Discord corregida con User-Agent y soporte SSL
 function sendDiscordWebhook(title, description, color) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.startsWith('https://discord.com/api/webhooks/')) return;
   try {
     const payload = JSON.stringify({
+      username: 'Steam Booster Enterprise',
+      avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg',
       embeds: [{
         title: title,
         description: description,
         color: color || 3718648,
-        footer: { text: 'Steam Hour Booster Pro' },
+        footer: { text: 'Steam Hour Booster Enterprise' },
         timestamp: new Date().toISOString()
       }]
     });
     const parsed = new URL(cfg.discordWebhook);
     const req = https.request(parsed, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
     });
-    req.on('error', () => {});
+    req.on('error', (err) => console.error('Error Webhook Discord:', err.message));
     req.write(payload);
     req.end();
-  } catch (err) {}
+  } catch (err) {
+    console.error('Error procesando Webhook:', err.message);
+  }
 }
 
 const logOnDetails = cfg.refreshToken 
@@ -82,13 +91,13 @@ client.on('loggedOn', () => {
 
 client.on('webSession', (sessionID, cookies) => {
   webCookies = cookies.join('; ');
-  console.log('[+] Sesión web de Steam establecida (Lista para cromos).');
+  console.log('[+] Sesión web de Steam establecida.');
   if (cfg.cardFarming) escanearCromos();
 });
 
 client.on('error', (e) => console.error('Error Steam:', e.message));
 
-// Anti-Colisión: Se pausa cuando inicias un juego en tu PC
+// Anti-Colisión
 client.on('playingElsewhere', () => {
   console.log('[⚠️ Anti-Colisión] Partida detectada en PC real. Pausando bot...');
   isCollisionPaused = true;
@@ -104,7 +113,7 @@ client.on('playingElsewhere', () => {
   }, 10 * 60 * 1000);
 });
 
-// Control Remoto por Chat de Steam
+// Comandos por Chat de Steam
 client.on('friendMessage', (steamID, message) => {
   const msg = message.trim().toLowerCase();
   const args = msg.split(' ');
@@ -150,11 +159,11 @@ client.on('friendMessage', (steamID, message) => {
     actualizarFarmeo();
     reply(`🗑️ Juego ${id} quitado de la lista.`);
   } else if (cmd === '!help' || cmd === '!ayuda') {
-    reply('🤖 Comandos: !status, !pausa, !reanudar, !add <id>, !remove <id>, !invisible, !online');
+    reply('🤖 Comandos disponibles: !status, !pausa, !reanudar, !add <id>, !remove <id>, !invisible, !online');
   }
 });
 
-// Escaneo y Auto-Farmeo de Cromos
+// Escaneo de Cromos
 function escanearCromos(cb) {
   if (!webCookies) {
     if (cb) cb([]);
@@ -164,7 +173,7 @@ function escanearCromos(cb) {
     hostname: 'steamcommunity.com',
     path: '/my/badges/',
     method: 'GET',
-    headers: { 'Cookie': webCookies, 'User-Agent': 'Mozilla/5.0' }
+    headers: { 'Cookie': webCookies, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
   };
   https.get(opts, (res) => {
     let html = '';
@@ -187,7 +196,7 @@ function escanearCromos(cb) {
   }).on('error', () => { if (cb) cb([]); });
 }
 
-// Cronograma Inteligente (Modo Sueño)
+// Cronograma Sueño
 setInterval(() => {
   if (!cfg.sleepMode || !cfg.sleepMode.enabled) return;
   const hour = new Date().getHours();
@@ -196,7 +205,7 @@ setInterval(() => {
     : (hour >= cfg.sleepMode.start || hour < cfg.sleepMode.end);
 
   if (inSleep && !isSleepPaused) {
-    console.log('[💤 Cronograma] Modo sueño activado. Bot en pausa nocturna.');
+    console.log('[💤 Cronograma] Modo sueño activado. Bot en pausa.');
     isSleepPaused = true;
     client.gamesPlayed([]);
   } else if (!inSleep && isSleepPaused) {
@@ -266,7 +275,7 @@ const server = http.createServer((req, res) => {
   if (parsedUrl.pathname === '/manifest.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({
-      name: 'Steam Booster Pro',
+      name: 'Steam Booster Enterprise',
       short_name: 'SteamBooster',
       start_url: '/',
       display: 'standalone',
@@ -407,11 +416,10 @@ const server = http.createServer((req, res) => {
           cfg.discordWebhook = (data.webhook || '').trim();
           guardarConfig();
           if (cfg.discordWebhook) {
-            sendDiscordWebhook('🔔 Webhook Conectado', 'Notificaciones activadas.', 3718648);
+            sendDiscordWebhook('🔔 Webhook Conectado', '¡Tu canal de Discord se ha vinculado con éxito al bot!', 3718648);
           }
         }
 
-        // Mega-Función: Toggle Modo Farmeo de Cromos
         if (parsedUrl.pathname === '/api/toggle-cards') {
           cfg.cardFarming = !cfg.cardFarming;
           guardarConfig();
@@ -422,9 +430,8 @@ const server = http.createServer((req, res) => {
           }
         }
 
-        // Mega-Función: Reclamar Licencias Gratuitas
         if (parsedUrl.pathname === '/api/claim-free') {
-          const freePackages = [730, 440, 570, 230410, 1172470]; // Paquetes free habituales
+          const freePackages = [730, 440, 570, 230410, 1172470];
           client.requestFreeLicense(freePackages, (err, grantedApps) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, granted: grantedApps ? grantedApps.length : 0 }));
@@ -432,7 +439,6 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // Mega-Función: Configurar Modo Sueño
         if (parsedUrl.pathname === '/api/set-sleep') {
           cfg.sleepMode = {
             enabled: Boolean(data.enabled),
@@ -452,7 +458,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Frontend Ultra Completo
+  // HTML Frontend
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="es">
