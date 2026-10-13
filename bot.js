@@ -29,18 +29,6 @@ let webCookies = '';
 let cardDropGames = [];
 let mySteamID = cfg.mySteamID || '';
 
-const VALVE_ALIASES = {
-  550: 'L4D2',
-  440: 'TF2',
-  730: 'CSGO',
-  240: 'CSS',
-  220: 'HL2',
-  620: 'Portal2',
-  500: 'L4D',
-  300: 'DODS',
-  10: 'CS'
-};
-
 const PRESETS = {
   competitivos: {
     name: '🎯 Competitivos',
@@ -59,7 +47,7 @@ const PRESETS = {
   }
 };
 
-// Cliente HTTP que preserva parámetros XML y cookies en redirecciones
+// Cliente HTTP con soporte de cookies y seguimiento de redirecciones
 function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   if (typeof customHeaders === 'function') {
     cb = customHeaders;
@@ -94,7 +82,6 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
         if (!next.startsWith('http')) {
           next = parsed.protocol + '//' + parsed.hostname + next;
         }
-        // Corrección crítica: asegurar que el parámetro xml=1 se mantenga tras la redirección
         if (targetUrl.includes('xml=1') && !next.includes('xml=1')) {
           next += (next.includes('?') ? '&' : '?') + 'xml=1';
         }
@@ -110,7 +97,7 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   }
 }
 
-// Webhook de Discord con proxy anti-1015 e imágenes
+// Webhook de Discord con proxy anti-1015
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
@@ -177,6 +164,8 @@ client.on('loggedOn', () => {
     guardarConfig();
   }
   client.setPersona(cfg.personaState);
+  // Solicita la sesión web para generar cookies de autenticación
+  try { client.webLogOn(); } catch (e) {}
   resolverNombresFaltantes();
   actualizarFarmeo();
   sendDiscordWebhook('🟢 Bot Conectado', 'Farmeando ' + cfg.games.length + ' juegos con motor de logros activo.', 1095985);
@@ -184,6 +173,7 @@ client.on('loggedOn', () => {
 
 client.on('webSession', (sessionID, cookies) => {
   webCookies = cookies.join('; ');
+  console.log('[+] Sesión web de Steam autenticada con éxito.');
   if (cfg.cardFarming) escanearCromos();
 });
 
@@ -229,7 +219,7 @@ client.on('friendMessage', (steamID, message) => {
   }
 });
 
-// Motor de logros orgánicos (Revisa la cola cada 30 segundos)
+// Motor de logros orgánicos
 setInterval(() => {
   if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
   const now = Date.now();
@@ -363,7 +353,7 @@ function getTag(body, tag) {
   return content;
 }
 
-// Extractor de logros desde el XML del perfil
+// Extractor XML de perfil
 function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   const achievements = [];
   const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
@@ -409,14 +399,12 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   return achievements;
 }
 
-// Extractor HTML con detección de estado de desbloqueo personal
+// Extractor HTML por bloques
 function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   const list = [];
-  const regexBlock = /<div\b[^>]*class=["'][^"']*achieveRow[^"']*["'][^>]*>([\s\S]*?)(?:<div\b[^>]*class=["'][^"']*achieveRow[^"']*["']|$)/gi;
-  let match;
-
-  while ((match = regexBlock.exec(html)) !== null) {
-    const block = match[1];
+  const parts = html.split('<div class="achieveRow">');
+  for (let i = 1; i < parts.length; i++) {
+    const block = parts[i];
     const imgM = /<img\b[^>]*src=["']([^"']+)["']/i.exec(block);
     const h3M = /<h3>([\s\S]*?)<\/h3>/i.exec(block);
     const h5M = /<h5>([\s\S]*?)<\/h5>/i.exec(block);
@@ -458,10 +446,9 @@ function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   return list;
 }
 
-// Buscador maestro con seguimiento y preservación de parámetros XML
+// Extractor que consulta tanto perfil personal como catálogo global
 function obtenerLogrosJuego(appid, cb) {
-  const aliasOrId = VALVE_ALIASES[appid] || appid;
-
+  // 1. Obtener porcentajes globales
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -478,47 +465,38 @@ function obtenerLogrosJuego(appid, cb) {
     const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
     const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
 
-    // 1. Probar XML con el identificador canónico
-    const tryXmlUrl = userSteamId
-      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${aliasOrId}/?xml=1`
-      : `https://steamcommunity.com/stats/${aliasOrId}/achievements/?xml=1`;
+    // 2. Consulta de logros personales por XML
+    const targetXmlUrl = userSteamId
+      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
+      : `https://steamcommunity.com/my/stats/${appid}/?xml=1`;
 
-    fetchWithRedirects(tryXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
-      if (!errXml && xmlData && xmlData.includes('<achievement')) {
+    fetchWithRedirects(targetXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
+      if (!errXml && xmlData && xmlData.includes('<achievement') && !xmlData.includes('<error>')) {
         const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
         if (list.length > 0) return cb(list);
       }
 
-      // 2. Probar XML directo por AppID numérico si difiere del alias
-      if (aliasOrId !== appid) {
-        const tryNumXmlUrl = userSteamId
-          ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
-          : `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
+      // 3. Fallback: Página web de estadísticas de usuario autenticado
+      const targetUserHtml = userSteamId
+        ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?tab=achievements&l=spanish`
+        : `https://steamcommunity.com/my/stats/${appid}/?tab=achievements&l=spanish`;
 
-        fetchWithRedirects(tryNumXmlUrl, xmlHeaders, 5, (errNumXml, numXmlData) => {
-          if (!errNumXml && numXmlData && numXmlData.includes('<achievement')) {
-            const listNum = parseAchievementsFromXml(numXmlData, percentMap, appid, unlockedLocally);
-            if (listNum.length > 0) return cb(listNum);
-          }
-          fallbackHtml();
-        });
-      } else {
-        fallbackHtml();
-      }
+      fetchWithRedirects(targetUserHtml, xmlHeaders, 5, (errUHtml, uHtmlData) => {
+        if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow')) {
+          const listU = parseAchievementsFromHtml(uHtmlData, percentMap, unlockedLocally);
+          if (listU.length > 0) return cb(listU);
+        }
 
-      function fallbackHtml() {
-        const targetHtmlUrl = userSteamId
-          ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${aliasOrId}/?tab=achievements&l=spanish`
-          : `https://steamcommunity.com/stats/${aliasOrId}/achievements/?l=spanish`;
-
-        fetchWithRedirects(targetHtmlUrl, xmlHeaders, 5, (errHtml, htmlData) => {
-          if (!errHtml && htmlData && (htmlData.includes('achieveRow') || htmlData.includes('achieveTxtHolder'))) {
-            const fallbackList = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
-            if (fallbackList.length > 0) return cb(fallbackList);
+        // 4. Fallback final: Catálogo público global de Steam
+        const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
+        fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
+          if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
+            const listG = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
+            if (listG.length > 0) return cb(listG);
           }
           cb([]);
         });
-      }
+      });
     });
   });
 }
@@ -1460,7 +1438,7 @@ const server = http.createServer((req, res) => {
             row.querySelector('.ach-checkbox').checked = true;
           } else {
             row.classList.remove('selected');
-            row.querySelector('.ach-checkbox').checked = false;
+            row.querySelector('.ach-checkbox').false;
           }
         }
       });
