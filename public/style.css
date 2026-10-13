@@ -360,4 +360,17 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 @media(max-width:600px) { .cards-panel { padding:12px; }.cards-game { gap:8px; }.cards-game strong { font-size:11px; } }
 .ach-impact-effect { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; padding:12px 0; border-bottom:1px solid var(--card-border); font-size:12px; }
 .ach-impact-effect small { grid-column:1 / -1; color:var(--text-muted); }
+.control-menu { position:relative;flex-shrink:0; }
+.control-menu > summary,.quick-presets > summary { cursor:pointer;list-style:none;color:var(--text-muted);font-size:12px;font-weight:600;padding:10px 14px;border:1px solid var(--card-border);border-radius:12px; }
+.control-menu > summary::-webkit-details-marker,.quick-presets > summary::-webkit-details-marker { display:none; }
+.control-menu > summary::after,.quick-presets > summary::after { content:'+';margin-left:10px;color:var(--primary); }
+.control-menu[open] > summary::after,.quick-presets[open] > summary::after { content:'−'; }
+.control-menu-content { position:absolute;right:0;top:calc(100% + 6px);z-index:30;display:flex;flex-direction:column;gap:8px;width:240px;max-width:80vw;padding:14px;background:#111c2a;border:1px solid var(--card-border);border-radius:14px;box-shadow:0 16px 36px #0006; }
+.control-menu-content small { line-height:1.5;color:var(--text-muted); }
+.card-actions { align-items:flex-start; }
+.card .control-menu-content { position:static;width:auto;max-width:160px;margin-top:6px;box-shadow:none;padding:8px; }
+.quick-presets { margin:12px 0; }.quick-presets > summary { width:fit-content; }
+#achReadMode { max-width:100%;padding:10px 12px;border:1px solid var(--card-border);border-radius:12px;background:#131b2e;color:var(--text-main,#fff);font:inherit;font-size:12px; }
+.ach-header > div:last-child { flex-wrap:wrap; }
+[hidden] { display:none !important; }
 @media(max-width:600px) { .ach-impact-effect { grid-template-columns:minmax(0,1fr); } }

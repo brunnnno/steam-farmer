@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=11">
+  <link rel="stylesheet" href="/style.css?v=12">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -47,7 +47,7 @@
           </div>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
-<button class="btn-action-sm" id="directVerifyBtn" title="Read your achievement state directly from your signed-in Steam session">Verify directly</button><button id="standardReadBtn" class="btn-action-sm" title="Use Steam Community sources, including rarity when available">Standard reading</button><button class="btn-action-sm" data-event-4="">Refresh</button>
+<select id="achReadMode" aria-label="Achievement reading mode" title="Direct reading checks activation compatibility; standard reading uses community sources."><option value="auto">Automatic reading</option><option value="protocol">Direct verification</option><option value="web">Standard reading</option></select><button class="btn-action-sm" data-event-4="">Refresh</button>
           <button class="btn-action-sm" data-event-5="">Close</button>
         </div>
       </div>
@@ -102,7 +102,7 @@
       </div>
       <div style="display:flex; gap:8px;">
         <button class="acc-pill" data-event-15="">+ Add Account</button>
-        <button class="acc-pill" data-event-16="">Refresh Steam session</button><button class="acc-pill" data-event-17="">Sign out of Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="">Delete profile</button>
+        <details class="control-menu" id="accountMenu"><summary>Account options</summary><div class="control-menu-content"><button class="acc-pill" data-event-16="">Refresh Steam session</button><button class="acc-pill" data-event-17="" hidden>Sign out of Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="" hidden>Delete profile</button><small id="managedAccountNote" hidden>The main account is managed by the server; signing out and deleting it here are unavailable.</small></div></details>
       </div>
     </div>
 
@@ -114,9 +114,8 @@
       <div class="header-actions">
         <button class="btn-main session-play" id="playBtn" data-event-24="">Resume / Play Now</button>
         <button class="btn-purple" id="cardsBtn" data-event-19="">Cards: OFF</button>
-        <button class="btn-action-sm" data-event-20="">Claim free games</button>
         <button class="btn-action-sm" id="personaBtn" data-event-21="">Mode: Online</button>
-        <button class="btn-action-sm" data-event-22="">Change password</button><button class="btn-action-sm" data-event-23="">Lock panel</button>
+        <button class="btn-action-sm" data-event-23="">Lock panel</button>
         <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Active</span></div>
       </div>
     </header>
@@ -166,14 +165,15 @@
           <input type="text" id="searchInput" placeholder="Search game title or enter AppID..." autocomplete="off">
           <div class="search-results" id="searchResults"></div>
         </div>
-        <button class="btn-clear" data-event-25="">Clear All Games</button>
+        <details class="control-menu"><summary>List options</summary><div class="control-menu-content"><button class="btn-clear" data-event-25="">Clear All Games</button></div></details>
       </div>
 
-      <div class="presets-row" id="presetsContainer">
+      <details class="quick-presets"><summary>Quick presets</summary><div class="presets-row" id="presetsContainer">
         <span style="font-size:0.8rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">Quick Presets:</span>
-      </div>
+      </div></details>
 
       <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
+        <section class="ach-impact-review"><h3>Panel &amp; licenses</h3><button class="btn-action-sm" data-event-22="">Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><p>Requests Steam licenses for five supported free games, not the entire free catalog.</p></section>
         <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
         <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
       <div class="tools-grid">
@@ -185,7 +185,7 @@
         <div class="tool-box">
           <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
           <input type="text" id="webhookInput" placeholder="https://discord.com/api/webhooks/...">
-          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-27="">Test</button>
+          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-27="">Save &amp; test</button>
         </div>
       </div>
 
@@ -210,6 +210,6 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager</span></footer>
   </div>
 
-  <script src="/app.js?v=11" defer></script>
+  <script src="/app.js?v=12" defer></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # Control review — 2026-10-13
 
-Scope: dashboard code and server handlers behind its controls. These are recommendations, not implemented removals. No achievement writes were performed.
+Scope: dashboard code and server handlers behind its controls. After user approval, the simplifications below were implemented on 2026-10-13. No achievement writes were performed; server activation and progress logic are unchanged.
 
 “Percentage: highest first” replaces the equivalent “Most common first”: descending global Steam unlock percentage, genuine zero preserved, unknown values last. Direct reads fetch missing percentages separately without changing verified states. Authenticated lookups are deduplicated and cached for one hour (16 entries / 256 KiB); response limit 512 KiB and timeout five seconds.
 
@@ -18,3 +18,7 @@ Higher percentage means more players obtained an achievement, not necessarily lo
 | Discord webhook Test | Rename Save & test. | Handler saves the URL and sends a message. |
 
 Keep Pause/Resume, Cards, Achievements, Close, search and filters readily accessible. Keep history refresh, schedule save and Steam-chat permission management in Advanced. Preserve security locking and verification functions.
+
+Implemented: reading-mode selector (Automatic / Direct verification / Standard), contextual account and list menus, per-game removal menu, collapsed presets, panel/password and supported-license controls in Advanced, and Save & test webhook label. Main-account sign-out/deletion are hidden with an explanation, while additional profiles retain their controls. Unavailable activation buttons are omitted but restriction reasons remain visible. Eligible activation, exclusive progress previews and read-only shared-counter review remain available.
+
+Verification: 137 automated tests pass, including normal activation submission, cancellation, progress preview/confirmation, account-scoped controls, mode switching and automatic refresh. Tests use simulated Steam transports; this UI update did not grant a new live achievement.

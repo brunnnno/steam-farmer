@@ -8,10 +8,36 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('account options hide unsupported main-account actions and restore them for additional profiles',async t=>{
+  const accounts=[{id:'a',name:'Main',tokenSource:'environment',games:[],cardDropGames:[],sleepMode:{}},{id:'b',name:'Other',tokenSource:'local',games:[],cardDropGames:[],sleepMode:{}}];
+  const w=ui(t,()=>({accounts,presets:[],timezone:'UTC'}));w.testUI.authenticate();await w.testUI.load();
+  for(const id of [17,18])assert.equal(w.document.querySelector('[data-event-'+id+']').hidden,true);
+  assert.equal(w.document.getElementById('managedAccountNote').hidden,false);
+  w.testUI.select('b');await w.testUI.load();
+  for(const id of [17,18])assert.equal(w.document.querySelector('[data-event-'+id+']').hidden,false);
+  assert.equal(w.document.getElementById('managedAccountNote').hidden,true);
+});
+test('secondary controls are collapsed, unique and preserve their original handlers',async t=>{
+  const w=ui(t,()=>response([])),d=w.document;
+  for(const id of [20,22,25,27])assert.equal(d.querySelectorAll('[data-event-'+id+']').length,1);
+  for(const id of [20,22])assert.ok(d.querySelector('[data-event-'+id+']').closest('.advanced-settings'));
+  assert.ok(d.querySelector('[data-event-25]').closest('details'));
+  assert.equal(d.querySelector('.quick-presets').open,false);
+  assert.match(d.querySelector('[data-event-27]').textContent,/Save & test/);
+  assert.equal(d.querySelectorAll('#achReadMode').length,1);
+});
+test('reading selector keeps automatic mode on refresh and exposes direct activation compatibility',async t=>{
+  const calls=[],target={name:'Target',apiname:'REAL',unlocked:false,compatibility:{canUnlock:true,status:'provisional',reason:'Eligible'}};
+  const w=ui(t,url=>{calls.push(url);return {...response([target]),readingMethod:'protocol'};});w.testUI.activate({tokenSource:'environment'});
+  await w.testUI.open(550,'Game',false,'auto');assert.equal(w.document.getElementById('achReadMode').value,'auto');
+  await w.testUI.refresh();assert.ok(calls.at(-1).includes('method=auto'));assert.match(w.document.querySelector('.ach-info button').textContent,/Unlock achievement/);
+  const mode=w.document.getElementById('achReadMode');mode.value='protocol';mode.dispatchEvent(new w.Event('change'));await new Promise(r=>setImmediate(r));
+  assert.ok(calls.some(url=>url.includes('method=protocol')));assert.ok(!calls.some(url=>url.includes('/unlock')));
+});
 test('percentage descending sort puts most obtained first, keeps genuine zero and places unknowns last',async t=>{const w=ui(t,()=>response([{name:'Unknown A',unlocked:false},{name:'Rare',unlocked:false,percent:1},{name:'Common',unlocked:false,percent:90},{name:'Unknown B',unlocked:false},{name:'Zero',unlocked:false,percent:0}]));await w.testUI.open(550,'Game');const select=w.document.getElementById('achSortSelect');select.value='percentage_desc';select.dispatchEvent(new w.Event('change'));assert.deepEqual([...w.document.querySelectorAll('.ach-title')].map(el=>el.textContent),['Common','Rare','Zero','Unknown A','Unknown B']);});
 test('percentage sort enriches a direct read without changing its verified states',async t=>{const calls=[],w=ui(t,url=>{calls.push(url);return url.includes('/percentages?')?{percentages:{ONE:80,TWO:10}}:response([{apiname:'TWO',name:'Two',unlocked:true,percent:null},{apiname:'ONE',name:'One',unlocked:false,percent:null}]);});await w.testUI.open(550,'Game',false,'protocol');const select=w.document.getElementById('achSortSelect');select.value='percentage_desc';select.dispatchEvent(new w.Event('change'));await new Promise(r=>setImmediate(r));assert.deepEqual([...w.document.querySelectorAll('.ach-title')].map(el=>el.textContent),['One','Two']);assert.equal(calls.filter(url=>url.includes('/api/achievements?')).length,1);assert.equal(calls.filter(url=>url.includes('/percentages?')).length,1);assert.equal(w.document.querySelectorAll('.verified').length,1);});
-test('resume control is in the header and card disclosure uses an inline animated SVG indicator',async t=>{const w=ui(t,()=>response([]));assert.ok(w.document.querySelector('header #playBtn'));assert.equal(w.document.querySelectorAll('#playBtn').length,1);assert.ok(w.document.querySelector('#cardsPanel summary .cards-disclosure svg path'));assert.ok(w.document.getElementById('standardReadBtn'));});
-test('connected game card opens automatic direct-first reading while standard reading remains available',async t=>{const calls=[],account={id:'a',name:'Owner',games:[550],gameNames:{550:'L4D2'},connected:true,tokenSource:'environment',cardDropGames:[],sleepMode:{enabled:false,start:3,end:8}};const w=ui(t,url=>{calls.push(url);return url==='/api/status'?{accounts:[account],presets:[],timezone:'UTC'}:{...response([{name:'Real',unlocked:true}]),readingMethod:url.includes('method=auto')?'protocol':'web'};});w.testUI.authenticate();await w.testUI.load();w.document.querySelector('.btn-card-ach').click();await new Promise(r=>setImmediate(r));assert.ok(calls.some(url=>url.includes('method=auto')));w.document.getElementById('standardReadBtn').click();await new Promise(r=>setImmediate(r));assert.ok(calls.some(url=>url.includes('/api/achievements?')&&url.includes('refresh=1')&&!url.includes('method=')));});
+test('resume control is in the header and card disclosure uses an inline animated SVG indicator',async t=>{const w=ui(t,()=>response([]));assert.ok(w.document.querySelector('header #playBtn'));assert.equal(w.document.querySelectorAll('#playBtn').length,1);assert.ok(w.document.querySelector('#cardsPanel summary .cards-disclosure svg path'));assert.ok(w.document.querySelector('#achReadMode option[value="web"]'));});
+test('connected game card opens automatic direct-first reading while standard reading remains available',async t=>{const calls=[],account={id:'a',name:'Owner',games:[550],gameNames:{550:'L4D2'},connected:true,tokenSource:'environment',cardDropGames:[],sleepMode:{enabled:false,start:3,end:8}};const w=ui(t,url=>{calls.push(url);return url==='/api/status'?{accounts:[account],presets:[],timezone:'UTC'}:{...response([{name:'Real',unlocked:true}]),readingMethod:url.includes('method=auto')?'protocol':'web'};});w.testUI.authenticate();await w.testUI.load();w.document.querySelector('.btn-card-ach').click();await new Promise(r=>setImmediate(r));assert.ok(calls.some(url=>url.includes('method=auto')));const mode=w.document.getElementById('achReadMode');mode.value='web';mode.dispatchEvent(new w.Event('change'));await new Promise(r=>setImmediate(r));assert.ok(calls.some(url=>url.includes('/api/achievements?')&&url.includes('refresh=1')&&!url.includes('method=')));});
 test('compact Cards panel shows automatic games, pending drops, active status and keeps the manual list',async t=>{
   const account={id:'a',name:'Owner',games:[220],gameNames:{220:'Manual game'},connected:true,cardFarming:true,cardsReady:true,isFarming:true,runningGames:[240],sleepMode:{enabled:false,start:3,end:8},cardDropGames:[{appid:240,name:'Counter-Strike: Source',remaining:3},{appid:550,name:'<img src=x onerror=alert(1)>',remaining:5}],cardScanAt:'2026-10-13T16:00:00Z'};
   const w=ui(t,()=>({accounts:[account],presets:[],timezone:'America/Montevideo'}));w.testUI.authenticate();await w.testUI.load();
@@ -70,7 +96,7 @@ test('individual activation requires direct reading, eligible schema and the mai
   await w.testUI.open(550,'A game');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);
   await w.testUI.open(550,'A game',true,'protocol');assert.match(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);assert.match(w.document.getElementById('achListContainer').textContent,/Provisional compatibility/);
   w.testUI.activate({tokenSource:'local'});await w.testUI.refresh();assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);
-  w.testUI.activate({tokenSource:'environment'});target.compatibility={status:'dependency',canUnlock:false,reason:'Progress stat'};await w.testUI.refresh();assert.equal(w.document.querySelector('.ach-info button').disabled,true);assert.match(w.document.getElementById('achListContainer').textContent,/Progress stat/);
+  w.testUI.activate({tokenSource:'environment'});target.compatibility={status:'dependency',canUnlock:false,reason:'Progress stat'};await w.testUI.refresh();assert.equal(w.document.querySelector('.ach-info button'),null);assert.match(w.document.getElementById('achListContainer').textContent,/Progress stat/);
 });
 test('cancelling individual activation sends no write request',async t=>{
   const urls=[];const target={name:'One',apiname:'ONE',unlocked:false,compatibility:{status:'provisional',canUnlock:true}};
