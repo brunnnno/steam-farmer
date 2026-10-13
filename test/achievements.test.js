@@ -1,6 +1,6 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');
-const {achievements,parseXml,parseHtml}=require('../lib/steam-data');
+const {achievements,parseXml,parseHtml,remote}=require('../lib/steam-data');
 const sid='76561198000000001';
 const row=(name,extra='')=>`<div class="achieveRow"><img src="https://example.test/icon.png"><h3>${name}</h3><h5>Description</h5>${extra}<div class="achievePercent">0.0%</div></div>`;
 function source(name,url,body){return {body,finalUrl:url};}
@@ -50,4 +50,13 @@ test('redirect to a different numeric profile cannot confirm the requested accou
 test('private profile with vanity URL stays unknown',async()=>{
   const request=async(url)=>{if(url.includes('/profiles/')&&!url.includes('xml=1'))return {body:'<div class="profile_private">This profile is private</div>'+row('One'),finalUrl:'https://steamcommunity.com/id/owner-name/stats/L4D2/'};if(url.includes('/stats/240/achievements/'))return source('',url,row('One'));throw Error('unavailable');};
   const result=await achievements({}, {steamId64:sid},240,'',request);assert.equal(result.verified,false);assert.equal(result.achievements[0].unlocked,null);
+});
+test('Steam canonical redirects retain achievement tab, XML and English while dropping unrelated query values',async()=>{
+  const seen=[];const fetcher=async(url,options)=>{seen.push({url:url.href,cookie:options.headers.Cookie});if(seen.length===1)return new Response('',{status:302,headers:{Location:'/id/owner/stats/L4D2'}});return new Response('<playerstats/>',{status:200});};
+  const result=await remote('https://steamcommunity.com/profiles/76561198000000001/stats/550/?tab=achievements&xml=1&l=english&key=must-not-carry',{cookie:'session=private'},fetcher);
+  const final=new URL(result.finalUrl);assert.equal(final.searchParams.get('tab'),'achievements');assert.equal(final.searchParams.get('xml'),'1');assert.equal(final.searchParams.get('l'),'english');assert.equal(final.searchParams.get('key'),null);assert.equal(seen[1].cookie,'session=private');
+});
+test('stats view parameters and cookies are not carried to another origin',async()=>{
+  const seen=[];const fetcher=async(url,options)=>{seen.push({url:url.href,cookie:options.headers.Cookie});if(seen.length===1)return new Response('',{status:302,headers:{Location:'https://store.steampowered.com/stats/550/'}});return new Response('ok',{status:200});};
+  await remote('https://steamcommunity.com/profiles/76561198000000001/stats/550/?tab=achievements&xml=1&l=english',{cookie:'session=private'},fetcher);assert.equal(new URL(seen[1].url).search,'');assert.equal(seen[1].cookie,undefined);
 });
