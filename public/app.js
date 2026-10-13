@@ -102,22 +102,29 @@ async function submitGuard() { const id = loginAttempt; if (!id) return; try { c
 async function deleteCurrentAccount() { if (!active || !confirm('¿Eliminar este perfil y su sesión guardada?')) return; if (await action('/api/account/remove')) { activeAccountId=''; closeAchModal(); await loadStatus(); } }
 async function logoutSteam() { if (active && confirm('¿Cerrar la sesión Steam y olvidar el acceso guardado?')) await action('/api/steam/logout',{},'Sesión Steam eliminada.'); }
 async function editChatAdmins() { if (!active) return; const value = prompt('SteamID64 autorizados, separados por comas. Vacío desactiva comandos.', (active.chatAdmins||[]).join(',')); if(value !== null) await action('/api/chat-admins',{steamids:value.split(',').map(v=>v.trim()).filter(Boolean)},'Permisos de chat actualizados.'); }
-async function openAchModal(id,title) {
+async function openAchModal(id,title,forceRefresh=false) {
+  if (currentAchAppId !== id || achAccountId !== activeAccountId) {
+    filterStatus='all'; filterRarity='all'; currentSort='default'; searchQuery='';
+    $('achSortSelect').value='default'; $('achSearchInput').value='';
+  }
+  document.body.classList.add('achievement-open');
+  $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
   currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; selectedApinames.clear(); currentAchList=[];
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Consultando Steam…'; $('achProgressFill').style.width='0%'; $('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none';
   const serial = ++achSerial, account = achAccountId;
   try {
-    const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}`);
+    const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':''}`);
     if (serial !== achSerial || account !== activeAccountId) return;
-    currentAchList=data.achievements;
+    currentAchList=(Array.isArray(data.achievements)?data.achievements:[]).map(a=>({ ...a, name:String(a.name||a.apiname||'Logro'), description:String(a.description||''), unlocked:typeof a.unlocked==='boolean'?a.unlocked:null, percent:a.percent!=null && a.percent!=='' && Number.isFinite(Number(a.percent))?Number(a.percent):null }));
     $('achReadMessage').textContent=data.message || '';
     $('achPrivacyWarning').style.display=data.message ? 'block':'none';
-    $('achGameTitle').textContent=`${title} · ${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString()}`;
+    $('achGameTitle').textContent=title;
+    $('estimatedTimeText').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString()}`;
     renderAchModal();
   } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='No verificado'; $('achListContainer').replaceChildren(element('p',e.message)); } }
 }
-function closeAchModal() { achSerial++; $('achModal').style.display='none'; }
-function forceRefreshAchievements() { if(currentAchAppId) openAchModal(currentAchAppId,currentAchGameName); }
+function closeAchModal() { document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none'; }
+function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true); }
 function setFilter(type,val) { if(type==='status') filterStatus=val; else filterRarity=filterRarity===val?'all':val; renderAchModal(); }
 function setSort(val) { currentSort=val; renderAchModal(); }
 function onSearchInput(val) { searchQuery=val.trim().toLowerCase(); renderAchModal(); }
@@ -139,8 +146,8 @@ function renderAchModal() {
     if(a.unlockTimestamp) info.append(element('small',' · '+new Date(a.unlockTimestamp*1000).toLocaleString())); else if(a.unlockDate) info.append(element('small',a.unlockDate));
     row.append(info,element('span',a.unlocked===true?'✓ Confirmado':a.unlocked===false?'Bloqueado':'Sin verificar')); cont.append(row);
   }
-  if(!list.length) cont.append(element('p',currentAchList.length?'No hay coincidencias.':'Steam no devolvió logros para este juego.'));
-  $('selectAllCheckbox').disabled=true; $('selectedCountText').textContent='Estado leído de Steam'; $('estimatedTimeText').textContent='';
+  if(!list.length) { const message=element('p',currentAchList.length?'No hay coincidencias con estos filtros.':'No hay una lista disponible. Revisá el mensaje de Steam de arriba.'); cont.append(message); if(currentAchList.length) cont.append(button('Mostrar todos',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+  $('selectAllCheckbox').disabled=true; $('selectedCountText').textContent='Estado leído de Steam';
 }
 function toggleSelectAll() {} // Read-only achievements have no write selection.
 async function addGame(id,name) { const account=activeAccountId; const result=await action('/api/add',{appid:Number(id),name:name||''}); if(result && account===activeAccountId) $('searchInput').value=''; }
@@ -164,6 +171,8 @@ $('searchInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&/^\d
 $('pinInput').addEventListener('keydown',event=>{if(event.key==='Enter')unlock();});
 document.addEventListener('click',event=>{if(!$('searchResults').contains(event.target)&&event.target!==$('searchInput'))$('searchResults').style.display='none';});
 setInterval(()=>{const start=active?.sessionStartTime, count=active?.runningGames?.length||0;const seconds=start&&active.isFarming?Math.max(0,Math.floor((Date.now()-start)/1000)):0;$('timerVal').textContent=`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m ${seconds%60}s`;$('hoursVal').textContent=(seconds/3600*count).toFixed(1)+' hrs estimadas';},1000);
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && $('achModal').style.display==='flex')closeAchModal();});
+$('achModal').addEventListener('click',event=>{if(event.target===$('achModal'))closeAchModal();});
 setInterval(loadStatus,5000);
 document.querySelector('[data-event-0]').addEventListener('click', function(event) { unlock(); });
 document.querySelector('[data-event-1]').addEventListener('click', function(event) { submitGuard(); });

@@ -174,10 +174,11 @@
     }
     .btn-card-remove:hover { background: var(--danger); color: #fff; }
 
+    body.achievement-open { overflow:hidden; }
     /* Achievement Modal */
     .ach-modal-card {
       background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);
-      width: 96%; max-width: 960px; max-height: 92vh; border-radius: 24px;
+      width: 96%; max-width: 960px; height: min(92vh, 920px); height: min(92dvh, 920px); max-height: 92dvh; border-radius: 24px;
       display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 70px rgba(0,0,0,0.95);
     }
     .ach-header {
@@ -205,8 +206,10 @@
       padding: 12px 30px; background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid var(--card-border);
       display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 0.9rem;
     }
-    .ach-list { padding: 20px 30px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .ach-list { padding: 20px 30px; overflow-y: auto; overscroll-behavior:contain; min-height:0; flex: 1 1 0; display: flex; flex-direction: column; gap: 10px; }
+    .ach-header,.privacy-banner,.ach-toolbar,.ach-batch-actions { flex-shrink:0; }
     .ach-item {
+      flex-shrink:0;
       background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border);
       border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 16px;
       transition: all 0.2s; user-select: none;
@@ -240,10 +243,19 @@
       .ach-header,.ach-toolbar,.ach-batch-actions { flex-wrap:wrap; gap:12px; }
       .ach-header-left { min-width:0; width:100%; }
       .ach-header-left > div { flex-wrap:wrap; }
-      .ach-item { flex-wrap:wrap; }
+      .ach-header,.privacy-banner,.ach-toolbar,.ach-batch-actions { flex-shrink:0; }
+    .ach-item {
+      flex-shrink:0; flex-wrap:wrap; }
       .modal-box { padding:24px 18px; }
       .accounts-bar > div { flex-wrap:wrap; }
       input,select,button { max-width:100%; }
+    }
+    @media (max-height:600px), (max-width:600px) {
+      .ach-modal-card { overflow-y:auto; overscroll-behavior:contain; }
+      .ach-header { position:sticky; top:0; z-index:2; padding:14px; }
+      .ach-list { flex:0 0 auto; overflow:visible; padding:14px; }
+      .ach-toolbar,.ach-batch-actions,.privacy-banner { padding:12px 14px; }
+      .ach-header-left h2 { font-size:1.1rem; overflow-wrap:anywhere; }
     }
   </style>
 </head>

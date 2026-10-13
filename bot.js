@@ -52,6 +52,7 @@ function createApp(options = {}) {
   const User = options.SteamUser || SteamUser;
   const Session = options.LoginSession || LoginSession;
   const steamRead = options.achievements || achievements;
+  const achievementCache = new Map(), achievementPending = new Map();
   let closing = false;
   function stateFor(id) {
     if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
@@ -304,8 +305,19 @@ function createApp(options = {}) {
         return json(res, 200, (r.items || []).slice(0, 6).map(i => ({ id: i.id, name: i.name, img: i.tiny_image })));
       }
       if (url.pathname === '/api/achievements' && req.method === 'GET') {
-        rate(`ach:${token}`, 12); const acc = getAccount(req, url); const st = stateFor(acc.id);
-        return json(res, 200, await steamRead(acc, st, appId(url.searchParams.get('appid')), process.env.STEAM_API_KEY || ''));
+        rate(`ach:${token}`, 40); const acc = getAccount(req, url); const st = stateFor(acc.id);
+        const id = appId(url.searchParams.get('appid'));
+        const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${Boolean(st.webCookies)}`;
+        const cached = achievementCache.get(key);
+        if (url.searchParams.get('refresh') !== '1' && cached && cached.expires > Date.now()) return json(res, 200, cached.result);
+        if (!achievementPending.has(key)) {
+          const task = Promise.resolve().then(() => steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(result => {
+            if (achievementCache.size >= 100) achievementCache.delete(achievementCache.keys().next().value);
+            achievementCache.set(key, { result, expires: Date.now() + 60000 }); return result;
+          }).finally(() => achievementPending.delete(key));
+          achievementPending.set(key, task);
+        }
+        return json(res, 200, await achievementPending.get(key));
       }
       if (['/api/unlock-batch', '/api/lock-batch', '/api/queue-achievements'].includes(url.pathname) && req.method === 'POST') throw fail(WRITE_UNAVAILABLE, 501);
       if (url.pathname === '/api/set-webhook' && req.method === 'POST') {

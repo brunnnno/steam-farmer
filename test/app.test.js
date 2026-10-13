@@ -145,3 +145,9 @@ test('entrada desde ChatGPT permite el panel público pero rechaza API y POST ex
   const badHost = await new Promise(resolve => require('node:http').get(f.base+'/', { headers: { Host: 'evil.example' } }, response => { response.resume(); resolve(response.statusCode); }));
   assert.equal(badHost,403);
 });
+test('caché de logros por cuenta y actualización manual real',async t=>{
+  let calls=0;const account={id:'a',name:'a',user:'a',games:[240],gameNames:{},sleepMode:{enabled:false,start:3,end:8}};
+  const f=await fixture(t,{accounts:[account]},{achievements:async()=>{calls++;return{achievements:[{name:'One',unlocked:false}],checkedAt:new Date().toISOString()};}});await f.login();
+  await f.request('/api/achievements?accountId=a&appid=240');await f.request('/api/achievements?accountId=a&appid=240');assert.equal(calls,1);
+  await f.request('/api/achievements?accountId=a&appid=240&refresh=1');assert.equal(calls,2);
+});
