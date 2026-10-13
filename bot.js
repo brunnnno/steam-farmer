@@ -43,13 +43,16 @@ const PRESETS = {
   }
 };
 
-// Función de Discord corregida con User-Agent y soporte SSL
-function sendDiscordWebhook(title, description, color) {
-  if (!cfg.discordWebhook || !cfg.discordWebhook.startsWith('https://discord.com/api/webhooks/')) return;
+// Webhook con formato PNG e informe de estado
+function sendDiscordWebhook(title, description, color, cb) {
+  if (!cfg.discordWebhook || !cfg.discordWebhook.startsWith('https://discord.com/api/webhooks/')) {
+    if (cb) cb({ success: false, error: 'URL de Webhook inválida. Debe comenzar por https://discord.com/api/webhooks/' });
+    return;
+  }
   try {
     const payload = JSON.stringify({
       username: 'Steam Booster Enterprise',
-      avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg',
+      avatar_url: 'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png',
       embeds: [{
         title: title,
         description: description,
@@ -64,14 +67,26 @@ function sendDiscordWebhook(title, description, color) {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       }
+    }, (res) => {
+      let resBody = '';
+      res.on('data', c => resBody += c);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          if (cb) cb({ success: true });
+        } else {
+          if (cb) cb({ success: false, error: 'Discord devolvió error ' + res.statusCode + ': ' + resBody });
+        }
+      });
     });
-    req.on('error', (err) => console.error('Error Webhook Discord:', err.message));
+    req.on('error', (err) => {
+      if (cb) cb({ success: false, error: err.message });
+    });
     req.write(payload);
     req.end();
   } catch (err) {
-    console.error('Error procesando Webhook:', err.message);
+    if (cb) cb({ success: false, error: err.message });
   }
 }
 
@@ -91,29 +106,28 @@ client.on('loggedOn', () => {
 
 client.on('webSession', (sessionID, cookies) => {
   webCookies = cookies.join('; ');
-  console.log('[+] Sesión web de Steam establecida.');
   if (cfg.cardFarming) escanearCromos();
 });
 
 client.on('error', (e) => console.error('Error Steam:', e.message));
 
-// Anti-Colisión
+// Anti-Colisión Instantáneo
 client.on('playingElsewhere', () => {
-  console.log('[⚠️ Anti-Colisión] Partida detectada en PC real. Pausando bot...');
+  console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC. Pausando bot...');
   isCollisionPaused = true;
-  client.gamesPlayed([]);
-  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Bot pausado para no interrumpir tu juego. Se reanudará al finalizar.', 16101915);
+  actualizarFarmeo();
+  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Has iniciado un juego en tu PC. El bot se pausó automáticamente para no interferir.', 16101915);
 
   if (collisionTimer) clearTimeout(collisionTimer);
   collisionTimer = setTimeout(() => {
-    console.log('[Anti-Colisión] Reanudando farmeo en la nube...');
+    console.log('[Anti-Colisión] Reanudando farmeo...');
     isCollisionPaused = false;
     actualizarFarmeo();
-    sendDiscordWebhook('🔄 Farmeo Reanudado', 'El bot volvió a farmear en la nube automáticamente.', 1095985);
+    sendDiscordWebhook('🔄 Farmeo Reanudado', 'Tu sesión en PC finalizó. El bot volvió a farmear en la nube.', 1095985);
   }, 10 * 60 * 1000);
 });
 
-// Comandos por Chat de Steam
+// Comandos por Chat
 client.on('friendMessage', (steamID, message) => {
   const msg = message.trim().toLowerCase();
   const args = msg.split(' ');
@@ -159,16 +173,12 @@ client.on('friendMessage', (steamID, message) => {
     actualizarFarmeo();
     reply(`🗑️ Juego ${id} quitado de la lista.`);
   } else if (cmd === '!help' || cmd === '!ayuda') {
-    reply('🤖 Comandos disponibles: !status, !pausa, !reanudar, !add <id>, !remove <id>, !invisible, !online');
+    reply('🤖 Comandos: !status, !pausa, !reanudar, !add <id>, !remove <id>, !invisible, !online');
   }
 });
 
-// Escaneo de Cromos
 function escanearCromos(cb) {
-  if (!webCookies) {
-    if (cb) cb([]);
-    return;
-  }
+  if (!webCookies) { if (cb) cb([]); return; }
   const opts = {
     hostname: 'steamcommunity.com',
     path: '/my/badges/',
@@ -196,7 +206,6 @@ function escanearCromos(cb) {
   }).on('error', () => { if (cb) cb([]); });
 }
 
-// Cronograma Sueño
 setInterval(() => {
   if (!cfg.sleepMode || !cfg.sleepMode.enabled) return;
   const hour = new Date().getHours();
@@ -205,11 +214,9 @@ setInterval(() => {
     : (hour >= cfg.sleepMode.start || hour < cfg.sleepMode.end);
 
   if (inSleep && !isSleepPaused) {
-    console.log('[💤 Cronograma] Modo sueño activado. Bot en pausa.');
     isSleepPaused = true;
     client.gamesPlayed([]);
   } else if (!inSleep && isSleepPaused) {
-    console.log('[🌅 Cronograma] Modo sueño finalizado. Reanudando farmeo.');
     isSleepPaused = false;
     actualizarFarmeo();
   }
@@ -251,20 +258,16 @@ function actualizarFarmeo() {
     client.gamesPlayed(list);
     if (!isFarming) sessionStartTime = Date.now();
     isFarming = true;
-    console.log('[+] Farmeando ' + cfg.games.length + ' juegos.');
   } else {
     client.gamesPlayed([]);
     isFarming = false;
-    console.log('[-] Farmeo pausado.');
   }
 }
 
 function guardarConfig() {
   try {
     fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2));
-  } catch (e) {
-    console.error('Error guardando config:', e.message);
-  }
+  } catch (e) {}
 }
 
 const PORT = process.env.PORT || 8000;
@@ -281,7 +284,7 @@ const server = http.createServer((req, res) => {
       display: 'standalone',
       background_color: '#070a13',
       theme_color: '#070a13',
-      icons: [{ src: 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg', sizes: '512x512', type: 'image/svg+xml' }]
+      icons: [{ src: 'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png', sizes: '512x512', type: 'image/png' }]
     }));
   }
 
@@ -415,9 +418,11 @@ const server = http.createServer((req, res) => {
         if (parsedUrl.pathname === '/api/set-webhook') {
           cfg.discordWebhook = (data.webhook || '').trim();
           guardarConfig();
-          if (cfg.discordWebhook) {
-            sendDiscordWebhook('🔔 Webhook Conectado', '¡Tu canal de Discord se ha vinculado con éxito al bot!', 3718648);
-          }
+          sendDiscordWebhook('🔔 Webhook Vinculado', '¡Canal de Discord conectado exitosamente!', 3718648, (result) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          });
+          return;
         }
 
         if (parsedUrl.pathname === '/api/toggle-cards') {
@@ -468,7 +473,7 @@ const server = http.createServer((req, res) => {
   <title>Steam Hour Booster Enterprise</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#070a13">
-  <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg">
+  <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -658,7 +663,7 @@ const server = http.createServer((req, res) => {
         </div>
         <div class="tool-box">
           <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
-          <input type="text" id="webhookInput" placeholder="https://discord.com/api/...">
+          <input type="text" id="webhookInput" placeholder="https://discord.com/api/webhooks/...">
           <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveWebhook()">Probar</button>
         </div>
       </div>
@@ -962,14 +967,18 @@ const server = http.createServer((req, res) => {
     }
 
     async function saveWebhook() {
-      var webhook = document.getElementById('webhookInput').value;
-      await reqAction('/api/set-webhook', { webhook: webhook });
-      alert('Webhook guardado y mensaje de prueba enviado.');
+      var webhook = document.getElementById('webhookInput').value.trim();
+      var res = await reqAction('/api/set-webhook', { webhook: webhook });
+      if (res && res.success) {
+        alert('✅ ¡Webhook vinculado correctamente! Revisa tu Discord.');
+      } else {
+        alert('❌ Error al enviar mensaje a Discord: ' + (res ? res.error : 'Desconocido'));
+      }
       loadStatus();
     }
 
     checkAuth();
-    setInterval(loadStatus, 15000);
+    setInterval(loadStatus, 3000); // Actualización rápida cada 3 segundos
   </script>
 </body>
 </html>`);
