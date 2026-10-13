@@ -9,134 +9,45 @@
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #070a13;
-      --card-bg: rgba(18, 24, 38, 0.75);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --primary: #38bdf8;
-      --primary-hover: #0ea5e9;
-      --success: #10b981;
-      --warning: #f59e0b;
-      --danger: #f43f5e;
-      --purple: #a855f7;
-      --gold: #f59e0b;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-    }
-    
-    * { 
-      box-sizing: border-box; 
-      margin: 0; 
-      padding: 0; 
-      font-family: 'Plus Jakarta Sans', system-ui, sans-serif; 
-    }
-    
-    body {
-      background: radial-gradient(circle at 50% 0%, #152033 0%, var(--bg) 70%);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 40px 24px;
-      display: flex;
-      justify-content: center;
-    }
-    
-    .container { 
-      width: 100%; 
-      max-width: 1100px; 
-      display: flex; 
-      flex-direction: column; 
-      gap: 32px; 
-    }
-
-    /* Modals & Overlays */
-    .modal-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(7, 10, 19, 0.94);
-      backdrop-filter: blur(20px);
-      display: none; align-items: center; justify-content: center; z-index: 1000;
-    }
-    
-    .modal-box {
-      background: #111827; border: 1px solid var(--card-border);
-      padding: 36px 32px; border-radius: 24px; max-width: 440px; width: 90%;
-      box-shadow: 0 25px 50px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 18px;
-    }
-    
+    :root { --bg: #070a13; --card-bg: rgba(18, 24, 38, 0.75); --card-border: rgba(255, 255, 255, 0.08); --primary: #38bdf8; --primary-hover: #0ea5e9; --success: #10b981; --warning: #f59e0b; --danger: #f43f5e; --purple: #a855f7; --gold: #f59e0b; --text: #f8fafc; --text-muted: #94a3b8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    body { background: radial-gradient(circle at 50% 0%, #152033 0%, var(--bg) 70%); color: var(--text); min-height: 100vh; padding: 40px 24px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 32px; }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(7, 10, 19, 0.94); backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-box { background: #111827; border: 1px solid var(--card-border); padding: 36px 32px; border-radius: 24px; max-width: 440px; width: 90%; box-shadow: 0 25px 50px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 18px; }
     .modal-box h2 { font-size: 1.4rem; font-weight: 800; color: #fff; }
     .modal-box p { font-size: 0.85rem; color: var(--text-muted); }
-    .modal-box input {
-      width: 100%; padding: 13px 16px; border-radius: 12px; background: #0b0f19;
-      border: 1px solid var(--card-border); color: #fff; font-size: 1rem; outline: none;
-    }
-
-    /* Multi-Account Bar */
-    .accounts-bar {
-      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;
-      padding: 12px 18px; background: rgba(18, 24, 38, 0.5); border: 1px solid var(--card-border);
-      border-radius: 18px; backdrop-filter: blur(12px);
-    }
-    
+    .modal-box input { width: 100%; padding: 13px 16px; border-radius: 12px; background: #0b0f19; border: 1px solid var(--card-border); color: #fff; font-size: 1rem; outline: none; }
+    .accounts-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 12px 18px; background: rgba(18, 24, 38, 0.5); border: 1px solid var(--card-border); border-radius: 18px; backdrop-filter: blur(12px); }
     .accounts-list { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    
-    .acc-pill {
-      background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border);
-      padding: 8px 18px; border-radius: 999px; font-size: 0.85rem; font-weight: 700;
-      color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
-    }
-    
+    .acc-pill { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border); padding: 8px 18px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
     .acc-pill:hover { border-color: var(--primary); color: #fff; }
-    .acc-pill.active {
-      background: rgba(56, 189, 248, 0.12); border-color: var(--primary); color: #fff;
-      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
-    }
+    .acc-pill.active { background: rgba(56, 189, 248, 0.12); border-color: var(--primary); color: #fff; box-shadow: 0 0 15px rgba(56, 189, 248, 0.25); }
     .acc-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
     .acc-pill.active .dot { background: var(--success); }
-
-    /* Header */
     header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
     .brand h1 { font-size: 1.85rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .brand p { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; }
     .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-
     .badge-status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.25); }
     .badge-status.paused { background: rgba(244, 63, 94, 0.12); color: var(--danger); border-color: rgba(244, 63, 94, 0.25); }
     .badge-status.collision { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: rgba(245, 158, 11, 0.3); }
     .badge-status.sleep { background: rgba(168, 85, 247, 0.15); color: var(--purple); border-color: rgba(168, 85, 247, 0.3); }
-
     .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
-
-    /* Dashboard Panels */
-    .dashboard-panel {
-      background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px);
-      border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 24px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-    
+    .dashboard-panel { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px); border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; }
     .stat-item { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); padding: 18px 20px; border-radius: 16px; }
     .stat-item label { display: block; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; }
     .stat-item value { font-size: 1.35rem; font-weight: 800; color: #fff; }
-
     .capacity-header { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 9px; }
     .progress-bar-bg { width: 100%; height: 10px; background: rgba(0, 0, 0, 0.5); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
     .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #818cf8); transition: width 0.4s ease; }
-
-    /* Controls Panel */
-    .controls {
-      background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px);
-      border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-    
+    .controls { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px); border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .input-row { display: flex; gap: 14px; flex-wrap: wrap; }
     .search-box-wrapper { position: relative; flex: 1; min-width: 260px; }
-    input[type="text"], input[type="password"], input[type="number"], select {
-      width: 100%; background: rgba(7, 10, 19, 0.7); border: 1px solid var(--card-border);
-      border-radius: 12px; color: #fff; padding: 14px 18px; font-size: 0.95rem; outline: none; transition: 0.2s;
-    }
+    input[type="text"], input[type="password"], input[type="number"], select { width: 100%; background: rgba(7, 10, 19, 0.7); border: 1px solid var(--card-border); border-radius: 12px; color: #fff; padding: 14px 18px; font-size: 0.95rem; outline: none; transition: 0.2s; }
     input:focus, select:focus { border-color: var(--primary); }
-
     button { padding: 14px 24px; border-radius: 12px; font-weight: 700; font-size: 0.9rem; border: none; cursor: pointer; transition: all 0.2s; }
     .btn-main { background: var(--primary); color: #04111d; }
     .btn-main:hover { background: var(--primary-hover); }
@@ -146,99 +57,42 @@
     .btn-purple:hover { background: var(--purple); color: #fff; }
     .btn-gold { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
     .btn-gold:hover { background: var(--gold); color: #000; }
-
     .presets-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .chip { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border); color: #cbd5e1; padding: 8px 16px; border-radius: 10px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
     .chip:hover { border-color: var(--primary); color: var(--primary); background: rgba(56, 189, 248, 0.08); }
-
     .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
     .tool-box { background: rgba(0, 0, 0, 0.25); padding: 14px 20px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; gap: 12px; align-items: center; }
-    
-    .search-results {
-      position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: #0f1626;
-      border: 1px solid var(--card-border); border-radius: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.7);
-      max-height: 280px; overflow-y: auto; z-index: 100; display: none;
-    }
+    .tool-box input { padding: 10px 14px; font-size: 0.85rem; }
+    .search-results { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: #0f1626; border: 1px solid var(--card-border); border-radius: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.7); max-height: 280px; overflow-y: auto; z-index: 100; display: none; }
     .search-item { display: flex; align-items: center; gap: 14px; padding: 12px 18px; cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
     .search-item:hover { background: rgba(56, 189, 248, 0.1); }
     .search-item img { width: 56px; height: 26px; object-fit: cover; border-radius: 4px; }
     .search-info { flex: 1; font-size: 0.9rem; font-weight: 600; }
     .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
-
-    /* Game Cards Grid */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
-    .card {
-      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px;
-      overflow: hidden; display: flex; flex-direction: column; backdrop-filter: blur(14px);
-      transition: all 0.25s ease; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-    }
+    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; backdrop-filter: blur(14px); transition: all 0.25s ease; box-shadow: 0 10px 25px rgba(0,0,0,0.25); }
     .card:hover { transform: translateY(-4px); border-color: rgba(56, 189, 248, 0.35); }
     .card-banner { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: #0c1220; display: block; }
-    
-    .card-content {
-      padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; flex: 1; justify-content: space-between;
-    }
+    .card-content { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; flex: 1; justify-content: space-between; }
     .card-header-info { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; width: 100%; }
-    .card-title {
-      font-size: 0.95rem; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
-    }
-    .card-appid {
-      font-size: 0.75rem; font-weight: 700; color: var(--primary); background: rgba(56, 189, 248, 0.1);
-      padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0;
-    }
-    
+    .card-title { font-size: 0.95rem; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .card-appid { font-size: 0.75rem; font-weight: 700; color: var(--primary); background: rgba(56, 189, 248, 0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0; }
     .card-actions { display: flex; gap: 10px; width: 100%; align-items: center; }
-    .btn-card-ach {
-      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px;
-      border-radius: 10px; background: rgba(56, 189, 248, 0.12); color: var(--primary);
-      border: 1px solid rgba(56, 189, 248, 0.25); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap;
-    }
+    .btn-card-ach { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border-radius: 10px; background: rgba(56, 189, 248, 0.12); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.25); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap; }
     .btn-card-ach:hover { background: var(--primary); color: #04111d; }
-    .btn-card-remove {
-      padding: 10px 16px; border-radius: 10px; background: rgba(244, 63, 94, 0.1); color: var(--danger);
-      border: 1px solid rgba(244, 63, 94, 0.2); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0;
-    }
+    .btn-card-remove { padding: 10px 16px; border-radius: 10px; background: rgba(244, 63, 94, 0.1); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.2); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
     .btn-card-remove:hover { background: var(--danger); color: #fff; }
-
-    /* Achievements Modal */
-    .ach-modal-card {
-      background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);
-      width: 96%; max-width: 960px; max-height: 92vh; border-radius: 24px;
-      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 70px rgba(0,0,0,0.95);
-    }
-    .ach-header {
-      padding: 22px 30px; background: #131b2e; border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;
-    }
+    .ach-modal-card { background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25); width: 96%; max-width: 960px; max-height: 92vh; border-radius: 24px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 70px rgba(0,0,0,0.95); }
+    .ach-header { padding: 22px 30px; background: #131b2e; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
     .ach-header-left h2 { font-size: 1.45rem; font-weight: 800; color: #fff; }
-    
-    .privacy-banner {
-      background: rgba(245, 158, 11, 0.12); border-bottom: 1px solid rgba(245, 158, 11, 0.3);
-      padding: 14px 30px; display: none; color: #fde68a; font-size: 0.85rem; line-height: 1.4;
-    }
-    
-    .ach-toolbar {
-      padding: 16px 30px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;
-    }
+    .privacy-banner { background: rgba(245, 158, 11, 0.12); border-bottom: 1px solid rgba(245, 158, 11, 0.3); padding: 14px 30px; display: none; color: #fde68a; font-size: 0.85rem; line-height: 1.4; }
+    .ach-toolbar { padding: 16px 30px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
     .ach-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .filter-btn {
-      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border);
-      color: var(--text-muted); padding: 6px 14px; border-radius: 8px; font-size: 0.8rem;
-      font-weight: 700; cursor: pointer; transition: 0.15s;
-    }
+    .filter-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: var(--text-muted); padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.15s; }
     .filter-btn.active, .filter-btn:hover { background: rgba(56, 189, 248, 0.15); border-color: var(--primary); color: #fff; }
-
-    .ach-batch-actions {
-      padding: 12px 30px; background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 0.9rem;
-    }
+    .ach-batch-actions { padding: 12px 30px; background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 0.9rem; }
     .ach-list { padding: 20px 30px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
-    .ach-item {
-      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border);
-      border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 16px;
-      transition: all 0.2s; user-select: none;
-    }
+    .ach-item { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 16px; transition: all 0.2s; user-select: none; }
     .ach-item.unlocked-item { background: rgba(16, 185, 129, 0.04); border-color: rgba(16, 185, 129, 0.25); }
     .ach-item.selected { background: rgba(56, 189, 248, 0.09); border-color: rgba(56, 189, 248, 0.45); }
     .ach-item.gold { border-left: 4px solid var(--gold); }
@@ -255,7 +109,6 @@
   </style>
 </head>
 <body>
-  <!-- PIN Modal -->
   <div id="lockModal" class="modal-overlay">
     <div class="modal-box" style="text-align:center;">
       <h2>🔒 Enterprise Panel</h2>
@@ -265,7 +118,6 @@
     </div>
   </div>
 
-  <!-- Add Account Modal -->
   <div id="addAccModal" class="modal-overlay">
     <div class="modal-box">
       <h2>+ Add Steam Account</h2>
@@ -280,7 +132,6 @@
     </div>
   </div>
 
-  <!-- Achievements Modal -->
   <div id="achModal" class="modal-overlay">
     <div class="ach-modal-card">
       <div class="ach-header">
@@ -335,7 +186,8 @@
           <span id="estimatedTimeText" style="color:var(--gold); font-size:0.85rem; margin-left:8px;"></span>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" onclick="queueSelectedOrganic()">⚡ Queue Unlock</button>
+          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" onclick="unlockSelected()">⚡ Unlock Real on Steam</button>
+          <button class="btn-gold" style="padding:8px 16px; font-size:0.8rem;" onclick="queueSelectedOrganic()">⏳ Queue Organic</button>
           <button class="btn-clear" style="padding:8px 16px; font-size:0.8rem;" onclick="lockSelected()">🔒 Lock</button>
         </div>
       </div>
@@ -461,33 +313,19 @@
     var searchQuery = '';
 
     function checkAuth() {
-      if (!savedPin) {
-        document.getElementById('lockModal').style.display = 'flex';
-        document.getElementById('pinInput').focus();
-      } else {
-        document.getElementById('lockModal').style.display = 'none';
-        loadStatus();
-      }
+      if (!savedPin) { document.getElementById('lockModal').style.display = 'flex'; document.getElementById('pinInput').focus(); } 
+      else { document.getElementById('lockModal').style.display = 'none'; loadStatus(); }
     }
 
     async function unlock() {
       var pin = document.getElementById('pinInput').value.trim();
       if (!pin) return;
       var res = await fetch('/api/verify-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pin }) });
-      if (res.ok) {
-        savedPin = pin;
-        localStorage.setItem('farmer_pin', pin);
-        document.getElementById('lockModal').style.display = 'none';
-        loadStatus();
-      } else { alert('Incorrect PIN.'); }
+      if (res.ok) { savedPin = pin; localStorage.setItem('farmer_pin', pin); document.getElementById('lockModal').style.display = 'none'; loadStatus(); } 
+      else { alert('Incorrect PIN.'); }
     }
 
-    function lock() {
-      localStorage.removeItem('farmer_pin');
-      savedPin = null;
-      document.getElementById('pinInput').value = '';
-      document.getElementById('lockModal').style.display = 'flex';
-    }
+    function lock() { localStorage.removeItem('farmer_pin'); savedPin = null; document.getElementById('pinInput').value = ''; document.getElementById('lockModal').style.display = 'flex'; }
 
     setInterval(function() {
       if (!sessionStart || activeGamesCount === 0) return;
@@ -503,7 +341,6 @@
       try {
         var res = await fetch('/api/status');
         var data = await res.json();
-
         renderAccountsTabs(data.accounts, data.activeAccountId);
 
         if (!data.activeAccount) return;
@@ -526,34 +363,17 @@
         var personaBtn = document.getElementById('personaBtn');
         var cardsBtn = document.getElementById('cardsBtn');
 
-        if (acc.isCollisionPaused) {
-          badge.className = 'badge-status collision';
-          statusText.innerText = 'Game Running on PC';
-          playBtn.innerText = 'Resume / Play Now';
-        } else if (acc.isSleepPaused) {
-          badge.className = 'badge-status sleep';
-          statusText.innerText = 'Sleep Mode (Night)';
-          playBtn.innerText = 'Resume / Play Now';
-        } else if (acc.isPaused) {
-          badge.className = 'badge-status paused';
-          statusText.innerText = 'Paused';
-          playBtn.innerText = 'Resume / Play Now';
-        } else {
-          badge.className = 'badge-status';
-          statusText.innerText = 'Boosting Active';
-          playBtn.innerText = 'Pause Boosting';
-        }
+        if (acc.isCollisionPaused) { badge.className = 'badge-status collision'; statusText.innerText = 'Game Running on PC'; playBtn.innerText = 'Resume / Play Now'; } 
+        else if (acc.isSleepPaused) { badge.className = 'badge-status sleep'; statusText.innerText = 'Sleep Mode (Night)'; playBtn.innerText = 'Resume / Play Now'; } 
+        else if (acc.isPaused) { badge.className = 'badge-status paused'; statusText.innerText = 'Paused'; playBtn.innerText = 'Resume / Play Now'; } 
+        else { badge.className = 'badge-status'; statusText.innerText = 'Boosting Active'; playBtn.innerText = 'Pause Boosting'; }
 
         personaBtn.innerText = (acc.personaState === 7) ? '👻 Mode: Invisible' : '🟢 Mode: Online';
         cardsBtn.innerText = acc.cardFarming ? '🃏 Cards: ACTIVE' : '🃏 Cards: OFF';
 
         if (acc.customStatus && !document.getElementById('customStatusInput').value) document.getElementById('customStatusInput').value = acc.customStatus;
         if (data.discordWebhook && !document.getElementById('webhookInput').value) document.getElementById('webhookInput').value = data.discordWebhook;
-        if (acc.sleepMode) {
-          document.getElementById('sleepEnabled').checked = acc.sleepMode.enabled;
-          document.getElementById('sleepStart').value = acc.sleepMode.start;
-          document.getElementById('sleepEnd').value = acc.sleepMode.end;
-        }
+        if (acc.sleepMode) { document.getElementById('sleepEnabled').checked = acc.sleepMode.enabled; document.getElementById('sleepStart').value = acc.sleepMode.start; document.getElementById('sleepEnd').value = acc.sleepMode.end; }
 
         renderPresets(data.presets);
         renderGames(acc.games);
@@ -572,11 +392,7 @@
       });
     }
 
-    async function switchAccount(accountId) {
-      await reqAction('/api/account/switch', { accountId });
-      loadStatus();
-    }
-
+    async function switchAccount(accountId) { await reqAction('/api/account/switch', { accountId }); loadStatus(); }
     function openAddAccModal() { document.getElementById('addAccModal').style.display = 'flex'; }
     function closeAddAccModal() { document.getElementById('addAccModal').style.display = 'none'; }
 
@@ -585,151 +401,76 @@
       var user = document.getElementById('newAccUser').value.trim();
       var token = document.getElementById('newAccToken').value.trim();
       if (!user) return alert('Username or email is required.');
-
       var res = await reqAction('/api/account/add', { name, user, refreshToken: token });
-      if (res && res.success) {
-        closeAddAccModal();
-        loadStatus();
-      }
+      if (res && res.success) { closeAddAccModal(); loadStatus(); }
     }
 
     async function deleteCurrentAccount() {
       if (!confirm('Are you sure you want to remove this account profile from the booster?')) return;
       var res = await reqAction('/api/account/remove', {});
-      if (res && res.error) alert(res.error);
-      else loadStatus();
+      if (res && res.error) alert(res.error); else loadStatus();
     }
 
     function renderPresets(presets) {
       var container = document.getElementById('presetsContainer');
       container.innerHTML = '<span style="font-size:0.8rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">Quick Presets:</span>';
       (presets || []).forEach(function(p) {
-        var chip = document.createElement('span');
-        chip.className = 'chip';
-        chip.innerText = p.name + ' (' + p.count + ')';
-        chip.onclick = function() { applyPreset(p.key); };
-        container.appendChild(chip);
+        var chip = document.createElement('span'); chip.className = 'chip'; chip.innerText = p.name + ' (' + p.count + ')'; chip.onclick = function() { applyPreset(p.key); }; container.appendChild(chip);
       });
     }
 
     function renderGames(games) {
       var grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
-      if (!games.length) {
-        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No games added yet. Add a game above or load a quick preset.</div>';
-        return;
-      }
-
+      if (!games.length) { grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No games added yet. Add a game above or load a quick preset.</div>'; return; }
       games.forEach(function(id) {
         var title = namesCache[id] || ('Game #' + id);
         var card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = 
-          '<img class="card-banner" src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/' + id + '/header.jpg" onerror="this.src=\\'https://placehold.co/460x215/0c1220/white?text=AppID+' + id + '\\'">' +
-          '<div class="card-content">' +
-            '<div class="card-header-info">' +
-              '<div class="card-title" title="' + title.replace(/"/g, '&quot;') + '">' + title + '</div>' +
-              '<div class="card-appid">#' + id + '</div>' +
-            '</div>' +
-            '<div class="card-actions">' +
-              '<button class="btn-card-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Achievements</button>' +
-              '<button class="btn-card-remove" onclick="removeGame(' + id + ')">Remove</button>' +
-            '</div>' +
-          '</div>';
+          '<img class="card-banner" src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/' + id + '/header.jpg" onerror="this.src=\\\'https://placehold.co/460x215/0c1220/white?text=AppID+' + id + '\\\'">' +
+          '<div class="card-content"><div class="card-header-info"><div class="card-title" title="' + title.replace(/"/g, '&quot;') + '">' + title + '</div><div class="card-appid">#' + id + '</div></div>' +
+          '<div class="card-actions"><button class="btn-card-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Achievements</button><button class="btn-card-remove" onclick="removeGame(' + id + ')">Remove</button></div></div>';
         grid.appendChild(card);
       });
     }
 
     async function openAchModal(appid, title, forceRefresh) {
-      currentAchAppId = appid;
-      currentAchGameName = title;
-      selectedApinames.clear();
-      filterStatus = 'all';
-      filterRarity = 'all';
-      currentSort = 'default';
-      searchQuery = '';
-      
-      document.getElementById('achSortSelect').value = 'default';
-      document.getElementById('achSearchInput').value = '';
-      document.getElementById('achGameTitle').innerText = title;
-      document.getElementById('achProgressText').innerText = 'Syncing achievements directly with Steam...';
-      document.getElementById('achProgressFill').style.width = '0%';
-      document.getElementById('achPrivacyWarning').style.display = 'none';
-      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Loading full trophies catalog...</p>';
-      document.getElementById('achModal').style.display = 'flex';
-      
-      updateFilterButtonsUI();
-      updateBatchToolbar();
-
+      currentAchAppId = appid; currentAchGameName = title; selectedApinames.clear(); filterStatus = 'all'; filterRarity = 'all'; currentSort = 'default'; searchQuery = '';
+      document.getElementById('achSortSelect').value = 'default'; document.getElementById('achSearchInput').value = ''; document.getElementById('achGameTitle').innerText = title;
+      document.getElementById('achProgressText').innerText = 'Syncing achievements directly with Steam...'; document.getElementById('achProgressFill').style.width = '0%';
+      document.getElementById('achPrivacyWarning').style.display = 'none'; document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Loading full trophies catalog...</p>';
+      document.getElementById('achModal').style.display = 'flex'; updateFilterButtonsUI(); updateBatchToolbar();
       try {
         var fetchUrl = '/api/achievements?appid=' + appid + (forceRefresh ? '&refresh=1' : '');
-        var res = await fetch(fetchUrl);
-        var data = await res.json();
-        
-        currentAchList = Array.isArray(data) ? data : (data.achievements || []);
-        var isPrivate = data.isPrivate || false;
-
-        document.getElementById('achPrivacyWarning').style.display = isPrivate ? 'block' : 'none';
-        renderAchModal();
+        var res = await fetch(fetchUrl); var data = await res.json();
+        currentAchList = Array.isArray(data) ? data : (data.achievements || []); var isPrivate = data.isPrivate || false;
+        document.getElementById('achPrivacyWarning').style.display = isPrivate ? 'block' : 'none'; renderAchModal();
       } catch (e) {
-        document.getElementById('achProgressText').innerText = 'Error loading';
-        document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Failed to query achievements from Steam.</p>';
+        document.getElementById('achProgressText').innerText = 'Error loading'; document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Failed to query achievements from Steam.</p>';
       }
     }
 
-    function forceRefreshAchievements() {
-      if (currentAchAppId) {
-        openAchModal(currentAchAppId, currentAchGameName, true);
-      }
-    }
-
+    function forceRefreshAchievements() { if (currentAchAppId) { openAchModal(currentAchAppId, currentAchGameName, true); } }
     function closeAchModal() { document.getElementById('achModal').style.display = 'none'; }
-
     function updateFilterButtonsUI() {
       document.querySelectorAll('.filter-btn').forEach(btn => {
-        var type = btn.getAttribute('data-filter');
-        var val = btn.getAttribute('data-val');
-        if (type === 'status') {
-          if (val === filterStatus) btn.classList.add('active');
-          else btn.classList.remove('active');
-        } else if (type === 'rarity') {
-          if (val === filterRarity) btn.classList.add('active');
-          else btn.classList.remove('active');
-        }
+        var type = btn.getAttribute('data-filter'); var val = btn.getAttribute('data-val');
+        if (type === 'status') { if (val === filterStatus) btn.classList.add('active'); else btn.classList.remove('active'); } 
+        else if (type === 'rarity') { if (val === filterRarity) btn.classList.add('active'); else btn.classList.remove('active'); }
       });
     }
-
-    function setFilter(type, val) {
-      if (type === 'status') {
-        filterStatus = val;
-      } else if (type === 'rarity') {
-        filterRarity = (filterRarity === val) ? 'all' : val;
-      }
-      updateFilterButtonsUI();
-      renderAchModal();
-    }
-
-    function setSort(val) {
-      currentSort = val;
-      renderAchModal();
-    }
-
-    function onSearchInput(val) {
-      searchQuery = val.trim().toLowerCase();
-      renderAchModal();
-    }
+    function setFilter(type, val) { if (type === 'status') { filterStatus = val; } else if (type === 'rarity') { filterRarity = (filterRarity === val) ? 'all' : val; } updateFilterButtonsUI(); renderAchModal(); }
+    function setSort(val) { currentSort = val; renderAchModal(); }
+    function onSearchInput(val) { searchQuery = val.trim().toLowerCase(); renderAchModal(); }
 
     function renderAchModal() {
       var cont = document.getElementById('achListContainer');
       cont.innerHTML = '';
-
       if (!currentAchList || !currentAchList.length) {
-        document.getElementById('achProgressText').innerText = '0 achievements found';
-        document.getElementById('achProgressFill').style.width = '0%';
-        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">This game has no public achievements on Steam.</p>';
-        return;
+        document.getElementById('achProgressText').innerText = '0 achievements found'; document.getElementById('achProgressFill').style.width = '0%';
+        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">This game has no public achievements on Steam.</p>'; return;
       }
-
       var totalUnlocked = currentAchList.filter(x => x.unlocked).length;
       var pctTotal = Math.round((totalUnlocked / currentAchList.length) * 100);
       document.getElementById('achProgressText').innerText = totalUnlocked + ' of ' + currentAchList.length + ' unlocked (' + pctTotal + '%)';
@@ -737,208 +478,112 @@
 
       var filteredList = currentAchList.filter(function(a) {
         var matchesSearch = !searchQuery || a.name.toLowerCase().includes(searchQuery) || (a.description && a.description.toLowerCase().includes(searchQuery));
-        
         var matchesStatus = true;
-        if (filterStatus === 'locked') matchesStatus = !a.unlocked;
-        else if (filterStatus === 'unlocked') matchesStatus = a.unlocked;
-        else if (filterStatus === 'queue') matchesStatus = a.inQueue;
-
-        var matchesRarity = true;
-        var p = parseFloat(a.percent) || 0;
-        if (filterRarity === 'mythic') matchesRarity = p < 5.0;
-        else if (filterRarity === 'epic') matchesRarity = p >= 5.0 && p < 15.0;
-        else if (filterRarity === 'rare') matchesRarity = p >= 15.0 && p < 40.0;
-
+        if (filterStatus === 'locked') matchesStatus = !a.unlocked; else if (filterStatus === 'unlocked') matchesStatus = a.unlocked; else if (filterStatus === 'queue') matchesStatus = a.inQueue;
+        var matchesRarity = true; var p = parseFloat(a.percent) || 0;
+        if (filterRarity === 'mythic') matchesRarity = p < 5.0; else if (filterRarity === 'epic') matchesRarity = p >= 5.0 && p < 15.0; else if (filterRarity === 'rare') matchesRarity = p >= 15.0 && p < 40.0;
         return matchesSearch && matchesStatus && matchesRarity;
       });
 
-      if (currentSort === 'locked_first') {
-        filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? 1 : -1));
-      } else if (currentSort === 'unlocked_first') {
-        filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? -1 : 1));
-      } else if (currentSort === 'rarity_rare') {
-        filteredList.sort((a, b) => (parseFloat(a.percent) || 0) - (parseFloat(b.percent) || 0));
-      } else if (currentSort === 'rarity_common') {
-        filteredList.sort((a, b) => (parseFloat(b.percent) || 0) - (parseFloat(a.percent) || 0));
-      } else if (currentSort === 'alpha') {
-        filteredList.sort((a, b) => a.name.localeCompare(b.name));
-      }
+      if (currentSort === 'locked_first') { filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? 1 : -1)); } 
+      else if (currentSort === 'unlocked_first') { filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? -1 : 1)); } 
+      else if (currentSort === 'rarity_rare') { filteredList.sort((a, b) => (parseFloat(a.percent) || 0) - (parseFloat(b.percent) || 0)); } 
+      else if (currentSort === 'rarity_common') { filteredList.sort((a, b) => (parseFloat(b.percent) || 0) - (parseFloat(a.percent) || 0)); } 
+      else if (currentSort === 'alpha') { filteredList.sort((a, b) => a.name.localeCompare(b.name)); }
 
-      if (!filteredList.length) {
-        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No achievements match the selected filters.</p>';
-        updateBatchToolbar();
-        return;
-      }
+      if (!filteredList.length) { cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No achievements match the selected filters.</p>'; updateBatchToolbar(); return; }
 
       filteredList.forEach(function(a) {
-        var pctNum = parseFloat(a.percent) || 0;
-        var rarityClass = 'gray';
-        if (pctNum < 5.0) rarityClass = 'gold';
-        else if (pctNum < 15.0) rarityClass = 'purple';
-        else if (pctNum < 40.0) rarityClass = 'blue';
-
+        var pctNum = parseFloat(a.percent) || 0; var rarityClass = 'gray';
+        if (pctNum < 5.0) rarityClass = 'gold'; else if (pctNum < 15.0) rarityClass = 'purple'; else if (pctNum < 40.0) rarityClass = 'blue';
         var statusClass = a.unlocked ? 'unlocked-item' : 'locked-item';
         var div = document.createElement('div');
-        div.className = 'ach-item ' + rarityClass + ' ' + statusClass + (selectedApinames.has(a.apiname) ? ' selected' : '');
-        div.setAttribute('data-apiname', a.apiname);
-        
+        div.className = 'ach-item ' + rarityClass + ' ' + statusClass + (selectedApinames.has(a.apiname) ? ' selected' : ''); div.setAttribute('data-apiname', a.apiname);
         var dateLabel = a.unlockDate ? '<small style="color:var(--success); font-size:0.75rem; display:block; margin-top:2px;">Unlocked: ' + a.unlockDate + '</small>' : '';
-
-        div.innerHTML = 
-          '<input type="checkbox" class="ach-checkbox" ' + (selectedApinames.has(a.apiname) ? 'checked' : '') + ' onclick="event.stopPropagation(); toggleSelectSingle(\\'' + a.apiname.replace(/'/g, "\\\\'") + '\\', this.checked)">' +
+        div.innerHTML = '<input type="checkbox" class="ach-checkbox" ' + (selectedApinames.has(a.apiname) ? 'checked' : '') + ' onclick="event.stopPropagation(); toggleSelectSingle(\\'' + a.apiname.replace(/'/g, "\\\\'") + '\\', this.checked)">' +
           '<img src="' + (a.unlocked ? (a.iconOpen || a.iconClosed) : a.iconClosed) + '" onerror="this.src=\\'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png\\'">' +
-          '<div class="ach-info">' +
-            '<div class="ach-title">' + a.name + ' <span class="ach-badge" style="color:var(--text-muted);">(' + a.tier + ' • ' + a.percent + '%)</span></div>' +
-            '<div class="ach-desc">' + a.description + '</div>' +
-            dateLabel +
-          '</div>' +
-          '<div>' +
-            (a.unlocked 
-              ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Unlocked</span>' 
-              : (a.inQueue 
-                  ? '<span style="color:var(--warning); font-weight:700; font-size:0.8rem;">⏳ Queued</span>' 
-                  : '<span style="color:var(--text-muted); font-size:0.8rem;">🔒 Locked</span>')) +
-          '</div>';
-
-        div.onclick = function() {
-          var isChecked = !selectedApinames.has(a.apiname);
-          toggleSelectSingle(a.apiname, isChecked);
-          div.querySelector('.ach-checkbox').checked = isChecked;
-        };
-
+          '<div class="ach-info"><div class="ach-title">' + a.name + ' <span class="ach-badge" style="color:var(--text-muted);">(' + a.tier + ' • ' + a.percent + '%)</span></div><div class="ach-desc">' + a.description + '</div>' + dateLabel + '</div>' +
+          '<div>' + (a.unlocked ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Unlocked</span>' : (a.inQueue ? '<span style="color:var(--warning); font-weight:700; font-size:0.8rem;">⏳ Queued</span>' : '<span style="color:var(--text-muted); font-size:0.8rem;">🔒 Locked</span>')) + '</div>';
+        div.onclick = function() { var isChecked = !selectedApinames.has(a.apiname); toggleSelectSingle(a.apiname, isChecked); div.querySelector('.ach-checkbox').checked = isChecked; };
         cont.appendChild(div);
       });
-
       updateBatchToolbar();
     }
 
     function toggleSelectSingle(apiname, isSelected) {
-      if (isSelected) selectedApinames.add(apiname);
-      else selectedApinames.delete(apiname);
-      
+      if (isSelected) selectedApinames.add(apiname); else selectedApinames.delete(apiname);
       var row = document.querySelector('.ach-item[data-apiname="' + apiname + '"]');
-      if (row) {
-        if (isSelected) row.classList.add('selected');
-        else row.classList.remove('selected');
-      }
-      updateBatchToolbar();
+      if (row) { if (isSelected) row.classList.add('selected'); else row.classList.remove('selected'); } updateBatchToolbar();
     }
 
     function toggleSelectAll(isChecked) {
-      selectedApinames.clear();
-      var visibleRows = document.querySelectorAll('.ach-item');
+      selectedApinames.clear(); var visibleRows = document.querySelectorAll('.ach-item');
       visibleRows.forEach(row => {
         var apiname = row.getAttribute('data-apiname');
-        if (isChecked) {
-          selectedApinames.add(apiname);
-          row.classList.add('selected');
-          var cb = row.querySelector('.ach-checkbox');
-          if (cb) cb.checked = true;
-        } else {
-          row.classList.remove('selected');
-          var cb = row.querySelector('.ach-checkbox');
-          if (cb) cb.checked = false;
-        }
+        if (isChecked) { selectedApinames.add(apiname); row.classList.add('selected'); var cb = row.querySelector('.ach-checkbox'); if (cb) cb.checked = true; } 
+        else { row.classList.remove('selected'); var cb = row.querySelector('.ach-checkbox'); if (cb) cb.checked = false; }
       });
       updateBatchToolbar();
     }
 
     function updateBatchToolbar() {
-      var count = selectedApinames.size;
-      document.getElementById('selectedCountText').innerText = count + ' selected';
-      document.getElementById('selectAllCheckbox').checked = count > 0 && count === currentAchList.length;
-
+      var count = selectedApinames.size; document.getElementById('selectedCountText').innerText = count + ' selected'; document.getElementById('selectAllCheckbox').checked = count > 0 && count === currentAchList.length;
       var estText = document.getElementById('estimatedTimeText');
-      if (count > 0) {
-        var minHours = ((count * 45) / 60).toFixed(1);
-        var maxHours = ((count * 85) / 60).toFixed(1);
-        estText.innerText = '⏱️ Organic Cadence: ~' + minHours + 'h to ' + maxHours + 'h';
-      } else {
-        estText.innerText = '';
-      }
+      if (count > 0) { var minHours = ((count * 45) / 60).toFixed(1); var maxHours = ((count * 85) / 60).toFixed(1); estText.innerText = '⏱️ Organic Cadence: ~' + minHours + 'h to ' + maxHours + 'h'; } else { estText.innerText = ''; }
     }
 
-    async function queueSelectedOrganic() {
-      if (!selectedApinames.size) return alert('Select the achievements you want to queue by checking the boxes.');
-      var items = currentAchList.filter(x => selectedApinames.has(x.apiname) && !x.unlocked && !x.inQueue);
-      if (!items.length) return alert('All selected achievements are already unlocked or queued.');
-      
-      await reqAction('/api/queue-achievements', {
-        appid: currentAchAppId,
-        gameName: currentAchGameName,
-        items: items
-      });
-      alert('⚡ ' + items.length + ' achievements scheduled. They will be unlocked organically on your Steam profile every 45-85 minutes.');
-      items.forEach(it => it.inQueue = true);
-      selectedApinames.clear();
-      renderAchModal();
-      loadStatus();
+    async function unlockSelected() {
+      if (!selectedApinames.size) return alert('Select at least one achievement first by checking the boxes.');
+      var items = currentAchList.filter(x => selectedApinames.has(x.apiname));
+      await reqAction('/api/unlock-batch', { appid: currentAchAppId, gameName: currentAchGameName, items: items });
+      items.forEach(it => { it.unlocked = true; it.inQueue = false; }); selectedApinames.clear(); renderAchModal(); loadStatus();
     }
 
     async function lockSelected() {
       if (!selectedApinames.size) return alert('Select at least one achievement first.');
       if (!confirm('Are you sure you want to re-lock the ' + selectedApinames.size + ' selected achievements on the dashboard?')) return;
-      var apinames = Array.from(selectedApinames);
-      await reqAction('/api/lock-batch', {
-        appid: currentAchAppId,
-        apinames: apinames
-      });
-      currentAchList.forEach(it => {
-        if (selectedApinames.has(it.apiname)) { it.unlocked = false; it.inQueue = false; it.unlockDate = null; }
-      });
-      selectedApinames.clear();
-      renderAchModal();
-      loadStatus();
+      var apinames = Array.from(selectedApinames); await reqAction('/api/lock-batch', { appid: currentAchAppId, apinames: apinames });
+      currentAchList.forEach(it => { if (selectedApinames.has(it.apiname)) { it.unlocked = false; it.inQueue = false; it.unlockDate = null; } });
+      selectedApinames.clear(); renderAchModal(); loadStatus();
     }
 
-    var debounceTimer = null;
-    var searchInput = document.getElementById('searchInput');
-    var searchResults = document.getElementById('searchResults');
+    async function queueSelectedOrganic() {
+      if (!selectedApinames.size) return alert('Select the achievements you want to queue.');
+      var items = currentAchList.filter(x => selectedApinames.has(x.apiname) && !x.unlocked && !x.inQueue);
+      if (!items.length) return alert('All selected achievements are already unlocked or queued.');
+      await reqAction('/api/queue-achievements', { appid: currentAchAppId, gameName: currentAchGameName, items: items });
+      alert('⚡ ' + items.length + ' achievements scheduled. They will be unlocked organically on your Steam profile every 45-85 minutes.');
+      items.forEach(it => it.inQueue = true); selectedApinames.clear(); renderAchModal(); loadStatus();
+    }
 
+    var debounceTimer = null; var searchInput = document.getElementById('searchInput'); var searchResults = document.getElementById('searchResults');
     searchInput.addEventListener('input', function(e) {
-      clearTimeout(debounceTimer);
-      var val = e.target.value.trim();
-      if (!val || !isNaN(val)) { searchResults.style.display = 'none'; return; }
+      clearTimeout(debounceTimer); var val = e.target.value.trim(); if (!val || !isNaN(val)) { searchResults.style.display = 'none'; return; }
       debounceTimer = setTimeout(async function() {
         try {
-          var res = await fetch('/api/search?term=' + encodeURIComponent(val));
-          var list = await res.json();
-          searchResults.innerHTML = '';
+          var res = await fetch('/api/search?term=' + encodeURIComponent(val)); var list = await res.json(); searchResults.innerHTML = '';
           if (list && list.length) {
             list.forEach(function(it) {
-              var div = document.createElement('div');
-              div.className = 'search-item';
-              div.innerHTML = '<img src="' + it.img + '" onerror="this.style.display=\\'none\\'"><div class="search-info">' + it.name + '<span>AppID: ' + it.id + '</span></div>';
-              div.onclick = function() { addGame(it.id, it.name); searchResults.style.display = 'none'; searchInput.value = ''; };
-              searchResults.appendChild(div);
-            });
-            searchResults.style.display = 'block';
+              var div = document.createElement('div'); div.className = 'search-item'; div.innerHTML = '<img src="' + it.img + '" onerror="this.style.display=\\'none\\'"><div class="search-info">' + it.name + '<span>AppID: ' + it.id + '</span></div>';
+              div.onclick = function() { addGame(it.id, it.name); searchResults.style.display = 'none'; searchInput.value = ''; }; searchResults.appendChild(div);
+            }); searchResults.style.display = 'block';
           } else { searchResults.style.display = 'none'; }
         } catch (e) { searchResults.style.display = 'none'; }
       }, 250);
     });
 
-    document.addEventListener('click', function(e) {
-      if (!searchResults.contains(e.target) && e.target !== searchInput) searchResults.style.display = 'none';
-    });
-
+    document.addEventListener('click', function(e) { if (!searchResults.contains(e.target) && e.target !== searchInput) searchResults.style.display = 'none'; });
     function addFromInput() { var v = searchInput.value.trim(); if (v && !isNaN(v)) addGame(Number(v)); }
 
     async function reqAction(endpoint, body) {
-      body = body || {};
-      body.pin = savedPin;
+      body = body || {}; body.pin = savedPin;
       var res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       var data = await res.json();
       if (res.status === 401) { alert('Incorrect PIN or session expired.'); lock(); return null; }
       return data;
     }
 
-    async function addGame(appid, name) {
-      var data = await reqAction('/api/add', { appid: Number(appid), name: name || '' });
-      if (data && data.error) alert(data.error);
-      else { searchInput.value = ''; loadStatus(); }
-    }
-
+    async function addGame(appid, name) { var data = await reqAction('/api/add', { appid: Number(appid), name: name || '' }); if (data && data.error) alert(data.error); else { searchInput.value = ''; loadStatus(); } }
     async function removeGame(appid) { await reqAction('/api/remove', { appid: Number(appid) }); loadStatus(); }
     async function clearAll() { if (confirm('Are you sure you want to clear the entire list for this profile?')) { await reqAction('/api/clear-all'); loadStatus(); } }
     async function applyPreset(presetKey) { await reqAction('/api/apply-preset', { presetKey: presetKey }); loadStatus(); }
@@ -946,33 +591,11 @@
     async function togglePersona() { await reqAction('/api/persona'); loadStatus(); }
     async function toggleCards() { await reqAction('/api/toggle-cards'); loadStatus(); }
     async function claimFreeGames() { var res = await reqAction('/api/claim-free'); if (res) alert('Free licenses requested from Steam.'); }
+    async function saveSleep() { await reqAction('/api/set-sleep', { enabled: document.getElementById('sleepEnabled').checked, start: document.getElementById('sleepStart').value, end: document.getElementById('sleepEnd').value }); alert('Sleep schedule saved.'); loadStatus(); }
+    async function saveCustomStatus() { await reqAction('/api/custom-status', { status: document.getElementById('customStatusInput').value }); alert('Custom status updated on Steam.'); loadStatus(); }
+    async function saveWebhook() { var webhook = document.getElementById('webhookInput').value.trim(); var res = await reqAction('/api/set-webhook', { webhook: webhook }); if (res && res.success) alert('✅ Webhook linked successfully! Check your Discord channel.'); else alert('❌ Error sending message: ' + (res ? res.error : 'Unknown')); loadStatus(); }
 
-    async function saveSleep() {
-      await reqAction('/api/set-sleep', {
-        enabled: document.getElementById('sleepEnabled').checked,
-        start: document.getElementById('sleepStart').value,
-        end: document.getElementById('sleepEnd').value
-      });
-      alert('Sleep schedule saved.');
-      loadStatus();
-    }
-
-    async function saveCustomStatus() {
-      await reqAction('/api/custom-status', { status: document.getElementById('customStatusInput').value });
-      alert('Custom status updated on Steam.');
-      loadStatus();
-    }
-
-    async function saveWebhook() {
-      var webhook = document.getElementById('webhookInput').value.trim();
-      var res = await reqAction('/api/set-webhook', { webhook: webhook });
-      if (res && res.success) alert('✅ Webhook linked successfully! Check your Discord channel.');
-      else alert('❌ Error sending message: ' + (res ? res.error : 'Unknown'));
-      loadStatus();
-    }
-
-    checkAuth();
-    setInterval(loadStatus, 3000);
+    checkAuth(); setInterval(loadStatus, 3000);
   </script>
 </body>
 </html>
