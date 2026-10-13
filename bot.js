@@ -10,7 +10,6 @@ cfg.webPin = String(cfg.webPin || '1234');
 cfg.discordWebhook = cfg.discordWebhook || '';
 cfg.accounts = cfg.accounts || [];
 
-// Backward-compatibility migration for legacy single-account configs
 if (cfg.accounts.length === 0 && (cfg.user || cfg.refreshToken)) {
   cfg.accounts.push({
     id: 'main',
@@ -34,7 +33,6 @@ if (cfg.accounts.length === 0 && (cfg.user || cfg.refreshToken)) {
 
 cfg.activeAccountId = cfg.activeAccountId || (cfg.accounts[0] ? cfg.accounts[0].id : 'main');
 
-// Multi-Account Runtime Manager
 const clients = {};
 const accountStates = {};
 const achMemoryCache = {};
@@ -65,7 +63,6 @@ const PRESETS = {
   }
 };
 
-// HTTP Client with Age-Gate bypass, custom headers & redirect preservation
 function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   if (typeof customHeaders === 'function') {
     cb = customHeaders;
@@ -115,7 +112,6 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   }
 }
 
-// Discord Webhook sender with proxy bypass
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'Invalid Webhook URL.' });
@@ -168,7 +164,6 @@ function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   }
 }
 
-// Initialize single account runtime
 function initializeAccount(acc) {
   if (clients[acc.id]) return;
 
@@ -214,7 +209,6 @@ function initializeAccount(acc) {
 
   client.on('error', (e) => console.error(`[Steam Error - ${acc.name}]:`, e.message));
 
-  // Anti-Collision Handler
   client.on('playingElsewhere', () => {
     console.log(`[⚠️ Anti-Collision] Local game detected for ${acc.name}. Pausing cloud session...`);
     state.isCollisionPaused = true;
@@ -230,7 +224,6 @@ function initializeAccount(acc) {
     }, 10 * 60 * 1000);
   });
 
-  // Steam Chat remote control
   client.on('friendMessage', (steamID, message) => {
     const msg = message.trim().toLowerCase();
     const args = msg.split(' ');
@@ -267,7 +260,6 @@ function initializeAccount(acc) {
   });
 }
 
-// Launch all accounts in parallel
 cfg.accounts.forEach(acc => initializeAccount(acc));
 
 function getActiveAccount() {
@@ -420,7 +412,7 @@ function getTag(body, tag) {
   return content;
 }
 
-function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
+function parseAchievementsFromXml(xmlData, percentMap, titlePercentMap, appid, unlockedLocally) {
   const achievements = [];
   const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
   let match;
@@ -430,8 +422,10 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
     const body = match[2];
     const apiname = getTag(body, 'apiname');
     const name = getTag(body, 'name') || apiname;
-    const pct = parseFloat(percentMap[apiname] || percentMap[name] || 50.0);
     const unlockTimestamp = parseInt(getTag(body, 'unlockTimestamp') || '0', 10);
+
+    const normName = name.toLowerCase().trim();
+    const pct = parseFloat(titlePercentMap[normName] || percentMap[apiname] || percentMap[apiname.toLowerCase()] || 25.0);
 
     let tier = '⚪ Common';
     let colorHex = 0x94a3b8;
@@ -465,8 +459,7 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   return achievements;
 }
 
-// Extractor HTML seguro sin expresiones regulares complejas
-function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
+function parseAchievementsFromHtml(html, unlockedSet, titlePercentMap, percentMap) {
   const list = [];
   const parts = html.split(/class=["'][^"']*achieveRow/i);
 
@@ -486,7 +479,8 @@ function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
       const icon = imgM ? imgM[1] : '';
       const apiname = 'ACH_' + name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
 
-      let pct = pctM ? parseFloat(pctM[1]) : (parseFloat(percentMap[apiname] || percentMap[name]) || 50.0);
+      const normName = name.toLowerCase().trim();
+      let pct = pctM ? parseFloat(pctM[1]) : parseFloat(titlePercentMap[normName] || percentMap[apiname.toLowerCase()] || 25.0);
 
       let tier = '⚪ Common';
       let colorHex = 0x94a3b8;
@@ -532,58 +526,76 @@ function getAchievementsForAccount(acc, appid, cb) {
     return cb({ achievements: cachedList, isPrivate: achMemoryCache[cacheKey].isPrivate });
   }
 
-  const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
-  fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
+  // 1. Fetch Global Steam Percentage API + Public Community Catalog in parallel for exact mapping
+  const urlGlobalApi = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
+  const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
+
+  fetchWithRedirects(urlGlobalApi, {}, 3, (errG, globalData) => {
     let percentMap = {};
     try {
       const parsedG = JSON.parse(globalData);
       if (parsedG.achievementpercentages && parsedG.achievementpercentages.achievements) {
         parsedG.achievementpercentages.achievements.forEach(a => {
-          percentMap[a.name] = parseFloat(a.percent).toFixed(1);
+          percentMap[a.name.toLowerCase()] = parseFloat(a.percent).toFixed(1);
         });
       }
     } catch (e) {}
 
-    const targetXmlUrl = userSteamId
-      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
-      : `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
-
-    fetchWithRedirects(targetXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
-      let isProfilePrivate = false;
-      if (xmlData && (xmlData.includes('profile is private') || xmlData.includes('Specified profile could not be found') || xmlData.includes('<error>'))) {
-        isProfilePrivate = true;
-      }
-
-      if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
-        const listXml = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
-        if (listXml.length > 0) {
-          achMemoryCache[cacheKey] = { achievements: listXml, isPersonalized: true, isPrivate: false };
-          return cb(achMemoryCache[cacheKey]);
+    fetchWithRedirects(urlGlobalHtml, {}, 5, (errGHtml, gHtmlData) => {
+      let titlePercentMap = {};
+      if (!errGHtml && gHtmlData) {
+        const rows = gHtmlData.split(/class=["'][^"']*achieveRow/i);
+        for (let i = 1; i < rows.length; i++) {
+          const r = rows[i];
+          const h3M = r.match(/<h3>([\s\S]*?)<\/h3>/i);
+          const pctM = r.match(/class=["'][^"']*achievePercent[^"']*["'][^>]*>\s*([0-9.]+)\s*%/i);
+          if (h3M && pctM) {
+            const cleanTitle = h3M[1].replace(/<[^>]+>/g, '').trim().toLowerCase();
+            titlePercentMap[cleanTitle] = parseFloat(pctM[1]).toFixed(1);
+          }
         }
       }
 
-      const unlockedSet = new Set(unlockedLocally);
-      const targetUserHtml = userSteamId
-        ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?tab=achievements&l=english`
-        : `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
+      // 2. Fetch User Profile Stats
+      const targetXmlUrl = userSteamId
+        ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
+        : `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
 
-      fetchWithRedirects(targetUserHtml, xmlHeaders, 5, (errUHtml, uHtmlData) => {
-        if (uHtmlData && (uHtmlData.includes('profile_private') || uHtmlData.includes('This profile is private') || uHtmlData.includes('Este perfil es privado'))) {
+      fetchWithRedirects(targetXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
+        let isProfilePrivate = false;
+        if (xmlData && (xmlData.includes('profile is private') || xmlData.includes('Specified profile could not be found') || xmlData.includes('<error>'))) {
           isProfilePrivate = true;
         }
 
-        if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow')) {
-          const listU = parseAchievementsFromHtml(uHtmlData, unlockedSet, percentMap);
-          if (listU.length > 0) {
-            achMemoryCache[cacheKey] = { achievements: listU, isPersonalized: !isProfilePrivate, isPrivate: isProfilePrivate };
+        if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
+          const listXml = parseAchievementsFromXml(xmlData, percentMap, titlePercentMap, appid, unlockedLocally);
+          if (listXml.length > 0) {
+            achMemoryCache[cacheKey] = { achievements: listXml, isPersonalized: true, isPrivate: false };
             return cb(achMemoryCache[cacheKey]);
           }
         }
 
-        const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
-        fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
-          if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
-            const listG = parseAchievementsFromHtml(htmlData, unlockedSet, percentMap);
+        const unlockedSet = new Set(unlockedLocally);
+        const targetUserHtml = userSteamId
+          ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?tab=achievements&l=english`
+          : `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
+
+        fetchWithRedirects(targetUserHtml, xmlHeaders, 5, (errUHtml, uHtmlData) => {
+          if (uHtmlData && (uHtmlData.includes('profile_private') || uHtmlData.includes('This profile is private') || uHtmlData.includes('Este perfil es privado'))) {
+            isProfilePrivate = true;
+          }
+
+          if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow')) {
+            const listU = parseAchievementsFromHtml(uHtmlData, unlockedSet, titlePercentMap, percentMap);
+            if (listU.length > 0) {
+              achMemoryCache[cacheKey] = { achievements: listU, isPersonalized: !isProfilePrivate, isPrivate: isProfilePrivate };
+              return cb(achMemoryCache[cacheKey]);
+            }
+          }
+
+          // Fallback to global catalog
+          if (gHtmlData && gHtmlData.includes('achieveRow')) {
+            const listG = parseAchievementsFromHtml(gHtmlData, unlockedSet, titlePercentMap, percentMap);
             if (listG.length > 0) {
               return cb({ achievements: listG, isPersonalized: false, isPrivate: isProfilePrivate });
             }
@@ -595,7 +607,6 @@ function getAchievementsForAccount(acc, appid, cb) {
   });
 }
 
-// HTTP Server
 const PORT = process.env.PORT || 8000;
 
 const server = http.createServer((req, res) => {
@@ -983,7 +994,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Frontend HTML
+  // Refined Clean English Frontend HTML/CSS
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="en">
@@ -998,7 +1009,7 @@ const server = http.createServer((req, res) => {
   <style>
     :root {
       --bg: #070a13;
-      --card-bg: rgba(18, 24, 38, 0.7);
+      --card-bg: rgba(18, 24, 38, 0.75);
       --card-border: rgba(255, 255, 255, 0.08);
       --primary: #38bdf8;
       --primary-hover: #0ea5e9;
@@ -1127,24 +1138,41 @@ const server = http.createServer((req, res) => {
     .search-info { flex: 1; font-size: 0.9rem; font-weight: 600; }
     .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
 
+    /* Redesigned Clean Game Cards Grid (Never Wraps or Breaks) */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
     .card {
-      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px;
+      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px;
       overflow: hidden; display: flex; flex-direction: column; backdrop-filter: blur(14px);
-      transition: all 0.25s ease; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      transition: all 0.25s ease; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
     }
-    .card:hover { transform: translateY(-5px); border-color: rgba(56, 189, 248, 0.35); }
-    .card-banner { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: #0c1220; }
-    .card-content { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px; }
-    .card-title { font-size: 0.95rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-    .card-appid { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
-    .card-btn-row { display: flex; gap: 8px; }
-    .btn-card { padding: 8px 14px; font-size: 0.8rem; border-radius: 9px; font-weight: 700; }
-    .btn-remove { background: rgba(244, 63, 94, 0.12); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.25); }
-    .btn-remove:hover { background: var(--danger); color: #fff; }
-    .btn-ach { background: rgba(56, 189, 248, 0.12); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.25); }
-    .btn-ach:hover { background: var(--primary); color: #04111d; }
+    .card:hover { transform: translateY(-4px); border-color: rgba(56, 189, 248, 0.35); }
+    .card-banner { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: #0c1220; display: block; }
+    
+    .card-content {
+      padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; flex: 1; justify-content: space-between;
+    }
+    .card-header-info { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; width: 100%; }
+    .card-title {
+      font-size: 0.95rem; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
+    }
+    .card-appid {
+      font-size: 0.75rem; font-weight: 700; color: var(--primary); background: rgba(56, 189, 248, 0.1);
+      padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2); white-space: nowrap; flex-shrink: 0;
+    }
+    .card-actions { display: flex; gap: 10px; width: 100%; align-items: center; }
+    .btn-card-ach {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px;
+      border-radius: 10px; background: rgba(56, 189, 248, 0.12); color: var(--primary);
+      border: 1px solid rgba(56, 189, 248, 0.25); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap;
+    }
+    .btn-card-ach:hover { background: var(--primary); color: #04111d; }
+    .btn-card-remove {
+      padding: 10px 16px; border-radius: 10px; background: rgba(244, 63, 94, 0.1); color: var(--danger);
+      border: 1px solid rgba(244, 63, 94, 0.2); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0;
+    }
+    .btn-card-remove:hover { background: var(--danger); color: #fff; }
 
+    /* Achievement Modal */
     .ach-modal-card {
       background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);
       width: 96%; max-width: 960px; max-height: 92vh; border-radius: 24px;
@@ -1567,13 +1595,13 @@ const server = http.createServer((req, res) => {
         card.innerHTML = 
           '<img class="card-banner" src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/' + id + '/header.jpg" onerror="this.src=\\'https://placehold.co/460x215/0c1220/white?text=AppID+' + id + '\\'">' +
           '<div class="card-content">' +
-            '<div>' +
+            '<div class="card-header-info">' +
               '<div class="card-title" title="' + title.replace(/"/g, '&quot;') + '">' + title + '</div>' +
-              '<div class="card-appid">AppID: ' + id + '</div>' +
+              '<div class="card-appid">#' + id + '</div>' +
             '</div>' +
-            '<div class="card-btn-row">' +
-              '<button class="btn-card btn-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Achievements</button>' +
-              '<button class="btn-card btn-remove" onclick="removeGame(' + id + ')">Remove</button>' +
+            '<div class="card-actions">' +
+              '<button class="btn-card-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Achievements</button>' +
+              '<button class="btn-card-remove" onclick="removeGame(' + id + ')">Remove</button>' +
             '</div>' +
           '</div>';
         grid.appendChild(card);
