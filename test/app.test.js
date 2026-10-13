@@ -166,3 +166,12 @@ test('public static assets support conditional caching while private APIs stay u
   assert.equal(second.status, 304); assert.equal(await second.text(), '');
   await f.login(); const status = await f.request('/api/status'); assert.equal(status.response.headers.get('cache-control'), 'no-store');
 });
+test('direct verification requires a connected account and stays separate from web cache',async t=>{
+  let calls=0;const f=await fixture(t,{accounts:[{id:'a',name:'Main',games:[]}]},{protocolReader:async()=>{calls++;return {achievements:[{name:'Native',unlocked:true}],verified:true,source:'Steam client protocol'};}});await f.login();
+  const route='/api/achievements?accountId=a&appid=550&method=protocol';assert.equal((await f.request(route)).response.status,409);
+  f.app.states.get('a').connected=true;
+  assert.equal((await f.request(route)).data.source,'Steam client protocol');await f.request(route);assert.equal(calls,1);
+  assert.equal((await f.request('/api/achievements?accountId=a&appid=550')).data.achievements[0].apiname,'REAL');
+  assert.equal((await f.request('/api/achievements?accountId=a&appid=550&method=unknown')).response.status,400);
+  const css=await fetch(f.base+'/style.css',{headers:{'Sec-Fetch-Site':'cross-site'}});assert.equal(css.status,200);assert.match(css.headers.get('content-type'),/text\/css/);
+});

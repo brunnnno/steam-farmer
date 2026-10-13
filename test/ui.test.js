@@ -33,7 +33,7 @@ test('catalog with only unknown personal states does not claim zero unlocked ach
   const w=ui(t,()=>response([{name:'One',unlocked:null,percent:null}]));await w.testUI.open(550,'Left 4 Dead 2');assert.match(w.document.getElementById('achProgressText').textContent,/Personal state not verified/);assert.doesNotMatch(w.document.getElementById('achProgressText').textContent,/0\/1/);
 });
 test('built-in panel options and messages are in English',()=>{
-  const root=path.join(__dirname,'../public');for(const file of ['index.html','app.js']){const content=fs.readFileSync(path.join(root,file),'utf8');assert.doesNotMatch(content,/Sin verificar|Pausado|Contraseña|desbloqueados|Cromos|Reanudar|Catálogo|Ingresá|Guardar|Cuenta principal/);}
+  const root=path.join(__dirname,'../public');for(const file of ['index.html','app.js']){const content=fs.readFileSync(path.join(root,file),'utf8');assert.doesNotMatch(content,/Horas estimadas|no verificadas|Sin verificar|Pausado|Contraseña|desbloqueados|Cromos|Reanudar|Catálogo|Ingresá|Guardar|Cuenta principal/);}
 });
 test('polling skips hidden tabs and unchanged game cards keep their DOM nodes', async t => {
   let requests=0;
@@ -44,4 +44,9 @@ test('polling skips hidden tabs and unchanged game cards keep their DOM nodes', 
   Object.defineProperty(w.document,'hidden',{configurable:true,value:true}); await poll.callback(); assert.equal(requests,1);
   Object.defineProperty(w.document,'hidden',{configurable:true,value:false}); await poll.callback();
   assert.equal(requests,2); assert.equal(w.document.querySelector('#gamesGrid .card'),first);
+});
+test('direct verification uses the protocol endpoint and preserves it when refreshing',async t=>{
+  const urls=[];const w=ui(t,url=>{urls.push(url);return response([{name:'Direct',unlocked:true,serverControlled:true}]);});
+  await w.testUI.open(550,'Left 4 Dead 2',true,'protocol');assert.ok(urls.at(-1).includes('method=protocol'));
+  await w.testUI.refresh();assert.ok(urls.at(-1).includes('method=protocol'));assert.match(w.document.getElementById('achListContainer').textContent,/Server-controlled/);
 });

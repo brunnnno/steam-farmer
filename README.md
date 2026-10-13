@@ -26,7 +26,7 @@ Render Free has an ephemeral filesystem. Environment variables survive deploymen
 
 ## Achievements
 
-The reader uses Steam Community XML/HTML and optional Steam API data, with global catalogs as fallbacks. Personal states are marked verified only when Steam returns them. Unknown state is displayed as **Not verified**, never treated as locked or locally unlocked. Refresh requests bypass the result cache. Private profiles or games without readable stats can prevent verification.
+The standard reader uses Steam Community XML/HTML and optional Steam API data, with global catalogs as fallbacks. **Verify directly** reads schema and personal states through the authenticated Steam client protocol without SAM. Direct verification currently does not supply global rarity percentages; standard verification remains available by reopening the game. Personal states are marked verified only when Steam returns them. Unknown state is displayed as **Not verified**, never treated as locked or locally unlocked. Refresh requests bypass the result cache and retain the selected reading method. Direct verification does not change achievements. See [protocol research](docs/achievement-research.md) for the investigated writing route and its limits. Private profiles or games without readable stats can prevent verification.
 
 Results are shared between simultaneous requests for the same account/game/session. Cache retention is limited to 64 entries, 4 MiB of serialized payloads and 60 seconds; this is not a limit on total process RAM. Static assets use conditional HTTP caching. Dashboard polling runs every 10 seconds while visible and resumes immediately when returning to the tab.
 
@@ -43,7 +43,7 @@ Local access defaults to `http://127.0.0.1:8000`. Keep credentials in environmen
 
 - `bot.js`: HTTP server, authentication and Steam session control.
 - `lib/`: Steam reading, validation, encrypted session storage and bounded caching.
-- `public/`: dashboard assets.
+- `public/`: English dashboard, responsive stylesheet and UI script.
 - `config.json`: default settings, with no credentials.
 - `test/`: server, Steam reader, cache and UI regression checks.
 - `package-lock.json`: reproducible dependency installation.

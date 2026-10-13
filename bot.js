@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const SteamUser = require('steam-user');
 const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require('steam-session');
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
+const { readProtocol } = require('./lib/steam-protocol');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
@@ -53,8 +54,9 @@ function createApp(options = {}) {
   const User = options.SteamUser || SteamUser;
   const Session = options.LoginSession || LoginSession;
   const steamRead = options.achievements || achievements;
+  const protocolRead = options.protocolReader || readProtocol;
   const achievementCache = new ResultCache(), achievementPending = new Map();
-  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'] }).map(([route, [file, type]]) => {
+  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
   }));
@@ -123,7 +125,9 @@ function createApp(options = {}) {
     client.on('accountInfo', name => { if (isCurrent()) st.profileName = name || ''; });
     client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); st.webSessionVersion++; console.log(`[Steam] ${acc.id}: authenticated web session ready`);
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0];
-      if (checkApp && !st.linkCheckStarted) { st.linkCheckStarted = true; steamRead(acc, st, checkApp, process.env.STEAM_API_KEY || '').then(result => { if (isCurrent()) console.log(`[Steam link check] account=${acc.id} app=${checkApp} source=${result.source || 'none'} personalVerified=${Boolean(result.verified)} count=${result.achievements?.length || 0} unlocked=${(result.achievements || []).filter(a=>a.unlocked===true).length} diagnostics=${JSON.stringify(result.diagnostics?.personal || {})}`); }).catch(() => { if (isCurrent()) console.warn(`[Steam link check] account=${acc.id}: achievement retrieval unavailable`); }); }
+      if (checkApp && !st.linkCheckStarted) { st.linkCheckStarted = true;
+        if (typeof client._send === 'function') protocolRead(client, checkApp).then(result => { if (isCurrent()) console.log(`[Steam protocol check] app=${checkApp} verified=${result.verified} count=${result.achievements.length} unlocked=${result.achievements.filter(a=>a.unlocked===true).length} serverControlled=${result.diagnostics.serverControlled}`); }).catch(err => { if (isCurrent()) console.warn(`[Steam protocol check] app=${checkApp}: ${err.status ? err.message : 'unavailable'}`); });
+        steamRead(acc, st, checkApp, process.env.STEAM_API_KEY || '').then(result => { if (isCurrent()) console.log(`[Steam link check] account=${acc.id} app=${checkApp} source=${result.source || 'none'} personalVerified=${Boolean(result.verified)} count=${result.achievements?.length || 0} unlocked=${(result.achievements || []).filter(a=>a.unlocked===true).length} diagnostics=${JSON.stringify(result.diagnostics?.personal || {})}`); }).catch(() => { if (isCurrent()) console.warn(`[Steam link check] account=${acc.id}: achievement retrieval unavailable`); }); }
       if (acc.cardFarming) scan(acc).catch(() => {}); } });
     client.on('playingState', blocked => {
       if (!isCurrent()) return;
@@ -263,7 +267,7 @@ function createApp(options = {}) {
       }
       // Public GET pages may be reached from bookmarks, search engines or external links.
       // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
-      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/manifest.json'].includes(url.pathname));
+      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/manifest.json', '/style.css'].includes(url.pathname));
       if (!['GET', 'POST'].includes(req.method)) throw fail('Method not allowed.', 405);
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') throw fail('Route not found.', 404);
@@ -320,11 +324,14 @@ function createApp(options = {}) {
       if (url.pathname === '/api/achievements' && req.method === 'GET') {
         rate(`ach:${token}`, 40); const acc = getAccount(req, url); const st = stateFor(acc.id);
         const id = appId(url.searchParams.get('appid'));
-        const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${st.webSessionVersion}`;
+        const method = url.searchParams.get('method') || 'web';
+        if (!['web','protocol'].includes(method)) throw fail('Unknown achievement verification method.');
+        if (method === 'protocol' && !st.connected) throw fail('Connect to Steam before using direct verification.', 409);
+        const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${st.webSessionVersion}:${method}`;
         const cached = achievementCache.get(key);
         if (url.searchParams.get('refresh') !== '1' && cached) return json(res, 200, cached);
         if (!achievementPending.has(key)) {
-          const task = Promise.resolve().then(() => steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(result => {
+          const task = Promise.resolve().then(() => method === 'protocol' ? protocolRead(clients.get(acc.id), id) : steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(result => {
             achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} webSession=${Boolean(st.webCookies)}`);
             if (result.outcome === 'catalog' && st.connected && Date.now() - st.lastWebRefresh > 120000) { st.lastWebRefresh = Date.now(); try { clients.get(acc.id)?.webLogOn(); } catch {} }
