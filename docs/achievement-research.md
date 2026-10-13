@@ -26,7 +26,7 @@ Existing implementations mean that SAM-free protocol achievement management is n
 
 `lib/steam-protocol.js` adds a read-only adapter for the installed `steam-user` 5.3.0 transport. The panel's **Verify directly** button reads the authenticated account's schema and states using `ClientGetUserStats`. It checks the returned game ID and response type, bounds payload size, times out, clears pending jobs, uses English schema labels, and keeps absent personal values unknown. It never sends a write/reset message. The standard web reader remains available through the normal game view.
 
-The test suite covers block/bit mapping, bit 31, missing values, timestamps, wrong-game responses, rejected results, timeout, disconnect and cache isolation. These tests validate the adapter against protocol-format fixtures; deployment logs provide the separate live read check. Writing has not been tested or enabled on this account.
+The test suite covers block/bit mapping, bit 31, missing values, timestamps that must not override bitmasks, wrong-game responses, rejected results, timeout, disconnect and cache isolation. These tests validate the adapter against protocol-format fixtures; deployment logs provide the separate live read check. Live validation exposed timestamps populated for locked achievements: the adapter now determines state only from personal stat bitmasks and omits implausible dates. Writing has not been tested or enabled on this account.
 
 ## Concrete next step for writing
 

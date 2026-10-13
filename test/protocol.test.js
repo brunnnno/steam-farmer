@@ -19,10 +19,15 @@ const snap=extra=>({eresult:1,game_id:'550',schema,stats:[{stat_id:7,stat_value:
 test('protocol schema preserves signed-boundary bits, English names and server control',()=>{
   const r=parseSnapshot(snap(),550);assert.equal(r.achievements.length,2);assert.equal(r.achievements[0].name,'First');assert.equal(r.achievements[0].unlocked,false);assert.equal(r.achievements[1].unlocked,true);assert.equal(r.achievements[1].serverControlled,true);assert.equal(r.verified,true);
 });
-test('missing personal stat blocks stay unknown, and timestamps confirm actual states',()=>{
+test('missing personal stat blocks stay unknown even with achievement timestamps',()=>{
   const r=parseSnapshot(snap({stats:[]}),550);assert.equal(r.verified,false);assert.equal(r.achievements[0].unlocked,null);
   const timed=parseSnapshot(snap({stats:[],achievement_blocks:[{achievement_id:7,unlock_time:[123456]}]}),550);
-  assert.equal(timed.achievements[0].unlockTimestamp,123456);assert.equal(timed.achievements[1].unlocked,null);
+  assert.equal(timed.achievements[0].unlockTimestamp,0);assert.equal(timed.achievements[0].unlocked,null);assert.equal(timed.achievements[1].unlocked,null);
+});
+test('timestamps never override locked bitmasks and future dates are not displayed',()=>{
+  const r=parseSnapshot(snap({achievement_blocks:[{achievement_id:7,unlock_time:Array(32).fill(0xffffffff)}]}),550);
+  assert.equal(r.achievements[0].unlocked,false);assert.equal(r.achievements[0].unlockTimestamp,0);
+  assert.equal(r.achievements[1].unlocked,true);assert.equal(r.achievements[1].unlockTimestamp,0);
 });
 test('wrong-game, rejected and malformed protocol responses cannot verify achievements',()=>{
   assert.throws(()=>parseSnapshot(snap({game_id:'240'}),550),/different game/);
