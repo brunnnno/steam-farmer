@@ -134,3 +134,14 @@ test('token privado de Render sobrevive recreación de datos sin renovación ni 
   assert.equal((await f.request('/api/steam/logout',{accountId:'main'})).response.status,409);
   assert.equal((await f.request('/api/account/remove',{accountId:'main'})).response.status,409);
 });
+test('entrada desde ChatGPT permite el panel público pero rechaza API y POST externos',async t=>{
+  const f=await fixture(t);const headers={'Sec-Fetch-Site':'cross-site',Origin:'https://chatgpt.com'};
+  const root=await fetch(f.base+'/',{headers});assert.equal(root.status,200);assert.match(await root.text(),/\/app.js/);
+  assert.equal((await fetch(f.base+'/app.js',{headers})).status,200);
+  assert.equal((await fetch(f.base+'/manifest.json',{headers})).status,200);
+  await f.login();assert.equal((await f.request('/api/status',undefined,{headers})).response.status,403);
+  assert.equal((await f.request('/api/panel/login',{password:PASSWORD},{headers})).response.status,403);
+  assert.equal((await f.request('/api/add',{accountId:'main',appid:730},{headers})).response.status,403);
+  const badHost = await new Promise(resolve => require('node:http').get(f.base+'/', { headers: { Host: 'evil.example' } }, response => { response.resume(); resolve(response.statusCode); }));
+  assert.equal(badHost,403);
+});

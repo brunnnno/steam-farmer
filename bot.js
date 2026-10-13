@@ -176,11 +176,11 @@ function createApp(options = {}) {
   const originValue = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';
   const origin = originValue ? new URL(originValue).origin : null;
   if (origin && !origin.startsWith('https://')) throw new Error('El origen público debe usar HTTPS.');
-  function checkOrigin(req) {
+  function checkOrigin(req, publicGet = false) {
     const expected = origin || `http://${req.headers.host}`;
     if (!origin && !/^((localhost|127\.0\.0\.1|\[::1\])(:\d+)?)$/.test(req.headers.host || '')) throw fail('Host inválido. Configurá PUBLIC_ORIGIN para acceso remoto.', 403);
-    if (req.headers.origin && req.headers.origin !== expected) throw fail('Origen no permitido.', 403);
-    if (req.headers['sec-fetch-site'] === 'cross-site') throw fail('Solicitud externa rechazada.', 403);
+    if (!publicGet && req.headers.origin && req.headers.origin !== expected) throw fail('Origen no permitido.', 403);
+    if (!publicGet && req.headers['sec-fetch-site'] === 'cross-site') throw fail('Solicitud externa rechazada.', 403);
   }
   function json(res, status, body) { if (!res.writableEnded && !res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); } }
   async function readBody(req) {
@@ -248,7 +248,9 @@ function createApp(options = {}) {
         res.writeHead(closing ? 503 : 200, { 'Content-Type': 'application/json; charset=utf-8' });
         return res.end(req.method === 'HEAD' ? undefined : JSON.stringify({ ok: !closing }));
       }
-      checkOrigin(req);
+      // Public GET pages may be reached from bookmarks, search engines or external links.
+      // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
+      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/manifest.json'].includes(url.pathname));
       if (!['GET', 'POST'].includes(req.method)) throw fail('Método no permitido.', 405);
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') throw fail('Ruta no encontrada.', 404);
