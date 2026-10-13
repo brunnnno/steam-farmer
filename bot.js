@@ -431,6 +431,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             if(method==='protocol') for(const row of result.achievements||[]) {
               const receipt=receipts.get(row.apiname);
               if(receipt) row.lastWriteOutcome=receipt.outcome;
+              if(receipt?.outcome==='confirmed'&&row.unlocked===true){row.panelOperationAt=receipt.checkedAt;row.panelVerifiedAt=receipt.verifiedAt||null;}
               if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
               if(receipt && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,status:receipt.outcome==='rejected'?'steam_rejected':receipt.outcome==='unknown'||receipt.outcome==='requested'?'pending_verification':'attempted',canUnlock:false,reason:receipt.message||'A write was already attempted for this achievement. The result must be checked; automatic retries are disabled.',code:receipt.diagnostic?.code||'previous_attempt',action:receipt.diagnostic?.action||'Refresh to verify the actual Steam state. A repeated write requires review.'};
               if(receipt&&row.unlocked!==true&&row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,reason:row.compatibility.reason};

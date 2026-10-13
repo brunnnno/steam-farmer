@@ -9,6 +9,20 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('Steam date and panel operation time stay distinct without replacing old Steam metadata',async t=>{
+  const row={name:'Doctor',unlocked:true,unlockTimestamp:1643673600,panelOperationAt:'2026-10-13T19:25:50.878Z',lastWriteOutcome:'confirmed',compatibility:{status:'dependency'}};
+  const w=ui(t,()=>response([row]));await w.testUI.open(440,'TF2',false,'protocol');const text=w.document.getElementById('achListContainer').textContent;
+  assert.match(text,/Steam-reported unlock date:.*2022/);assert.match(text,/Panel operation recorded:.*2026/);assert.match(text,/predates this panel operation/);
+  assert.match(w.document.querySelector('.ach-availability').textContent,/Confirmed on this account/);
+});
+test('shared review cards distinguish planned unlock from locked progress and use accurate accessible bars',async t=>{
+  const row={name:'Doctor',apiname:'DOCTOR',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewShared:true}};
+  const preview={appid:440,apiname:'DOCTOR',canActivate:true,revision:'a'.repeat(64),counter:{statName:'HEALED',before:0,after:25000},effects:[{name:'Doctor',apiname:'DOCTOR',before:0,after:25000,goal:25000,effect:'would_unlock'},{name:'Chief',apiname:'CHIEF',before:0,after:25000,goal:1000000,effect:'progress_only'}],message:'Reviewed.'};
+  const w=ui(t,url=>url.includes('shared-progress-preview')?preview:response([row]));w.testUI.activate({tokenSource:'environment'});await w.testUI.open(440,'TF2',false,'protocol');await w.testUI.reviewShared(row);
+  assert.equal(w.document.querySelectorAll('.shared-effect-card').length,2);assert.match(w.document.querySelector('.shared-effect-card.progress_only').textContent,/Stays locked.*25,000 \/ 1,000,000 · 2.5%/);
+  const bar=w.document.querySelector('.shared-effect-card.progress_only [role="progressbar"]');assert.equal(bar.getAttribute('aria-valuenow'),'25000');assert.equal(bar.getAttribute('aria-valuemax'),'1000000');assert.equal(bar.firstChild.style.width,'2.5%');
+  assert.ok(w.document.querySelector('#sharedProgressActions .shared-confirm'));assert.equal(w.document.querySelector('#sharedProgressEffects button'),null);
+});
 test('rarity buttons fetch missing direct-read percentages once and use the latest selected tier',async t=>{
   const calls=[],rows=['Zero','Epic','Epic upper','Rare','Rare upper','Common','Unknown'].map((name,i)=>({apiname:'A'+i,name,unlocked:i===0,percent:null}));
   let resolveLookup;const lookup=new Promise(resolve=>{resolveLookup=resolve;});
@@ -38,7 +52,7 @@ test('shared update displays every effect and cancellation never sends a write',
   const calls=[],row={name:'Doctor',apiname:'DOCTOR',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewShared:true}};
   const preview={appid:440,apiname:'DOCTOR',name:'Doctor',canActivate:true,revision:'a'.repeat(64),counter:{statName:'HEALED',before:0,after:25000},effects:[{apiname:'DOCTOR',name:'Doctor',goal:25000,effect:'would_unlock'},{apiname:'CHIEF',name:'Chief',goal:1000000,effect:'progress_only'}],message:'Review all effects.'};
   const w=ui(t,url=>{calls.push(url);return url.includes('shared-progress-preview')?preview:response([row]);});w.testUI.activate({tokenSource:'environment'});await w.testUI.open(440,'TF2',false,'protocol');await w.testUI.reviewShared(row);
-  let confirmation;w.confirm=message=>{confirmation=message;return false;};w.document.querySelector('#sharedProgressEffects button').click();
+  let confirmation;w.confirm=message=>{confirmation=message;return false;};w.document.querySelector('#sharedProgressActions button').click();
   assert.match(confirmation,/Chief: progress_only/);assert.match(confirmation,/0 → 25000/);assert.ok(!calls.includes('/api/achievement/unlock'));
 });
 test('shared update submission uses only the reviewed revision and requires explicit confirmation',async t=>{
@@ -46,7 +60,7 @@ test('shared update submission uses only the reviewed revision and requires expl
   const preview={appid:440,apiname:'DOCTOR',canActivate:true,revision:'a'.repeat(64),counter:{statName:'HEALED',before:0,after:25000},effects:[{name:'Doctor',goal:25000,effect:'would_unlock'},{name:'Chief',goal:1000000,effect:'progress_only'}],message:'Reviewed.'};
   const w=ui(t,url=>url.includes('shared-progress-preview')?preview:response([row]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});await w.testUI.open(440,'TF2',false,'protocol');await w.testUI.reviewShared(row);w.confirm=()=>true;
   let submitted;w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock')submitted=JSON.parse(options.body);return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
-  w.document.querySelector('#sharedProgressEffects button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:440,apiname:'DOCTOR',mode:'shared',revision:'a'.repeat(64)});
+  w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:440,apiname:'DOCTOR',mode:'shared',revision:'a'.repeat(64)});
 });
 test('compatibility filter includes bit and progress attempts but excludes protected, shared and unknown',async t=>{
   const calls=[],rows=[

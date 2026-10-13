@@ -141,6 +141,7 @@ async function logoutSteam() { if (active && confirm('Sign out of Steam and remo
 async function editChatAdmins() { if (!active) return; const value = prompt('Allowed SteamID64s, separated by commas. Leave empty to disable chat commands.', (active.chatAdmins||[]).join(',')); if(value !== null) await action('/api/chat-admins',{steamids:value.split(',').map(v=>v.trim()).filter(Boolean)},'Chat permissions updated.'); }
 async function openAchModal(id,title,forceRefresh=false,method='web') {
   $('sharedProgressReview').hidden=true;
+  document.querySelector('.ach-modal-card').classList.remove('shared-review-open');
   if (currentAchAppId !== id || achAccountId !== activeAccountId || $('achReadMode').value !== method) {
     filterStatus='all'; filterRarity='all'; filterCompatibility='all';currentSort='default'; searchQuery='';
     $('achCompatibilityFilter').value='all';
@@ -227,7 +228,10 @@ function renderAchModal(page=0) {
     const row=element('div',undefined,'ach-item '+(a.unlocked===true?'unlocked-item':'locked-item'));
     row.append(image(a.unlocked?a.iconOpen:a.iconClosed));
     const info=element('div',undefined,'ach-info'); info.append(element('div',a.name,'ach-title'),element('div',a.description,'ach-desc'),element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
-    if(a.unlockTimestamp) info.append(element('small',' · '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'))); else if(a.unlockDate) info.append(element('small',a.unlockDate));
+    if(a.unlockTimestamp) info.append(element('small','Steam-reported unlock date: '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'),'ach-date')); else if(a.unlockDate) info.append(element('small','Steam-reported unlock date: '+a.unlockDate,'ach-date'));
+    const recordedAt=a.panelVerifiedAt||a.panelOperationAt;
+    if(recordedAt&&Number.isFinite(Date.parse(recordedAt)))info.append(element('small',(a.panelVerifiedAt?'Verified by this panel: ':'Panel operation recorded: ')+new Date(recordedAt).toLocaleString('en-US'),'ach-date panel-date'));
+    if(a.panelOperationAt&&a.unlockTimestamp&&a.unlockTimestamp*1000<Date.parse(a.panelOperationAt)-86400000)info.append(element('small','Steam\'s reported date predates this panel operation. It is separate from the recorded test time.','ach-date-note'));
     if(a.hidden===true)info.append(element('small',' · Hidden achievement'));
     if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}${a.progressDetails.statName?' ('+a.progressDetails.statName+')':''}`));
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
@@ -259,16 +263,30 @@ async function reviewSharedProgress(row){
   if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canPreviewShared)return;
   const id=currentAchAppId,account=activeAccountId,serial=achSerial;
   try{const result=await api('/api/achievement/shared-progress-preview?accountId='+encodeURIComponent(account)+'&appid='+id+'&apiname='+encodeURIComponent(row.apiname));if(account!==activeAccountId||id!==currentAchAppId||serial!==achSerial)return;
-    $('sharedProgressSummary').textContent=`${result.counter.statName}: ${result.counter.before} → ${result.counter.after}. ${result.effects.length} related achievements.`;
-    const list=$('sharedProgressEffects');list.replaceChildren();const labels={would_unlock:'Would unlock',already_unlocked:'Already unlocked',progress_only:'Progress would change',unknown:'Impact unknown',restricted:'Restricted'};
-    for(const effect of result.effects){const item=element('div',undefined,'ach-impact-effect');item.append(element('strong',effect.name),element('span',labels[effect.effect]||'Impact unknown'),element('small',`Goal: ${effect.goal??'unknown'}${effect.hidden?' · Hidden achievement':''}`));list.append(item);}
-    $('sharedProgressMessage').textContent=result.message+' No changes have been sent to Steam.';$('sharedProgressReview').hidden=false;
+    const format=value=>typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('en-US'):'Unknown';
+    const summary=$('sharedProgressSummary');summary.replaceChildren(element('code',result.counter.statName,'shared-counter-key'));
+    const flow=element('div',undefined,'shared-counter-flow'),from=element('div',undefined,'shared-counter-value'),to=element('div',undefined,'shared-counter-value proposed');
+    from.append(element('small','Current counter'),element('strong',format(result.counter.before)));to.append(element('small','Proposed counter'),element('strong',format(result.counter.after)));
+    flow.append(from,element('span','→','shared-counter-arrow'),to);summary.append(flow,element('small',`${result.effects.length} related achievements · ${result.effects.filter(e=>e.effect==='would_unlock').length} would unlock`,'shared-counter-meta'));
+    const list=$('sharedProgressEffects');list.replaceChildren();$('sharedProgressActions').replaceChildren();
+    const labels={would_unlock:'Would unlock',already_unlocked:'Already unlocked',progress_only:'Stays locked · Progress only',unknown:'Impact unknown',restricted:'Restricted'};
+    for(const effect of result.effects){
+      const item=element('article',undefined,'shared-effect-card '+effect.effect),header=element('div',undefined,'shared-effect-heading');
+      header.append(element('strong',effect.name),element('span',labels[effect.effect]||'Impact unknown','shared-effect-badge'));item.append(header);
+      if(Number.isFinite(effect.goal)&&effect.goal>0&&Number.isFinite(effect.after)){
+        const ratio=Math.max(0,Math.min(100,effect.after/effect.goal*100)),track=element('div',undefined,'shared-progress-track'),fill=element('div',undefined,'shared-progress-fill');fill.style.width=ratio+'%';track.append(fill);track.setAttribute('role','progressbar');track.setAttribute('aria-label','Proposed progress for '+effect.name);track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax',String(effect.goal));track.setAttribute('aria-valuenow',String(Math.max(0,Math.min(effect.goal,effect.after))));item.append(track);
+        item.append(element('small',`After update: ${format(effect.after)} / ${format(effect.goal)} · ${ratio.toFixed(1)}%`,'shared-effect-progress'));
+      }else item.append(element('small',`Goal: ${format(effect.goal)}`,'shared-effect-progress'));
+      if(effect.effect==='progress_only')item.append(element('small','This achievement would stay locked. Only its shared progress changes.','shared-effect-note'));
+      if(effect.hidden)item.append(element('small','Hidden achievement','shared-effect-note'));list.append(item);
+    }
+    $('sharedProgressMessage').textContent=result.canActivate===true?'Review the unlock and all progress changes. Nothing has been sent to Steam yet.':result.message+' No changes have been sent to Steam.';$('sharedProgressReview').hidden=false;document.querySelector('.ach-modal-card').classList.add('shared-review-open');
     const target=currentAchList.find(a=>a.apiname===row.apiname);if(target){target.sharedSupport={canComplete:result.canActivate===true};renderAchModal();}
-    if(result.canActivate===true){const activate=button('Confirm reviewed shared update',()=>completeSharedProgress(result,{id,account,serial}));list.append(activate);}
+    if(result.canActivate===true){const activate=button('Confirm reviewed shared update',()=>completeSharedProgress(result,{id,account,serial}),'btn-main shared-confirm');$('sharedProgressActions').append(activate);}
   }catch(e){notice(e.message);}
 }
 $('historyRefresh').addEventListener('click',refreshWriteHistory);
-$('closeSharedReview').addEventListener('click',()=>{$('sharedProgressReview').hidden=true;});
+$('closeSharedReview').addEventListener('click',()=>{$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');});
 async function completeSharedProgress(preview,{id,account,serial}){
   if(experimentBusy||serial!==achSerial||id!==currentAchAppId||account!==activeAccountId||currentAchMethod!=='protocol')return;
   const effects=preview.effects.map(e=>e.name+': '+e.effect+' (goal '+e.goal+')').join('\n');
