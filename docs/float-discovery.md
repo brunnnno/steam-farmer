@@ -1,5 +1,7 @@
 # Finding a real decimal achievement
 
+UI update: the separate discovery tool has been removed from the public panel at the user's request. The following describes the bounded diagnostic endpoint and the earlier tool; ordinary progress detection now happens within achievement reading. See progress-ui.md.
+
 Previous candidate logs kept only four generic progress examples, which happened to be INT counters. They do not establish that the user's library has no FLOAT achievement. Sniper: Ghost Warrior's two review candidates, Sniper Expert and Sniper Master, use the shared INT stat_headshots counter. No live FLOAT candidate has been confirmed yet.
 
 The folded **Find decimal achievements** tool searches Steam-confirmed owned games. Each user click performs at most four batches of eight games, stops when a decimal preview candidate is found, and keeps its cursor for a later click. Played games are prioritized without assuming any specific title uses FLOAT. No search runs during normal startup or achievement opening. Stop, panel locking or account changes prevent pending results from rendering under another account.

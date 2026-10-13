@@ -9,22 +9,22 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
-test('decimal search displays exact game candidates without writing and stops after an eligible result',async t=>{
-  const calls=[];const w=ui(t,url=>{calls.push(url);return {nextCursor:8,revision:'r',totalGames:523,complete:false,games:[{readable:true},{readable:false}],candidates:[{appid:55,game:'Owned game',name:'Decimal target',apiname:'DECIMAL',statName:'DISTANCE',before:1.25,goal:10.5,canPreview:true,reason:'Read-only preview'}]};});
-  w.testUI.activate({tokenSource:'environment',connected:true});w.document.getElementById('floatSearchStart').click();await new Promise(resolve=>setImmediate(resolve));
-  assert.match(w.document.getElementById('floatSearchResults').textContent,/Owned game · Decimal target/);assert.match(w.document.getElementById('floatSearchStatus').textContent,/8\/523.*1 unreadable/);assert.equal(calls.length,1);assert.ok(!calls.some(url=>url.includes('/unlock')));assert.equal(w.document.getElementById('floatSearchStart').disabled,false);
-});
-test('stopping decimal discovery or switching accounts discards a pending private search result',async t=>{
-  let resolve;const pending=new Promise(r=>resolve=r);const w=ui(t,()=>pending);w.testUI.activate({tokenSource:'environment',connected:true});
-  w.document.getElementById('floatSearchStart').click();w.document.getElementById('floatSearchStop').click();w.testUI.select('b');
-  resolve({nextCursor:8,revision:'r',totalGames:8,complete:true,games:[],candidates:[{name:'Private candidate',game:'Private game'}]});await new Promise(r=>setImmediate(r));assert.equal(w.document.getElementById('floatSearchResults').textContent,'');
+test('one progress action dispatches supported and shared counters to their existing review flows',async t=>{
+  for(const shared of [false,true]){
+    const calls=[],row={name:'Progress target',apiname:'TARGET',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency',canUnlock:false},progressSupport:shared?{canPreviewShared:true}:{canComplete:true}};
+    const endpoint=shared?'/shared-progress-preview?':'/progress-preview?';
+    const w=ui(t,url=>{calls.push(url);if(url.includes(endpoint))return shared?{counter:{statName:'COUNT',before:0,after:10},effects:[],canActivate:false,message:'Review only.'}:{name:'Progress target',progressChanges:[{statName:'COUNT',before:0,after:10}],message:'Review only.'};return response([row]);});
+    w.testUI.activate({tokenSource:'environment',connected:true});w.confirm=()=>false;await w.testUI.open(550,'Game',false,'protocol');
+    const actions=[...w.document.querySelectorAll('#achListContainer button')];assert.equal(actions.length,1);assert.equal(actions[0].textContent,'Review progress');actions[0].click();await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(calls.some(url=>url.includes(endpoint)));assert.ok(!calls.some(url=>url.includes('/unlock')));
+  }
 });
 test('decimal preview shows decoded values and schema limits without confirmation or write controls',async t=>{
   const calls=[],row={apiname:'DECIMAL',name:'Distance',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency',canUnlock:false},progressSupport:{canPreviewFloat:true,canComplete:false,code:'float_review_only'},progressDetails:{currentValue:1.25,maximum:10.5}};
   const w=ui(t,url=>{calls.push(url);return url.includes('/float-progress-preview?')?{name:'Distance',counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},canActivate:false,message:'Read-only decimal preview. No changes.'}:response([row]);});
   w.testUI.activate({tokenSource:'environment',connected:true});w.confirm=()=>{throw Error('Read-only review must not ask for confirmation');};await w.testUI.open(550,'Game',false,'protocol');
-  const button=[...w.document.querySelectorAll('#achListContainer button')].find(b=>b.textContent==='Review decimal progress');assert.ok(button);button.click();await new Promise(resolve=>setImmediate(resolve));
-  const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Decimal progress preview/);assert.match(panel.textContent,/1.25/);assert.match(panel.textContent,/10.5/);assert.match(panel.textContent,/Allowed range: 0 to 100/);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);assert.ok(!calls.some(url=>url.includes('/unlock')));
+  const button=[...w.document.querySelectorAll('#achListContainer button')].find(b=>b.textContent==='Review progress');assert.ok(button);button.click();await new Promise(resolve=>setImmediate(resolve));
+  const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Review progress/);assert.match(panel.textContent,/1.25/);assert.match(panel.textContent,/10.5/);assert.match(panel.textContent,/Allowed range: 0 to 100/);assert.doesNotMatch(panel.textContent,/FLOAT|decimal/i);assert.equal(w.document.getElementById('floatSearchStart'),null);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);assert.ok(!calls.some(url=>url.includes('/unlock')));
 });
 test('reopening shows bounded previous reading immediately but blocks writes until fresh verification',async t=>{
   const row={apiname:'REAL',name:'Old reading',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}};
