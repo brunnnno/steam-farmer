@@ -1,19 +1,35 @@
 {
-  "user": "creep_no.1@web.de",
-  "webPin": "4947",
-  "games": [
-    240,
-    550,
-    271590,
-    1938090,
-    1118310,
-    379720,
-    323470,
-    883710,
-    202970,
-    220240,
-    1888930,
-    730
-  ],
-  "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5Nzk2MTg1MDMxOSIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MTAxMzM5MjIsICJuYmYiOiAxNzgzMjI4NTk4LCAiaWF0IjogMTc5MTg2ODU5OCwgImp0aSI6ICIwMDEyXzI4RUYxOUI2X0QwRDA2IiwgIm9hdCI6IDE3OTE4Njg1OTgsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODYuNDguMTYwLjgyIiwgImlwX2NvbmZpcm1lciI6ICIxODYuNDguMTYwLjgyIiB9.QGnWd-P_IwsDn0elO_uOCNyudU616SzbOII-MignPidO73uKIHRoHUE6Ok5zHdx8x0Hx_q2xwG3-CGQ5WeiXBA"
+  "timezone": "America/Montevideo",
+  "discordWebhook": "",
+  "accounts": [
+    {
+      "id": "main",
+      "name": "Cuenta principal",
+      "user": "",
+      "games": [
+        240,
+        550,
+        271590,
+        1938090,
+        1118310,
+        379720,
+        323470,
+        883710,
+        202970,
+        220240,
+        1888930,
+        730
+      ],
+      "gameNames": {},
+      "customStatus": "",
+      "personaState": 1,
+      "cardFarming": false,
+      "sleepMode": {
+        "enabled": false,
+        "start": 3,
+        "end": 8
+      },
+      "chatAdmins": []
+    }
+  ]
 }
