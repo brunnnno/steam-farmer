@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation and isolated database migration testing are complete; production migration and deployment remain pending user confirmation. No live Steam write was sent.
+Implementation and isolated database migration testing are complete. On 2026-10-13 the user explicitly approved the production migration and publication. The reservation table was applied to the main Neon branch; the temporary test branch was deleted by the migration workflow. Existing write-history row count and content fingerprint were unchanged. Publication follows this checkpoint. No live Steam write was sent.
 
 Candidate reviewed by the user: Team Fortress 2 Team Doctor, Medic.accum.iHealthPointsHealed 0 → 25000. Team Doctor would unlock; Chief of Staff would remain locked with 25000 / 1000000 progress. Values must be freshly read again before any operation.
 
@@ -31,7 +31,7 @@ Neon prepare_database_migration context (must pass these exact values when the u
 - database_name: neondb
 - migration_sql: CREATE TABLE IF NOT EXISTS steamfarmer_shared_reservations (account_id TEXT NOT NULL, appid BIGINT NOT NULL, apiname TEXT NOT NULL, owner_apiname TEXT NOT NULL, PRIMARY KEY (account_id, appid, apiname), FOREIGN KEY (account_id, appid, owner_apiname) REFERENCES steamfarmer_achievement_writes(account_id, appid, apiname));
 
-The temporary branch passed schema, foreign-key, duplicate-reservation, two-member transaction and independent readback checks with synthetic records for account 76561198000009999. Those records are only in the temporary branch and are not Steam account activity. The migration completion workflow requires explicit user confirmation; do not apply it or delete its branch without that confirmation.
+The temporary branch passed schema, foreign-key, duplicate-reservation, two-member transaction and independent readback checks with synthetic records for account 76561198000009999. Those records existed only in the temporary branch and were not Steam account activity. The migration context above is retained for audit, not for reuse: this migration has now been completed with user confirmation.
 
 ## Verification
 
