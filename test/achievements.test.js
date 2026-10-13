@@ -2,6 +2,19 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {achievements,parseXml,parseHtml,remote,parseCards}=require('../lib/steam-data');
 const sid='76561198000000001';
+test('verified personal XML returns before a stalled optional source and aborts remaining fetches',async()=>{
+  let signal,release;const stalled=new Promise(r=>release=r);
+  const xml='<playerstats><steamID64>'+sid+'</steamID64><achievements><achievement closed="1"><apiname>REAL</apiname><name>One</name></achievement></achievements></playerstats>';
+  const request=async(url,opts)=>{signal=opts.signal;if(url.includes('xml=1'))return {body:xml,finalUrl:url};return stalled;};
+  const start=Date.now();const timeout=setTimeout(()=>release({body:'{}',finalUrl:'https://steamcommunity.com/'}),1000);
+  try{const result=await achievements({}, {steamId64:sid},240,'',request);assert.equal(result.verified,true);assert.equal(result.source,'Steam Community XML');assert.ok(Date.now()-start<500);assert.equal(signal.aborted,true);assert.equal(result.achievements[0].percent,null);assert.equal(result.diagnostics.sources.global,'not_awaited');}finally{clearTimeout(timeout);release({body:'{}',finalUrl:'https://steamcommunity.com/'});}
+});
+test('catalog response waits for personal sources instead of returning a premature unknown state',async()=>{
+  let release;const gate=new Promise(r=>release=r);const xml='<playerstats><achievements><achievement closed="0"><apiname>REAL</apiname><name>One</name></achievement></achievements></playerstats>';
+  let finished=false;const request=async(url)=>{if(url.includes('xml=1')){await gate;return {body:xml,finalUrl:url};}if(url.includes('/stats/240/achievements/'))return {body:row('One'),finalUrl:url};throw Error('unavailable');};
+  const pending=achievements({}, {steamId64:sid},240,'',request).then(r=>{finished=true;return r;});await new Promise(r=>setImmediate(r));assert.equal(finished,false);release();const result=await pending;assert.equal(result.verified,true);assert.equal(result.achievements[0].unlocked,false);
+});
+test('caller cancellation reaches the actual remote request signal',async()=>{const controller=new AbortController();controller.abort();await assert.rejects(remote('https://steamcommunity.com/',{signal:controller.signal},async(_,opts)=>{assert.equal(opts.signal.aborted,true);throw opts.signal.reason;}));});
 test('badge parser reads real titles and remaining drops without view-details decoration',()=>{const html='<div class="badge_row"><a class="badge_row_overlay" href="https://steamcommunity.com/my/gamecards/240/"></a><div class="badge_title">Counter-Strike: Source<div class="badge_view_details">View details</div></div><span class="progress_info_bold">3 card drops remaining</span></div>';assert.deepEqual(parseCards(html),[{appid:240,remaining:3,name:'Counter-Strike: Source'}]);});
 const row=(name,extra='')=>`<div class="achieveRow"><img src="https://example.test/icon.png"><h3>${name}</h3><h5>Description</h5>${extra}<div class="achievePercent">0.0%</div></div>`;
 function source(name,url,body){return {body,finalUrl:url};}

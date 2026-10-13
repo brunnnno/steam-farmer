@@ -65,10 +65,11 @@ async function loadStatus() {
     renderGames(active.games);
   } catch (e) { notice(e.message); } finally { statusBusy = false; }
 }
-let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '',cardsSnapshot='';
+let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '',cardsSnapshot='',cardsAccount='';
 function renderCardFarming(account){
   const panel=$('cardsPanel');panel.hidden=!account?.cardFarming;
-  if(panel.hidden){cardsSnapshot='';$('cardsList').replaceChildren();return;}
+  if(panel.hidden){panel.open=false;cardsSnapshot='';cardsAccount='';$('cardsList').replaceChildren();return;}
+  if(cardsAccount!==account.id){panel.open=false;cardsAccount=account.id;}
   const games=Array.isArray(account.cardDropGames)?account.cardDropGames:[];
   const running=new Set(account.isFarming?(account.runningGames||[]):[]);
   const stopped=!account.connected?'Steam disconnected':account.isCollisionPaused?'Playing on another device':account.isSleepPaused?'Sleep schedule active':account.isPaused?'Paused':null;
