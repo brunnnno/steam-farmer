@@ -36,6 +36,8 @@ test('XML sin atributo closed se mantiene sin verificar',()=>{
   const xml='<playerstats><achievements><achievement><apiname>REAL</apiname><name>One</name></achievement></achievements></playerstats>';
   assert.equal(parseXml(xml)[0].unlocked,null);
 });
+test('XML from a different account never verifies the requested Steam identity',async()=>{const xml='<playerstats><steamID64>76561198000000002</steamID64><achievements><achievement closed="1"><apiname>REAL</apiname><name>One</name></achievement></achievements></playerstats>';const request=async url=>{if(url.includes('xml=1'))return {body:xml,finalUrl:url};if(url.includes('/stats/240/achievements/'))return source('',url,row('One'));throw Error('unavailable')};const result=await achievements({}, {steamId64:sid},240,'',request);assert.equal(result.verified,false);assert.equal(result.achievements[0].unlocked,null);});
+test('remote rejects declared oversized responses before buffering',async()=>{let cancelled=false;const response={ok:true,status:200,headers:new Headers({'content-length':'9999999'}),body:{cancel:async()=>{cancelled=true}}};await assert.rejects(remote('https://steamcommunity.com/',{maxBytes:1024},async()=>response),/too large/);assert.equal(cancelled,true);});
 test('unlocked por icono real de Steam y 0% se conservan',()=>{
   const rows=parseHtml(row('One','<div class="achieveImgHolderUnlocked"></div>'),true);assert.equal(rows[0].unlocked,true);assert.equal(rows[0].percent,0);
 });

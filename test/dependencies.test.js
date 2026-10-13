@@ -1,0 +1,4 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict');
+test('patched ZIP dependency supports the exact read path used by steam-user',()=>{const Zip=require('adm-zip'),zip=new Zip();zip.addFile('fixture',Buffer.from('Steam dependency smoke test'));const read=new Zip(zip.toBuffer());assert.equal(read.readFile(read.getEntries()[0]).toString(),'Steam dependency smoke test');});
+test('patched protobuf runtime loads Steam app-ticket generated schema and round-trips',()=>{const schema=require('steam-appticket/protobufs/generated/_load').EncryptedAppTicket;const fixture=schema.fromObject({ticket_version_no:1,encrypted_ticket:Buffer.from('synthetic')});const decoded=schema.decode(schema.encode(fixture).finish());assert.deepEqual(schema.toObject(decoded,{bytes:String,longs:String}),schema.toObject(fixture,{bytes:String,longs:String}));});

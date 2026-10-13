@@ -16,6 +16,7 @@ const {AchievementJournal}=require('./lib/achievement-journal');
 const {AppState}=require('./lib/app-state');
 const {sharedPreview}=require('./lib/achievement-progress');
 const { ResultCache } = require('./lib/cache');
+const {ResourceBudget}=require('./lib/resources');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
@@ -75,7 +76,10 @@ function createApp(options = {}) {
   const requirementsRead = options.requirementsReader || gameRequirements;
   const requirementsCache = new ResultCache({maxEntries:32,maxBytes:128*1024,ttl:3600000}),requirementsPending=new Map();
   const experimentBusy = new Set();
-  const achievementCache = new ResultCache(), achievementPending = new Map();
+  const achievementCache = new ResultCache({maxBytes:2*1024*1024,maxEntries:24}), achievementPending = new Map();
+  const budget=options.resourceBudget||new ResourceBudget();
+  const startupDiagnostics=options.startupDiagnostics??(process.env.STEAM_STARTUP_DIAGNOSTICS==='1');
+  const namePending=new Map();
   const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
@@ -83,7 +87,7 @@ function createApp(options = {}) {
   let closing = false;
   function stateFor(id) {
     if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', webSessionVersion: 0, linkCheckStarted: false, lastWebRefresh: 0, profileName: '', tokenAccountMatches: false, steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
-    return states.get(id);
+    const state=states.get(id);if(state.pausedInitialized!==true){state.isPaused=Boolean(cfg.accounts.find(a=>a.id===id)?.paused);state.pausedInitialized=true;}return state;
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
   function farming(acc) {
@@ -109,23 +113,29 @@ function createApp(options = {}) {
   async function scan(acc) {
     const st = stateFor(acc.id);
     if (!st.connected || !st.webCookies || st.scanning) return;
+    let release;try{release=budget.acquire('heavy');}catch{return;}
     st.scanning = true;
+    const client=clients.get(acc.id),version=st.webSessionVersion;
+    const current=()=>!closing&&cfg.accounts.includes(acc)&&states.get(acc.id)===st&&clients.get(acc.id)===client&&st.connected&&st.webSessionVersion===version&&acc.cardFarming;
     try {
       const found = new Map();
       for (let page = 1; page <= 50; page++) {
+        if(!current())return;
         const result = await remote(`https://steamcommunity.com/my/badges/?l=english&p=${page}`, { cookie: st.webCookies });
+        if(!current())return;
         if (/\/login/.test(result.finalUrl) || !/badge_row|badges_empty|badge_empty/i.test(result.body)) throw new Error('Web session expired or unrecognized badge response.');
         for (const item of parseCards(result.body)) found.set(item.appid, item);
         if (!new RegExp('[?&](?:amp;)?p=' + (page + 1) + '(?:["&])').test(result.body)) break;
         if (page === 50) throw new Error('Too many badge pages; scan incomplete.');
       }
-      if (!cfg.accounts.includes(acc)) return;
+      if (!current()) return;
       st.cardDropGames = [...found.values()]; st.cardsReady = true; st.cardError = ''; farming(acc);
-    } catch { st.cardError = 'Could not update card drops; keeping the previous scan.'; try { clients.get(acc.id)?.webLogOn(); } catch {} }
-    finally { st.scanning = false; }
+    } catch { if(current()){st.cardError = 'Could not update card drops; keeping the previous scan.'; try { client?.webLogOn(); } catch {}} }
+    finally { st.scanning = false;release(); }
   }
   function connect(acc) {
     if (closing || clients.has(acc.id) || (persistence && !persistence.available)) return;
+    if(clients.size>=3){stateFor(acc.id).error='Free-plan memory protection allows up to 3 simultaneous Steam connections. Your saved profile has not been removed.';return;}
     const st = stateFor(acc.id); const token = isEnvironmentAccount(acc) ? environmentToken : vault.get(acc.id);
     if (!token || !validClientToken(token)) { st.error = 'Please sign in again.'; return; }
     const client = new User({ renewRefreshTokens: !isEnvironmentAccount(acc), autoRelogin: false, dataDirectory: path.join(directory, 'steam-cache') });
@@ -145,14 +155,14 @@ function createApp(options = {}) {
     });
     client.on('accountInfo', name => { if (isCurrent()) st.profileName = name || ''; });
     client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); st.webSessionVersion++; console.log(`[Steam] ${acc.id}: authenticated web session ready`);
-      if(isEnvironmentAccount(acc)&&typeof client.getUserOwnedApps==='function'&&!st.candidateScanStarted){
+      if(startupDiagnostics&&isEnvironmentAccount(acc)&&typeof client.getUserOwnedApps==='function'&&!st.candidateScanStarted){
         st.candidateScanStarted=true;
         const timer=setTimeout(()=>{if(!isCurrent()||!st.connected)return;st.achievementCandidates={state:'running'};
-          runReadOnlyProbes(client).then(result=>{if(isCurrent()&&st.connected){st.achievementProbes=result;console.log('[Achievement guard probes] '+JSON.stringify(result));}}).then(async()=>{if(!isCurrent()||!st.connected)return;const report=await runSharedImpactProbes(client);if(isCurrent()&&st.connected){st.sharedCounterReviews=report;console.log('[Shared counter impact probes] '+JSON.stringify({checkedAt:report.checkedAt,results:report.results.map(r=>({appid:r.appid,game:r.game,name:r.name,counter:r.counter,message:r.message,completeImpact:r.completeImpact,effects:r.effects?.length,wouldUnlock:r.effects?.filter(e=>e.effect==='would_unlock').map(e=>e.name).slice(0,8),unknown:r.effects?.filter(e=>e.effect==='unknown').length,restricted:r.effects?.filter(e=>e.effect==='restricted').length,writesSent:r.writesSent}))}));}}).then(async()=>{if(!isCurrent()||!st.connected)return;try{const view=await protocolRead(client,220,{timeoutMs:6000});const row=view.achievements.find(a=>a.apiname==='HL2_HIT_CANCOP_WITHCAN');if(isCurrent()&&st.connected){st.hiddenAchievementPersistence={appid:220,apiname:'HL2_HIT_CANCOP_WITHCAN',name:row?.name,hidden:row?.hidden,unlocked:row?.unlocked??null,checkedAt:view.checkedAt,afterReconnect:true};console.log('[Hidden achievement persistence check] '+JSON.stringify(st.hiddenAchievementPersistence));}}catch{console.log('[Hidden achievement persistence check] Reading unavailable; no write was sent.');}}).then(()=>{if(!isCurrent()||!st.connected)return;return scanCandidates(client,[3764200,3932890,...acc.games],{fullLibrary:true,maxGames:120,onCandidate:entry=>console.log('[Hidden achievement candidate] '+JSON.stringify(entry))}).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}});}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
+budget.run(()=>runReadOnlyProbes(client)).then(result=>{if(isCurrent()&&st.connected){st.achievementProbes=result;console.log('[Achievement guard probes] '+JSON.stringify(result));}}).then(async()=>{if(!isCurrent()||!st.connected)return;const report=await budget.run(()=>runSharedImpactProbes(client));if(isCurrent()&&st.connected){st.sharedCounterReviews=report;console.log('[Shared counter impact probes] '+JSON.stringify({checkedAt:report.checkedAt,results:report.results.map(r=>({appid:r.appid,game:r.game,name:r.name,counter:r.counter,message:r.message,completeImpact:r.completeImpact,effects:r.effects?.length,wouldUnlock:r.effects?.filter(e=>e.effect==='would_unlock').map(e=>e.name).slice(0,8),unknown:r.effects?.filter(e=>e.effect==='unknown').length,restricted:r.effects?.filter(e=>e.effect==='restricted').length,writesSent:r.writesSent}))}));}}).then(async()=>{if(!isCurrent()||!st.connected)return;try{const view=await protocolRead(client,220,{timeoutMs:6000});const row=view.achievements.find(a=>a.apiname==='HL2_HIT_CANCOP_WITHCAN');if(isCurrent()&&st.connected){st.hiddenAchievementPersistence={appid:220,apiname:'HL2_HIT_CANCOP_WITHCAN',name:row?.name,hidden:row?.hidden,unlocked:row?.unlocked??null,checkedAt:view.checkedAt,afterReconnect:true};console.log('[Hidden achievement persistence check] '+JSON.stringify(st.hiddenAchievementPersistence));}}catch{console.log('[Hidden achievement persistence check] Reading unavailable; no write was sent.');}}).then(()=>{if(!isCurrent()||!st.connected)return;return scanCandidates(client,[3764200,3932890,...acc.games],{fullLibrary:true,maxGames:12,maxDurationMs:60000,onCandidate:entry=>console.log('[Hidden achievement candidate] '+JSON.stringify(entry))}).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}});}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
         },8000);timer.unref();
       }
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0] || 3764200;
-      if (checkApp && st.connected && client.steamID && !st.linkCheckStarted) { st.linkCheckStarted = true;
+      if (startupDiagnostics && checkApp && st.connected && client.steamID && !st.linkCheckStarted) { st.linkCheckStarted = true;
         if (isEnvironmentAccount(acc) && typeof client._send === 'function') protocolRead(client,3764200).then(result=>{
           if(!isCurrent() || !st.connected) return;
           const rows=result.achievements.filter(a=>a.apiname==='46' && a.name==='Model Mania');
@@ -200,9 +210,13 @@ function createApp(options = {}) {
     states.delete(id);
   }
   async function resolveNames(acc) {
+    if(namePending.has(acc.id))return namePending.get(acc.id);
+    const task=(async()=>{
     for (const id of acc.games.filter(id => !acc.gameNames[id])) {
-      try { const data = JSON.parse((await remote(`https://store.steampowered.com/api/appdetails?appids=${id}&filters=basic&l=english`)).body); if (data[id]?.success && cfg.accounts.includes(acc)) { acc.gameNames[id] = data[id].data.name; save(); } } catch {}
+      if(closing||!cfg.accounts.includes(acc))break;
+      try { const data = JSON.parse((await budget.run(()=>remote(`https://store.steampowered.com/api/appdetails?appids=${id}&filters=basic&l=english`,{maxBytes:128*1024}),'small')).body); if (data[id]?.success && cfg.accounts.includes(acc)&&acc.games.includes(id)&&typeof data[id].data.name==='string') { acc.gameNames[id] = data[id].data.name.slice(0,256); save(); } } catch {}
     }
+    })().finally(()=>namePending.delete(acc.id));namePending.set(acc.id,task);return task;
   }
   function getAccount(req, url, data = {}) {
     const id = data.accountId || url.searchParams.get('accountId');
@@ -215,6 +229,7 @@ function createApp(options = {}) {
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
+    if(rates.size>2048){for(const [k,v]of rates)if(v.until<=now)rates.delete(k);if(rates.size>2048){rates.delete(key);throw fail('The server is receiving too many requests.',429);}}
     if (++r.count > limit) throw fail('Too many requests. Please wait a moment.', 429);
   }
   function panelSession(req) {
@@ -233,7 +248,7 @@ function createApp(options = {}) {
     if (!publicGet && req.headers['sec-fetch-site'] === 'cross-site') throw fail('Cross-site request rejected.', 403);
   }
   async function json(res, status, body) {
-    if(body?.achievementHistoryStorage)body.applicationStorage=persistence?.status()||{mode:'local',persistent:false,available:true};
+    if(body?.achievementHistoryStorage){body.applicationStorage=persistence?.status()||{mode:'local',persistent:false,available:true};const mem=process.memoryUsage();body.resources={rssBytes:mem.rss,heapUsedBytes:mem.heapUsed,externalBytes:mem.external,...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes};}
     if(status<400 && persistence && (body?.success===true || body?.phase==='authenticated')){
       try{await persistence.flush();}catch{status=503;body={error:'Persistent storage failed. The change was not confirmed as saved. Restart after checking Neon.'};}
     }
@@ -241,13 +256,14 @@ function createApp(options = {}) {
   }
   async function readBody(req) {
     if (!(req.headers['content-type'] || '').startsWith('application/json')) throw fail('application/json is required.', 415);
-    let size = 0, body = '';
-    for await (const chunk of req) { size += chunk.length; if (size > 65536) throw fail('Request too large.', 413); body += chunk; }
+    let size = 0;const chunks=[];
+    for await (const chunk of req) { size += chunk.length; if (size > 65536) throw fail('Request too large.', 413); chunks.push(chunk); }
+    const body=Buffer.concat(chunks,size).toString('utf8');
     try { const parsed = JSON.parse(body || '{}'); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error(); return parsed; } catch { throw fail('Invalid JSON.'); }
   }
   function cancelAttempt(id) {
     const a = attempts.get(id); if (!a) return; a.phase = 'cancelled';
-    try { a.login.cancelLoginAttempt(); } catch {} attempts.delete(id);
+    try { a.login.cancelLoginAttempt(); } catch {}a.login.removeAllListeners();a.login.on('error',()=>{}); attempts.delete(id);
   }
   function findAttempt(id, owner) {
     const a = attempts.get(id); if (!a || a.owner !== owner) throw fail('Login attempt not found.', 404); return a;
@@ -256,11 +272,12 @@ function createApp(options = {}) {
   async function startLogin(data, owner) {
     rate(`steam:${owner}`, 5, 5 * 60000);
     for (const [id, a] of attempts) if (a.owner === owner) cancelAttempt(id);
-    if (attempts.size >= 20) throw fail('Too many pending login attempts.', 429);
+    if (attempts.size >= 4) throw fail('Too many pending login attempts.', 429);
     const user = text(data.user, 128); const name = text(data.name || user, 64);
     if (!user || typeof data.password !== 'string' || !data.password || data.password.length > 256) throw fail('Enter your Steam login name and password.');
     let existing;
     if (data.accountId) existing = getAccount(null, new URL('http://localhost'), data);
+    if(!existing&&cfg.accounts.length>=8)throw fail('Maximum 8 saved profiles on the free-plan memory budget.',409);
     if (existing && isEnvironmentAccount(existing)) throw fail('This account uses STEAM_REFRESH_TOKEN in Render. Update that variable to replace its session.', 409);
     const login = new Session(EAuthTokenPlatformType.SteamClient, { machineFriendlyName: 'SteamFarmer personal', machineId: true });
     login.loginTimeout = 120000;
@@ -273,15 +290,22 @@ function createApp(options = {}) {
       if (!alive()) return;
       try {
         const steamid = login.steamID.toString();
-        let acc = a.targetId ? cfg.accounts.find(acc => acc.id === a.targetId) : cfg.accounts.find(acc => acc.mySteamID === steamid || acc.user.toLowerCase() === login.accountName.toLowerCase());
+        let acc = a.targetId ? cfg.accounts.find(acc => acc.id === a.targetId) : cfg.accounts.find(acc => acc.mySteamID === steamid || String(acc.user||'').toLowerCase() === login.accountName.toLowerCase());
         if (a.targetId && (!acc || (acc.mySteamID && acc.mySteamID !== steamid))) throw Error('Account identity mismatch');
         if (acc && isEnvironmentAccount(acc)) throw Error('Account managed through an environment variable');
         if (acc && [...attempts.values()].some(other => other !== a && other.targetId === acc.id && ['starting', 'guard', 'waiting'].includes(other.phase))) throw Error('Concurrent login attempt');
         const fresh = !acc;
         acc ||= { id: crypto.randomUUID(), name, user: login.accountName, games: [], gameNames: {}, personaState: SteamUser.EPersonaState.Online, cardFarming: false, sleepMode: { enabled: false, start: 3, end: 8 }, customStatus: '', chatAdmins: [] };
+        if(fresh&&cfg.accounts.length>=8)throw Error('Profile limit reached while authenticating');
+        const oldAccount=fresh?null:structuredClone(acc),oldTokenRecord=vault.records[acc.id];
+        a.phase='saving';
         vault.set(acc.id, login.refreshToken);
         acc.mySteamID = steamid; acc.user = login.accountName;
-        if (fresh) cfg.accounts.push(acc); save();if(persistence)await persistence.flush(); disconnect(acc.id); connect(acc);
+        if (fresh) cfg.accounts.push(acc); save();if(persistence)await persistence.flush();
+        if(attempts.get(a.id)!==a||!sessions.has(owner)||sessions.get(owner).expires<=Date.now()||closing){
+          if(!closing){if(fresh)cfg.accounts=cfg.accounts.filter(x=>x!==acc);else Object.assign(acc,oldAccount);if(oldTokenRecord)vault.records[acc.id]=oldTokenRecord;else delete vault.records[acc.id];atomicWrite(vault.file,vault.records);save();if(persistence)await persistence.flush();}return;
+        }
+        disconnect(acc.id); connect(acc);
         a.accountId = acc.id; a.phase = 'authenticated';
       } catch { a.phase = 'failed'; a.error = 'Could not save the session or the account does not match the selected profile.'; }
     });
@@ -295,6 +319,7 @@ function createApp(options = {}) {
     return attemptView(a);
   }
   const server = http.createServer(async (req, res) => {
+    let releaseResource;
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
@@ -321,6 +346,8 @@ function createApp(options = {}) {
         rate(`panel:${ip}`, 5, 5 * 60000);
         const data = await readBody(req);
         if (!verifyPassword(data.password, cfg.panelAuth)) throw fail('Incorrect password.', 401);
+        for(const [id,s]of sessions)if(s.expires<=Date.now())sessions.delete(id);
+        if(sessions.size>=16)throw fail('Too many dashboard sessions. Sign out of an existing session first.',429);
         const token = crypto.randomBytes(32).toString('hex'), csrf = crypto.randomBytes(32).toString('hex');
         sessions.set(token, { csrf, expires: Date.now() + 12 * 3600000 });
         res.setHeader('Set-Cookie', `sf_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${origin?.startsWith('https:') ? '; Secure' : ''}`);
@@ -333,6 +360,8 @@ function createApp(options = {}) {
         if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Invalid session. Reload the dashboard.', 403);
         data = await readBody(req);
       }
+      if(['/api/achievement/progress-preview','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement-experiment','/api/achievement/history'].includes(url.pathname))releaseResource=budget.acquire('heavy');
+      else if(['/api/search','/api/game-requirements'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
@@ -377,7 +406,10 @@ function createApp(options = {}) {
         const cached = achievementCache.get(key);
         if (url.searchParams.get('refresh') !== '1' && cached) return json(res, 200, cached);
         if (!achievementPending.has(key)) {
+          releaseResource=budget.acquire('heavy');
+          const readClient=clients.get(acc.id),readVersion=st.webSessionVersion;
           const task = Promise.resolve().then(() => method === 'protocol' ? protocolRead(clients.get(acc.id), id) : steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(async result => {
+            if(!cfg.accounts.includes(acc)||states.get(acc.id)!==st||clients.get(acc.id)!==readClient||st.webSessionVersion!==readVersion)throw fail('The selected Steam session changed during verification. Refresh again.',409);
             let receipts=new Map(),historyUnavailable=false;
             if(method==='protocol')try{receipts=await journal.forGame(st.steamId64,id);}catch{historyUnavailable=true;result.historyWarning='Persistent write history is unavailable. Achievement reads remain available, but activation is blocked.';}
             if(method==='protocol') for(const row of result.achievements||[]) {
@@ -529,15 +561,18 @@ function createApp(options = {}) {
         }
       }
       return json(res, 200, { success: true });
-    } catch (err) { json(res, err.status || 502, { error: err.status ? err.message : 'The operation failed. Check the server connection or permissions.',...(err.diagnostic?{diagnostic:err.diagnostic}:{}) }); }
+    } catch (err) { if(err.status===429)res.setHeader('Retry-After','3');json(res, err.status || 502, { error: err.status ? err.message : 'The operation failed. Check the server connection or permissions.',...(err.diagnostic?{diagnostic:err.diagnostic}:{}) }); }
+    finally{releaseResource?.();}
   });
   server.requestTimeout = 20000; server.headersTimeout = 10000;
+  server.maxConnections=64;server.keepAliveTimeout=5000;server.maxRequestsPerSocket=100;
   const timers = [setInterval(() => { if (!closing) cfg.accounts.forEach(farming); }, 30000), setInterval(() => { if (!closing) for (const acc of cfg.accounts) if (acc.cardFarming) scan(acc).catch(() => {}); }, 10 * 60000), setInterval(() => {
     for (const [token, s] of sessions) if (s.expires <= Date.now()) sessions.delete(token);
     for (const [id, a] of attempts) if (Date.now() - a.created > 5 * 60000 || !sessions.has(a.owner)) cancelAttempt(id);
     achievementCache.prune();requirementsCache.prune();
     for (const [key, r] of rates) if (r.until <= Date.now()) rates.delete(key);
   }, 30000)];
+  if(!options.silent)timers.push(setInterval(()=>{const m=process.memoryUsage();console.log('[Resources] '+JSON.stringify({rssMiB:Number((m.rss/1048576).toFixed(1)),heapMiB:Number((m.heapUsed/1048576).toFixed(1)),externalMiB:Number((m.external/1048576).toFixed(1)),...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes}));},60000));
   timers.forEach(t => t.unref());
   for(const acc of cfg.accounts)stateFor(acc.id).isPaused=Boolean(acc.paused);
   if(persistence)persistence.onFailure=()=>{for(const id of clients.keys())disconnect(id);};

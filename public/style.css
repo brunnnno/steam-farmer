@@ -165,6 +165,7 @@
     .btn-card-remove:hover { background: var(--danger); color: #fff; }
 
     body.achievement-open { overflow:hidden; }
+    .ach-pagination { display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:16px;color:var(--text-muted); }
     /* Achievement Modal */
     .ach-modal-card {
       background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);

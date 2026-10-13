@@ -38,6 +38,29 @@ Results are shared between simultaneous requests for the same account/game/sessi
 
 ## Development
 
+## Free-plan resource budget and bug audit (2026-10-13)
+
+Observed Render memory before this audit: about 204 MB on the current instance, with a historical sampled peak of 280 MB across the reviewed deployments. These are container measurements, not JavaScript heap sizes. Render reports a 536,870,900-byte memory limit. No absolute promise against every OOM is possible.
+
+- Startup now skips experimental library scans and achievement diagnostic probes by default. Set `STEAM_STARTUP_DIAGNOSTICS=1` only for deliberate diagnostics; candidate scans are capped at 12 games/60 seconds. Direct verification, single-target activation and card farming remain available.
+- One expensive operation at a time; identical achievement reads still share their result. Up to four small lookups run concurrently. New work receives HTTP 429 with Retry-After when busy or process RSS reaches the 360 MiB admission threshold. This is a soft admission check, not a total-memory hard limit.
+- Achievement cache: 2 MiB serialized payloads/24 entries/60 seconds. Requirements cache: 128 KiB/32 entries. In-memory object overhead is additional. Steam HTML responses default to 2 MiB and streams are capped; oversized declared responses are cancelled before buffering.
+- Node startup uses a 192 MiB old-generation and 8 MiB semi-space budget. Heap limits do not cover all native buffers, sockets or container memory. Up to 3 simultaneous Steam connections, 8 new saved profiles, 16 dashboard sessions, 4 login attempts and 64 inbound sockets; existing saved profiles are never deleted by these limits.
+- PostgreSQL configuration writes retain at most one in-flight encrypted snapshot and one latest pending snapshot. Rapid saves coalesce; responses still wait for durable confirmation, with no local fallback on database failure.
+- Progress parsing indexes definitions and counter references, avoids redundant full parsing, and rejects oversized/deep definitions. Achievement write verification remains strict and unrelated statistics must still be unchanged.
+- Corrected reconnect pause loss, stale-session achievement responses, stale card scans, late login authority checks, removed-game name writes, XML account mismatches, and UTF-8 request chunks. The browser renders 200 achievement rows per page and frees the modal content on close.
+- Patched transitive `adm-zip` and app-ticket `protobufjs` dependencies through scoped overrides, without downgrading steam-user. Dedicated ZIP/protobuf round-trip tests cover their runtime API compatibility. `npm audit --omit=dev` must remain clean.
+
+Local-only synthetic load check (no Steam credentials, database or writes):
+
+```sh
+node --max-old-space-size=192 --max-semi-space-size=8 scripts/memory-smoke.js
+```
+
+This launches a disposable local panel and sends 64 concurrent/batched requests for 1,400 synthetic HTML achievements. Busy requests are intentionally rejected instead of queued. It measures sampled process RSS and validates headroom below 400 MiB. It is not proof of worst-case production traffic or a substitute for Render metrics. Resource usage is visible in Advanced settings and logged once per minute without credentials.
+
+### Development commands
+
 ```sh
 npm ci
 npm run check

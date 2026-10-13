@@ -1,0 +1,5 @@
+'use strict';
+const {test}=require('node:test');const assert=require('node:assert/strict');const {ResourceBudget}=require('../lib/resources');
+test('resource admission limits simultaneous work without retaining a waiting queue',()=>{const b=new ResourceBudget({rss:()=>0}),release=b.acquire();assert.throws(()=>b.acquire(),e=>e.status===429);const small=Array.from({length:4},()=>b.acquire('small'));assert.throws(()=>b.acquire('small'),e=>e.status===429);release();release();assert.equal(b.status().activeHeavy,0);small.forEach(r=>r());assert.equal(b.status().activeSmall,0);});
+test('memory pressure blocks new heavy work but permits recovery after memory falls',()=>{let rss=400*1048576;const b=new ResourceBudget({rss:()=>rss});assert.throws(()=>b.acquire(),e=>e.status===429);rss=100*1048576;b.acquire()();});
+test('failed work releases its admission slot',async()=>{const b=new ResourceBudget({rss:()=>0});await assert.rejects(b.run(async()=>{throw Error('failed')}));assert.equal(b.status().activeHeavy,0);assert.equal(await b.run(async()=>42),42);});
