@@ -140,6 +140,38 @@ function createApp(options = {}) {
         const timer=setTimeout(()=>{if(!isCurrent()||!st.connected)return;st.achievementCandidates={state:'running'};
           runReadOnlyProbes(client).then(result=>{if(isCurrent()&&st.connected){st.achievementProbes=result;console.log('[Achievement guard probes] '+JSON.stringify(result));}}).then(async()=>{if(!isCurrent()||!st.connected)return;try{const view=await protocolRead(client,220,{timeoutMs:6000});const row=view.achievements.find(a=>a.apiname==='HL2_HIT_CANCOP_WITHCAN');if(isCurrent()&&st.connected){st.hiddenAchievementPersistence={appid:220,apiname:'HL2_HIT_CANCOP_WITHCAN',name:row?.name,hidden:row?.hidden,unlocked:row?.unlocked??null,checkedAt:view.checkedAt,afterReconnect:true};console.log('[Hidden achievement persistence check] '+JSON.stringify(st.hiddenAchievementPersistence));}}catch{console.log('[Hidden achievement persistence check] Reading unavailable; no write was sent.');}}).then(()=>{if(!isCurrent()||!st.connected)return;return scanCandidates(client,[3764200,3932890,...acc.games],{fullLibrary:true,maxGames:120,onCandidate:entry=>console.log('[Hidden achievement candidate] '+JSON.stringify(entry))}).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}});}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
         },8000);timer.unref();
+        // Temporary one-target test explicitly approved at 2026-10-13T14:34:59Z (user named Crocodile and stat_1 0 -> 1).
+        // Authorization is only Crocodile plus stat_1 0 -> 1; removed after verification.
+        const progressTimer=setTimeout(async()=>{
+          if(Date.now()>Date.parse('2026-10-13T15:04:59Z')||st.crocodileTestAttempted||!isCurrent()||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||experimentBusy.has(acc.id))return;
+          st.crocodileTestAttempted=true;
+          const id=1938090,apiName='crocodile',auditKey=st.steamId64+':'+id+':'+apiName;
+          if(cfg.achievementWrites?.[auditKey])return;
+          experimentBusy.add(acc.id);
+          try{
+            const owned=await client.getUserOwnedApps(client.steamID,{filterAppids:[id],includeAppInfo:true,skipUnvettedApps:false});
+            if(!isCurrent()||!st.connected||!owned.apps?.some(a=>a.appid===id))throw fail('The authorized game ownership could not be confirmed.',409);
+            const snapshot=await progressSnapshotRead(client,id,{timeoutMs:6000});
+            const preview=prepare(snapshot,id,apiName,{allowProgress:true});
+            const exact=row=>{const p=row.progressSupport;if(row.apiname!==apiName||row.name!=='Crocodile'||!p?.canComplete||p.statId!==5||p.statName!=='stat_1'||p.before!==0||p.after!==1||p.goal!==1)throw fail('The current data no longer matches the approved Crocodile 0-to-1 test.',409);};
+            exact(preview.target);
+            const result=await individualWrite(client,id,apiName,{allowProgress:true,expectedRevision:preview.revision,validateTarget:exact,beforeSend:evidence=>{
+              if(Date.now()>Date.parse('2026-10-13T15:04:59Z')||!isCurrent()||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('The authorized Steam session changed or the test expired.',409);
+              const changes=evidence.progressChanges;
+              if(changes?.length!==1||changes[0].statId!==5||changes[0].statName!=='stat_1'||changes[0].before!==0||changes[0].after!==1)throw fail('Unexpected progress changes; no write is authorized.',409);
+              cfg.achievementWrites ||= {};
+              if(cfg.achievementWrites[auditKey])throw fail('This achievement was already attempted; no retry is authorized.',409);
+              if(st.lastAchievementWrite&&Date.now()-st.lastAchievementWrite<60000)throw fail('Wait one minute between achievement writes.',429);
+              const entries=Object.entries(cfg.achievementWrites);
+              if(entries.length>=128){const completed=entries.find(([,v])=>['confirmed','already_unlocked'].includes(v.outcome));if(!completed)throw fail('The achievement journal is full.',409);delete cfg.achievementWrites[completed[0]];}
+              cfg.achievementWrites[auditKey]={...evidence,outcome:'requested'};save();st.lastAchievementWrite=Date.now();
+              console.log('[Authorized Crocodile test requested] '+JSON.stringify(evidence));
+            }});
+            if(cfg.achievementWrites?.[auditKey]){cfg.achievementWrites[auditKey]=result;save();}
+            console.log('[Authorized Crocodile test result] '+JSON.stringify(result));
+          }catch(err){console.log('[Authorized Crocodile test stopped] '+JSON.stringify({message:err.message,diagnostic:err.diagnostic||null}));}
+          finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
+        },12000);progressTimer.unref();
       }
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0] || 3764200;
       if (checkApp && st.connected && client.steamID && !st.linkCheckStarted) { st.linkCheckStarted = true;
