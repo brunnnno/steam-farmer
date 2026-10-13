@@ -35,7 +35,9 @@
         "enabled": false,
         "start": 3,
         "end": 8
-      }
+      },
+      "achievementQueue": [],
+      "unlockedAchievements": {}
     }
   ]
 }
