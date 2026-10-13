@@ -23,7 +23,7 @@ const cases=[
   ['exclusive INT progress',{progress:true},'progress',true],
   ['hidden INT progress',{progress:true,bit:{hidden:'1'}},'progress',true],
   ['already-reached counter',{progress:true,personal:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:15}]},'progress',true],
-  ['FLOAT progress',{progress:true,counter:{type:'FLOAT'}},'unsupported',false],
+  ['FLOAT progress',{progress:true,counter:{type:'FLOAT'}},'review',false],
   ['AVGRATE progress',{progress:true,counter:{type:'AVGRATE'}},'unsupported',false],
   ['aggregated counter',{progress:true,counter:{aggregated:'1'}},'unsupported',false],
   ['protected counter',{progress:true,counter:{permission:'2'}},'protected',false],

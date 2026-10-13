@@ -266,6 +266,7 @@ function renderAchModal(page=0) {
         if(available.canAttempt&&available.action==='unlock'){const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));unlock.disabled=experimentBusy;unlock.title=a.compatibility.reason;info.append(unlock);}
         if(a.hasProgressDependency){if(available.canAttempt&&available.action==='progress'){const progress=button(experimentBusy?'Checking Steam…':'Preview progress completion',()=>completeAchievementProgress(a));progress.disabled=experimentBusy;progress.title=a.progressSupport.reason;info.append(progress);}}
         if(a.progressSupport?.canPreviewShared)info.append(button('Review shared counter',()=>reviewSharedProgress(a)));
+        if(a.progressSupport?.canPreviewFloat)info.append(button('Review decimal progress',()=>reviewFloatProgress(a)));
       }
       if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.action||'','ach-write-reason'));
     } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
@@ -273,6 +274,25 @@ function renderAchModal(page=0) {
   }
   if(pages>1){const nav=element('div',undefined,'ach-pagination');if(page>0)nav.append(button('Previous',()=>{renderAchModal(page-1);cont.scrollTop=0;}));nav.append(element('span',`Page ${page+1} of ${pages} · ${list.length} matching achievements`));if(page+1<pages)nav.append(button('Next',()=>{renderAchModal(page+1);cont.scrollTop=0;}));cont.append(nav);}
   if(!list.length) { const message=element('p',filterRarity!=='all'&&rarityLoading?'Loading rarity percentages from Steam…':filterRarity!=='all'&&rarityMissing===currentAchList.length&&currentAchList.length?'Steam has not supplied rarity percentages for this list. Try again later or use Show all.':currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+}
+async function reviewFloatProgress(row){
+  if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canPreviewFloat||!currentAchAppId)return;
+  const serial=achSerial,account=activeAccountId,id=currentAchAppId;
+  try{
+    const review=await api('/api/achievement/float-progress-preview?accountId='+encodeURIComponent(account)+'&appid='+id+'&apiname='+encodeURIComponent(row.apiname));
+    if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
+    const p=review.counter,summary=$('sharedProgressSummary');summary.replaceChildren();
+    document.querySelector('#sharedProgressReview .eyebrow').textContent='READ-ONLY INSPECTION';document.querySelector('#sharedProgressReview h3').textContent='Decimal progress preview';
+    summary.append(element('span','Decimal progress · Read-only','eyebrow'),element('h3',review.name));
+    const flow=element('div',undefined,'shared-counter-flow');
+    for(const [label,value]of [['Current',p.before],['Target preview',p.after]]){const box=element('div',undefined,'shared-counter-value');box.append(element('small',label),element('strong',String(value)));flow.append(box);}
+    summary.append(flow,element('small',`${p.statName} · Goal: ${p.goal}`,'shared-counter-meta'));
+    const effects=$('sharedProgressEffects');effects.replaceChildren();
+    const card=element('article',undefined,'shared-effect-card progress_only');
+    card.append(element('strong','Schema limits'),element('p',`Allowed range: ${p.min} to ${p.max}`),element('p',p.maxChange>0?'Maximum change: '+p.maxChange:'No maximum change declared'),element('p','FLOAT uses decimal precision. The preview rounds upward only when needed to reach the goal.'));
+    effects.append(card);$('sharedProgressActions').replaceChildren();$('sharedProgressMessage').textContent=review.message;
+    $('sharedProgressReview').hidden=false;document.querySelector('.ach-modal-card').classList.add('shared-review-open');
+  }catch(e){if(serial===achSerial&&account===activeAccountId)notice(e.message);}
 }
 async function refreshWriteHistory(){
   if(!activeAccountId)return;
@@ -286,6 +306,7 @@ async function reviewSharedProgress(row){
   if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canPreviewShared)return;
   const id=currentAchAppId,account=activeAccountId,serial=achSerial;
   try{const result=await api('/api/achievement/shared-progress-preview?accountId='+encodeURIComponent(account)+'&appid='+id+'&apiname='+encodeURIComponent(row.apiname));if(account!==activeAccountId||id!==currentAchAppId||serial!==achSerial)return;
+    document.querySelector('#sharedProgressReview .eyebrow').textContent='REVIEW BEFORE CONFIRMING';document.querySelector('#sharedProgressReview h3').textContent='Shared progress update';
     const format=value=>typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('en-US'):'Unknown';
     const summary=$('sharedProgressSummary');summary.replaceChildren(element('code',result.counter.statName,'shared-counter-key'));
     const flow=element('div',undefined,'shared-counter-flow'),from=element('div',undefined,'shared-counter-value'),to=element('div',undefined,'shared-counter-value proposed');

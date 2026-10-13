@@ -9,6 +9,13 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('decimal preview shows decoded values and schema limits without confirmation or write controls',async t=>{
+  const calls=[],row={apiname:'DECIMAL',name:'Distance',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency',canUnlock:false},progressSupport:{canPreviewFloat:true,canComplete:false,code:'float_review_only'},progressDetails:{currentValue:1.25,maximum:10.5}};
+  const w=ui(t,url=>{calls.push(url);return url.includes('/float-progress-preview?')?{name:'Distance',counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},canActivate:false,message:'Read-only decimal preview. No changes.'}:response([row]);});
+  w.testUI.activate({tokenSource:'environment',connected:true});w.confirm=()=>{throw Error('Read-only review must not ask for confirmation');};await w.testUI.open(550,'Game',false,'protocol');
+  const button=[...w.document.querySelectorAll('#achListContainer button')].find(b=>b.textContent==='Review decimal progress');assert.ok(button);button.click();await new Promise(resolve=>setImmediate(resolve));
+  const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Decimal progress preview/);assert.match(panel.textContent,/1.25/);assert.match(panel.textContent,/10.5/);assert.match(panel.textContent,/Allowed range: 0 to 100/);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);assert.ok(!calls.some(url=>url.includes('/unlock')));
+});
 test('reopening shows bounded previous reading immediately but blocks writes until fresh verification',async t=>{
   const row={apiname:'REAL',name:'Old reading',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}};
   let resolveRead,reads=0;const pending=new Promise(resolve=>resolveRead=resolve);

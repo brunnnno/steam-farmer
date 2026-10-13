@@ -25,6 +25,17 @@ test('shared API stays read-only without persistent reservations and never bypas
   assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
 });
 const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
+test('decimal preview requires the connected main account, rejects session changes and never writes',async t=>{
+  function kv(obj){const chunks=[];for(const[k,v]of Object.entries(obj))chunks.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));chunks.push(Buffer.from([8]));return Buffer.concat(chunks);}
+  const snapshot={eresult:1,game_id:'550',crc_stats:12,schema:kv({'550':{stats:{'7':{type:'4',bits:{'0':{name:'DECIMAL',progress:{max_val:'10.5',value:{operation:'statvalue',operand1:'DISTANCE'}}}}},'9':{type:'FLOAT',name:'DISTANCE'}}}}),stats:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:0x3fa00000}]};
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f,writes=0,change=false;
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{progressSnapshotReader:async()=>{if(change)f.app.states.get('main').connected=false;return snapshot;},individualWriter:async()=>{writes++;}});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  const route='/api/achievement/float-progress-preview?accountId=main&appid=550&apiname=DECIMAL';assert.equal((await f.request(route)).response.status,401);await f.login();await f.request('/api/status');assert.equal((await f.request(route)).response.status,409);
+  Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true});f.app.clients.set('main',new FakeUser({}));
+  const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.counter.before,1.25);assert.equal(preview.data.counter.after,10.5);assert.equal(preview.data.canActivate,false);
+  assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'DECIMAL',mode:'float',revision:preview.data.revision})).response.status,400);
+  change=true;assert.equal((await f.request(route)).response.status,409);assert.equal(writes,0);
+});
 test('persistent history starts concurrently with Steam reading and failures still block activation',async t=>{
   let releaseSteam,historyStarted=false;
   const steam=new Promise(resolve=>releaseSteam=resolve);

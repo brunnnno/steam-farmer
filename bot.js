@@ -14,7 +14,7 @@ const { scanCandidates } = require('./lib/achievement-candidates');
 const { runReadOnlyProbes,runSharedImpactProbes } = require('./lib/achievement-probes');
 const {AchievementJournal}=require('./lib/achievement-journal');
 const {AppState}=require('./lib/app-state');
-const {sharedPreview}=require('./lib/achievement-progress');
+const {sharedPreview,floatPreview}=require('./lib/achievement-progress');
 const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
 const {globalPercentages}=require('./lib/steam-percentages');
@@ -363,7 +363,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Invalid session. Reload the dashboard.', 403);
         data = await readBody(req);
       }
-      if(['/api/achievement/progress-preview','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement-experiment','/api/achievement/history'].includes(url.pathname))releaseResource=budget.acquire('heavy');
+      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement-experiment','/api/achievement/history'].includes(url.pathname))releaseResource=budget.acquire('heavy');
       else if(['/api/search','/api/game-requirements','/api/achievement/percentages'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
@@ -476,6 +476,16 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         rate(`achievement-history:${token}`,20,60000);
         const before=url.searchParams.get('before');if(before&&!Number.isFinite(Date.parse(before)))throw fail('Invalid history date.');
         return json(res,200,{storage:journal.status(),entries:identity?await journal.list(identity,{before}):[],limit:100});
+      }
+      if(url.pathname==='/api/achievement/float-progress-preview'&&req.method==='GET'){
+        const acc=getAccount(req,url),st=stateFor(acc.id);
+        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Decimal preview requires the available connected main Steam account.',409);
+        rate(`float-preview:${acc.id}`,10,60000);
+        const id=appId(url.searchParams.get('appid')),apiName=text(url.searchParams.get('apiname')||'',256),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!identity)throw fail('Steam is disconnected.',409);
+        const snapshot=await progressSnapshotRead(client,id);
+        if(clients.get(acc.id)!==client||client.steamID?.toString()!==identity||!st.connected||st.isCollisionPaused)throw fail('The Steam session changed during the decimal preview.',409);
+        return json(res,200,floatPreview(snapshot,id,apiName));
       }
       if(url.pathname==='/api/achievement/progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
