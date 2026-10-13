@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=17">
+  <link rel="stylesheet" href="/style.css?v=18">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -47,7 +47,7 @@
           </div>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
-<select id="achReadMode" aria-label="Achievement reading mode" title="Direct reading checks activation compatibility; standard reading uses community sources."><option value="auto">Automatic reading</option><option value="protocol">Direct verification</option><option value="web">Standard reading</option></select><button class="btn-action-sm" data-event-4="">Refresh</button>
+<button class="btn-action-sm" data-event-4="">Refresh</button><details class="control-menu achievement-reading-options" id="achReadingOptions"><summary>Reading options</summary><div class="control-menu-content"><label for="achReadMode">Reading method</label><select id="achReadMode" aria-label="Achievement reading mode"><option value="auto">Automatic (recommended)</option><option value="protocol">Verify through Steam session</option><option value="web">Community reading</option></select><small>Automatic works for everyday use. Steam-session verification checks activation compatibility; community reading provides an alternative when information is unavailable.</small></div></details>
           <button class="btn-action-sm" data-event-5="">Close</button>
         </div>
       </div>
@@ -213,7 +213,7 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager</span></footer>
   </div>
 
-  <script src="/achievement-availability.js?v=17" defer></script>
-  <script src="/app.js?v=17" defer></script>
+  <script src="/achievement-availability.js?v=18" defer></script>
+  <script src="/app.js?v=18" defer></script>
 </body>
 </html>

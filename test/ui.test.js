@@ -9,6 +9,19 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('game banners use bounded alternate sources and a designed placeholder after exhaustion',async t=>{
+  const account={id:'a',name:'Main',games:[550],gameNames:{550:'Left 4 Dead 2'},connected:true,tokenSource:'environment',cardDropGames:[],sleepMode:{}};
+  const w=ui(t,()=>({accounts:[account],presets:[],timezone:'UTC'}));w.testUI.authenticate();await w.testUI.load();const img=w.document.querySelector('.card-banner');
+  assert.match(img.src,/store_item_assets.*header.jpg/);img.dispatchEvent(new w.Event('error'));assert.match(img.src,/cdn.akamai.*header.jpg/);assert.equal(img.hidden,false);
+  img.dispatchEvent(new w.Event('error'));assert.match(img.src,/library_hero.jpg/);img.dispatchEvent(new w.Event('error'));assert.equal(img.hidden,true);const last=img.src;img.dispatchEvent(new w.Event('error'));assert.equal(img.src,last);
+  assert.match(w.document.querySelector('.game-art-placeholder').textContent,/Left 4 Dead 2/);assert.equal(w.document.querySelector('.game-art').querySelectorAll('img').length,1);
+});
+test('reading alternatives stay in a closed options menu and selection still requests direct verification',async t=>{
+  const calls=[],w=ui(t,url=>{calls.push(url);return response([{name:'Real',unlocked:false}]);});await w.testUI.open(550,'Game',false,'auto');
+  const menu=w.document.getElementById('achReadingOptions'),select=w.document.getElementById('achReadMode');assert.equal(menu.open,false);assert.equal(select.closest('details'),menu);assert.equal(select.value,'auto');
+  assert.ok(w.document.querySelector('.ach-header [data-event-4]'));assert.ok(w.document.querySelector('.ach-header [data-event-5]'));
+  menu.open=true;select.value='protocol';select.dispatchEvent(new w.Event('change'));await new Promise(r=>setImmediate(r));assert.equal(menu.open,false);assert.ok(calls.some(url=>url.includes('method=protocol')));
+});
 test('Steam date and panel operation time stay distinct without replacing old Steam metadata',async t=>{
   const row={name:'Doctor',unlocked:true,unlockTimestamp:1643673600,panelOperationAt:'2026-10-13T19:25:50.878Z',lastWriteOutcome:'confirmed',compatibility:{status:'dependency'}};
   const w=ui(t,()=>response([row]));await w.testUI.open(440,'TF2',false,'protocol');const text=w.document.getElementById('achListContainer').textContent;
