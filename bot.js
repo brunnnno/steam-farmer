@@ -11,6 +11,7 @@ const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement } = require('./lib/achievement-writer');
 const { gameRequirements } = require('./lib/game-requirements');
 const { scanCandidates } = require('./lib/achievement-candidates');
+const { runReadOnlyProbes } = require('./lib/achievement-probes');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
@@ -136,7 +137,7 @@ function createApp(options = {}) {
       if(isEnvironmentAccount(acc)&&typeof client.getUserOwnedApps==='function'&&!st.candidateScanStarted){
         st.candidateScanStarted=true;
         const timer=setTimeout(()=>{if(!isCurrent()||!st.connected)return;st.achievementCandidates={state:'running'};
-          scanCandidates(client,[3764200,3932890,...acc.games]).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
+          runReadOnlyProbes(client).then(result=>{if(isCurrent()&&st.connected){st.achievementProbes=result;console.log('[Achievement guard probes] '+JSON.stringify(result));}}).then(()=>{if(!isCurrent()||!st.connected)return;return scanCandidates(client,[3764200,3932890,...acc.games],{fullLibrary:true,maxGames:120,onCandidate:entry=>console.log('[Hidden achievement candidate] '+JSON.stringify(entry))}).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}});}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
         },8000);timer.unref();
       }
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0] || 3764200;
@@ -325,7 +326,7 @@ function createApp(options = {}) {
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual', achievementBatchWrite:false } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual', achievementBatchWrite:false } });
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }

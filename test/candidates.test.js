@@ -12,3 +12,8 @@ test('already unlocked, unknown and ineligible hidden achievements are not activ
 test('account changes stop the read-only scan rather than attributing another library to this account',async()=>{
   const client={steamID:{toString:()=> '76561198000000001'},getUserOwnedApps:async()=>{client.steamID=null;return {apps:[]};}};await assert.rejects(scanCandidates(client,[550]),/account changed/);
 });
+test('full-library mode inspects additional owned games and reports a bounded partial scope',async()=>{
+  const visited=[];const client={steamID:{toString:()=> '76561198000000001'},getUserOwnedApps:async(_,options)=>{assert.ok(!Object.hasOwn(options,'filterAppids'));return {apps:[{appid:100,name:'Extra owned game'},{appid:101,name:'Another'}]};}};
+  const report=await scanCandidates(client,[550],{fullLibrary:true,maxGames:1,read:async(_,id)=>{visited.push(id);return {achievements:[]};}});
+  assert.deepEqual(visited,[100]);assert.equal(report.libraryGames,2);assert.equal(report.completeLibrary,false);assert.equal(report.stopReason,'game_limit');
+});
