@@ -137,32 +137,7 @@ function createApp(options = {}) {
       if(isEnvironmentAccount(acc)&&typeof client.getUserOwnedApps==='function'&&!st.candidateScanStarted){
         st.candidateScanStarted=true;
         const timer=setTimeout(()=>{if(!isCurrent()||!st.connected)return;st.achievementCandidates={state:'running'};
-          runReadOnlyProbes(client).then(result=>{if(isCurrent()&&st.connected){st.achievementProbes=result;console.log('[Achievement guard probes] '+JSON.stringify(result));}}).then(async()=>{
-            // Temporary Defiant experiment explicitly approved by the user at 2026-10-13T13:52:09Z.
-            // Removed after the result is collected. No batch, resets or retries.
-            if(Date.now()>Date.parse('2026-10-13T14:07:09Z')||st.hiddenTestAttempted||!isCurrent()||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||experimentBusy.has(acc.id))return;
-            st.hiddenTestAttempted=true;
-            const id=220,apiName='HL2_HIT_CANCOP_WITHCAN',auditKey=st.steamId64+':'+id+':'+apiName;
-            if(cfg.achievementWrites?.[auditKey])return;
-            const owned=await client.getUserOwnedApps(client.steamID,{filterAppids:[id],includeAppInfo:true,skipUnvettedApps:false});
-            if(!isCurrent()||!st.connected||!owned.apps?.some(a=>a.appid===id))return;
-            experimentBusy.add(acc.id);
-            try{
-              const result=await individualWrite(client,id,apiName,{validateTarget:row=>{if(row.hidden!==true||row.apiname!==apiName||row.hasProgressDependency||row.compatibility.code!=='provisional')throw fail('The selected hidden test does not match the reviewed Steam schema.',409);},beforeSend:evidence=>{
-                if(!isCurrent()||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('The Steam session changed.',409);
-                cfg.achievementWrites ||= {};
-                if(cfg.achievementWrites[auditKey])throw fail('The selected test was already attempted. No retry is authorized.',409);
-                if(st.lastAchievementWrite&&Date.now()-st.lastAchievementWrite<60000)throw fail('Wait one minute between achievement writes.',429);
-                const entries=Object.entries(cfg.achievementWrites);
-                if(entries.length>=128){const completed=entries.find(([,v])=>['confirmed','already_unlocked'].includes(v.outcome));if(!completed)throw fail('The achievement journal is full.',409);delete cfg.achievementWrites[completed[0]];}
-                cfg.achievementWrites[auditKey]={...evidence,outcome:'requested'};save();st.lastAchievementWrite=Date.now();
-                console.log('[Authorized hidden test requested] '+JSON.stringify(evidence));
-              }});
-              if(cfg.achievementWrites?.[auditKey]){cfg.achievementWrites[auditKey]=result;save();}
-              st.hiddenAchievementTest=result;console.log('[Authorized hidden test result] '+JSON.stringify(result));
-            }catch(err){console.log('[Authorized hidden test stopped] '+JSON.stringify({message:err.message,diagnostic:err.diagnostic||null}));}
-            finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
-          }).then(()=>{if(!isCurrent()||!st.connected)return;return scanCandidates(client,[3764200,3932890,...acc.games],{fullLibrary:true,maxGames:120,onCandidate:entry=>console.log('[Hidden achievement candidate] '+JSON.stringify(entry))}).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}});}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish.'};});
+          runReadOnlyProbes(client).then(result=>{if(isCurrent()&&st.connected){st.achievementProbes=result;console.log('[Achievement guard probes] '+JSON.stringify(result));}}).then(async()=>{if(!isCurrent()||!st.connected)return;try{const view=await protocolRead(client,220,{timeoutMs:6000});const row=view.achievements.find(a=>a.apiname==='HL2_HIT_CANCOP_WITHCAN');if(isCurrent()&&st.connected){st.hiddenAchievementPersistence={appid:220,apiname:'HL2_HIT_CANCOP_WITHCAN',name:row?.name,hidden:row?.hidden,unlocked:row?.unlocked??null,checkedAt:view.checkedAt,afterReconnect:true};console.log('[Hidden achievement persistence check] '+JSON.stringify(st.hiddenAchievementPersistence));}}catch{console.log('[Hidden achievement persistence check] Reading unavailable; no write was sent.');}}).then(()=>{if(!isCurrent()||!st.connected)return;return scanCandidates(client,[3764200,3932890,...acc.games],{fullLibrary:true,maxGames:120,onCandidate:entry=>console.log('[Hidden achievement candidate] '+JSON.stringify(entry))}).then(result=>{if(isCurrent()&&st.connected){st.achievementCandidates=result;console.log('[Achievement candidate scan] '+JSON.stringify(result));}});}).catch(()=>{if(isCurrent())st.achievementCandidates={state:'unavailable',message:'The read-only library scan could not finish. No achievement writes were sent.'};});
         },8000);timer.unref();
       }
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0] || 3764200;
