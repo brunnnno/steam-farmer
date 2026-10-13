@@ -29,6 +29,9 @@ let webCookies = '';
 let cardDropGames = [];
 let mySteamID = cfg.mySteamID || '';
 
+// Memoria caché para evitar bloqueos de Steam Community
+const achCache = {};
+
 const PRESETS = {
   competitivos: {
     name: '🎯 Competitivos',
@@ -226,8 +229,8 @@ setInterval(() => {
     }
 
     sendDiscordWebhook(
-      `🏆 ¡Logro Desbloqueado! • ${item.gameName}`,
-      `**${item.name}**\n*${item.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${item.tier} (${item.percent}% global)\n⏱️ **Modo Orgánico:** Cadencia temporal natural simulada.`,
+      `🏆 ¡Logro Registrado! • ${item.gameName}`,
+      `**${item.name}**\n*${item.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${item.tier} (${item.percent}% global)`,
       item.color,
       item.icon
     );
@@ -235,7 +238,6 @@ setInterval(() => {
     if (cfg.achievementQueue.length > 0) {
       const nextDelayMinutes = Math.floor(Math.random() * (85 - 45 + 1)) + 45;
       cfg.achievementQueue[0].scheduledTime = Date.now() + (nextDelayMinutes * 60 * 1000);
-      console.log(`[Logros] Siguiente logro en cola programado en ${nextDelayMinutes} minutos.`);
     }
 
     guardarConfig();
@@ -437,8 +439,19 @@ function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   return list;
 }
 
-// Extractor con detección de cuenta privada
+// Extractor con memoria caché local
 function obtenerLogrosJuego(appid, cb) {
+  // 1. Si ya se cargaron antes, devolverlos directamente de la memoria caché
+  if (achCache[appid] && achCache[appid].achievements && achCache[appid].achievements.length > 0) {
+    const unlockedLocally = cfg.unlockedAchievements[appid] || [];
+    const cachedList = achCache[appid].achievements.map(a => ({
+      ...a,
+      unlocked: a.unlocked || unlockedLocally.includes(a.apiname),
+      inQueue: (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === a.apiname)
+    }));
+    return cb({ achievements: cachedList, isPrivate: achCache[appid].isPrivate });
+  }
+
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -467,7 +480,10 @@ function obtenerLogrosJuego(appid, cb) {
 
       if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
         const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
-        if (list.length > 0) return cb({ achievements: list, isPrivate: false });
+        if (list.length > 0) {
+          achCache[appid] = { achievements: list, isPrivate: false };
+          return cb(achCache[appid]);
+        }
       }
 
       const targetUserHtml = userSteamId
@@ -481,14 +497,20 @@ function obtenerLogrosJuego(appid, cb) {
 
         if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow') && !isProfilePrivate) {
           const listU = parseAchievementsFromHtml(uHtmlData, percentMap, unlockedLocally);
-          if (listU.length > 0) return cb({ achievements: listU, isPrivate: false });
+          if (listU.length > 0) {
+            achCache[appid] = { achievements: listU, isPrivate: false };
+            return cb(achCache[appid]);
+          }
         }
 
         const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
         fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
           if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
             const listG = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
-            if (listG.length > 0) return cb({ achievements: listG, isPrivate: isProfilePrivate });
+            if (listG.length > 0) {
+              achCache[appid] = { achievements: listG, isPrivate: isProfilePrivate };
+              return cb(achCache[appid]);
+            }
           }
           cb({ achievements: [], isPrivate: isProfilePrivate });
         });
@@ -680,15 +702,15 @@ const server = http.createServer((req, res) => {
           if (items.length === 1) {
             const it = items[0];
             sendDiscordWebhook(
-              `🏆 ¡Logro Desbloqueado! • ${gameName}`,
+              `🏆 ¡Logro Registrado! • ${gameName}`,
               `**${it.name}**\n*${it.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${it.tier} (${it.percent}% global)`,
               it.color || 3718648,
               it.icon
             );
           } else {
             sendDiscordWebhook(
-              `🏆 Desbloqueo Masivo • ${gameName}`,
-              `Se han registrado **${items.length} logros** para tu cuenta.`,
+              `🏆 Registro de Logros • ${gameName}`,
+              `Se han marcado **${items.length} logros** en el panel.`,
               3718648
             );
           }
@@ -778,7 +800,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Interfaz HTML
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="es">
@@ -1511,7 +1532,7 @@ const server = http.createServer((req, res) => {
         gameName: currentAchGameName,
         items: items
       });
-      alert('⚡ ' + items.length + ' logros programados. Se desbloquearán progresivamente cada 45-85 minutos.');
+      alert('⚡ ' + items.length + ' logros programados. Se registrarán progresivamente cada 45-85 minutos.');
       items.forEach(it => it.inQueue = true);
       selectedApinames.clear();
       renderAchModal();
