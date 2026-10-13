@@ -21,9 +21,8 @@ test('compatibility filter includes bit and progress attempts but excludes prote
   const w=ui(t,url=>{calls.push(url);return response(rows);});w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
   const select=w.document.getElementById('achCompatibilityFilter'),names=()=>[...w.document.querySelectorAll('.ach-title')].map(el=>el.textContent),filter=value=>{select.value=value;select.dispatchEvent(new w.Event('change'));};
   filter('attemptable');assert.deepEqual(names(),['Normal','Progress']);
-  filter('protected');assert.deepEqual(names(),['Protected']);
-  filter('unsupported');assert.deepEqual(names(),['Shared']);
-  filter('confirmed');assert.deepEqual(names(),['Recorded']);
+  filter('unavailable');assert.deepEqual(names(),['Protected','Shared']);
+  filter('all');assert.match(w.document.querySelector('.ach-availability.confirmed').textContent,/Confirmed on this account/);
   filter('unknown');assert.deepEqual(names(),['Unknown']);
   assert.match(w.document.getElementById('achCompatibilitySummary').textContent,/2 eligible to attempt/);
   assert.equal(calls.filter(url=>/unlock|complete-progress/.test(url)).length,0);

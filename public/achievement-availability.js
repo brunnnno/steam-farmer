@@ -10,6 +10,7 @@
     if(c.code==='history_unavailable')return result('unknown','Activation temporarily blocked',c.reason);
     if(row.serverControlled||c.code==='server_controlled'||['protected_progress','protected_progress_stat'].includes(p.code))return result('protected','Protected by Steam permissions',p.reason||c.reason||'The returned permissions do not allow this client operation.');
     if(c.status==='restricted')return result('unsupported','Unsupported write permissions',c.reason);
+    if(c.status==='insufficient_data')return result('unknown','Compatibility unknown',c.reason||'Steam did not provide sufficient verified definitions and personal state.');
     if(row.unlocked!==false)return result('unknown','Compatibility unknown',c.reason||'Steam did not return a verified locked personal state.');
     if(row.hasProgressDependency){
       if(p.canComplete===true)return result('progress','Progress eligible for preview',p.reason||'The current schema supports a single-counter preview. Steam must still accept and verify the update.','progress');

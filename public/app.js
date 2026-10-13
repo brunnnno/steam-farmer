@@ -206,7 +206,7 @@ function renderAchModal(page=0) {
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
   let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<15||filterRarity==='rare'&&a.percent>=15&&a.percent<40)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
-  list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='review'&&['review','rejected'].includes(v.status)||v.status===filterCompatibility;});
+  list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&v.status!=='unknown'&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
   if(currentSort==='locked_first'||currentSort==='unlocked_first') list.sort((a,b)=>Number(a.unlocked===true)-Number(b.unlocked===true));
   if(currentSort==='unlocked_first') list.reverse();
