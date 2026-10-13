@@ -54,8 +54,6 @@ Render documentation: [Free services](https://render.com/docs/free), [Environmen
 
 The panel explains per-achievement restrictions, unsupported permissions, progress dependencies, missing personal state, missing statistics versions and ambiguous identifiers. Steam rejection messages distinguish stale statistics, validation failures and unknown results without inferring a publisher/launcher cause from a generic error. A separate Game integration & activation limits section shows established Steam Store account/DRM/launcher requirements; these are context and never automatically block an otherwise eligible Steam achievement. The panel cannot inspect external account linking or modify publisher progress. Missing metadata stays unknown. Store lookups are parallel, bounded, deduplicated and cached (32 entries, 128 KiB, one hour).
 
-## Read-only candidate scan
-
 ## Progress completion
 
 After direct verification, supported progress achievements offer **Preview progress completion**. The preview names the achievement and exact linked counter change; explicit confirmation sends one update containing the achievement bit and, if needed, its counter. The server binds the preview to the current schema, CRC and returned statistics and rejects stale previews before sending. Confirmation requires a clean Steam response and a fresh read matching both reviewed changes, with no unrelated changes. Normal bit-only activation still rejects progress dependencies.
@@ -63,6 +61,8 @@ After direct verification, supported progress achievements offer **Preview progr
 Initial support is limited to direct `statvalue` expressions over one exclusive, client-writable INT counter. Shared counters, complex expressions, FLOAT/AVGRATE, aggregated stats, protected/trusted-server stats, unknown or ambiguous personal values, invalid constraints and updates exceeding min/max/maxchange are rejected. Counters never decrease, and no multi-step update or automatic retry occurs. Completing a Steam counter does not establish that the corresponding game-save or publisher requirements were fulfilled. This feature remains provisional until an individual live write is verified; the current Crocodile startup check only previews it and sends no writes.
 
 Steam's [stats and achievements documentation](https://partner.steamgames.com/doc/features/achievements?l=english) describes progress-linked automatic unlocks, statistic permissions and bounds.
+
+## Read-only candidate scan
 
 On 2026-10-13 the account's explicitly approved hidden achievement test, Half-Life 2 `HL2_HIT_CANCOP_WITHCAN` (Defiant), received Steam result 1 and a fresh read confirmed only that achievement changed, with no rejected stats, unrelated statistic changes or other achievement changes. The temporary activation hook was removed after collecting the result; only a read-only persistence check remains. Live dry-run guards also rejected Crocodile (Call of Duty, linked stat 0/1) for its progress dependency and PMC (Tarkov, 2/300) for server-controlled permissions, with all returned stats unchanged. These are specific observed cases, not universal compatibility guarantees.
 
