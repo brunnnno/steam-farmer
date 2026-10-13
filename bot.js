@@ -13,6 +13,8 @@ cfg.webPin = String(cfg.webPin || '1234');
 cfg.personaState = cfg.personaState !== undefined ? cfg.personaState : SteamUser.EPersonaState.Invisible;
 cfg.cardFarming = cfg.cardFarming || false;
 cfg.sleepMode = cfg.sleepMode || { enabled: false, start: 3, end: 8 };
+cfg.achievementQueue = cfg.achievementQueue || [];
+cfg.unlockedAchievements = cfg.unlockedAchievements || {};
 
 const client = new SteamUser();
 
@@ -43,8 +45,8 @@ const PRESETS = {
   }
 };
 
-// Webhook con bypass automático de proxy para Cloudflare Error 1015 en Render
-function sendDiscordWebhook(title, description, color, cb) {
+// Webhook de Discord con soporte para imágenes de trofeos y bypass anti-error 1015
+function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
     return;
@@ -54,16 +56,19 @@ function sendDiscordWebhook(title, description, color, cb) {
       .replace('https://discord.com', 'https://webhook.lewisakura.moe')
       .replace('https://discordapp.com', 'https://webhook.lewisakura.moe');
 
+    const embed = {
+      title: title,
+      description: description,
+      color: color || 3718648,
+      footer: { text: 'Steam Hour Booster Pro • Achievement Engine' },
+      timestamp: new Date().toISOString()
+    };
+    if (thumbUrl) embed.thumbnail = { url: thumbUrl };
+
     const payload = JSON.stringify({
       username: 'Steam Booster Enterprise',
       avatar_url: 'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png',
-      embeds: [{
-        title: title,
-        description: description,
-        color: color || 3718648,
-        footer: { text: 'Steam Hour Booster Enterprise' },
-        timestamp: new Date().toISOString()
-      }]
+      embeds: [embed]
     });
 
     const parsed = new URL(targetUrl);
@@ -81,15 +86,11 @@ function sendDiscordWebhook(title, description, color, cb) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           if (cb) cb({ success: true });
         } else {
-          if (cb) cb({ success: false, error: 'Discord devolvió error ' + res.statusCode + ': ' + resBody });
+          if (cb) cb({ success: false, error: 'Discord error ' + res.statusCode + ': ' + resBody });
         }
       });
     });
-
-    req.on('error', (err) => {
-      if (cb) cb({ success: false, error: err.message });
-    });
-
+    req.on('error', (err) => { if (cb) cb({ success: false, error: err.message }); });
     req.write(payload);
     req.end();
   } catch (err) {
@@ -108,7 +109,7 @@ client.on('loggedOn', () => {
   client.setPersona(cfg.personaState);
   resolverNombresFaltantes();
   actualizarFarmeo();
-  sendDiscordWebhook('🟢 Bot Conectado', 'Farmeando ' + cfg.games.length + ' juegos en la nube.', 1095985);
+  sendDiscordWebhook('🟢 Bot Conectado', 'Farmeando ' + cfg.games.length + ' juegos con motor de logros activo.', 1095985);
 });
 
 client.on('webSession', (sessionID, cookies) => {
@@ -123,14 +124,14 @@ client.on('playingElsewhere', () => {
   console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC. Pausando bot...');
   isCollisionPaused = true;
   actualizarFarmeo();
-  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Has iniciado un juego en tu PC. El bot se pausó automáticamente para no interferir.', 16101915);
+  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Has iniciado un juego en tu PC. Bot pausado automáticamente.', 16101915);
 
   if (collisionTimer) clearTimeout(collisionTimer);
   collisionTimer = setTimeout(() => {
     console.log('[Anti-Colisión] Reanudando farmeo...');
     isCollisionPaused = false;
     actualizarFarmeo();
-    sendDiscordWebhook('🔄 Farmeo Reanudado', 'Tu sesión en PC finalizó. El bot volvió a farmear en la nube.', 1095985);
+    sendDiscordWebhook('🔄 Farmeo Reanudado', 'Sesión en PC finalizada. Bot activo nuevamente en la nube.', 1095985);
   }, 10 * 60 * 1000);
 });
 
@@ -140,13 +141,11 @@ client.on('friendMessage', (steamID, message) => {
   const args = msg.split(' ');
   const cmd = args[0];
 
-  function reply(text) {
-    try { client.chatMessage(steamID, text); } catch (e) {}
-  }
+  function reply(text) { try { client.chatMessage(steamID, text); } catch (e) {} }
 
   if (cmd === '!status' || cmd === '!estado') {
     const estado = isPaused ? 'Pausado' : (isCollisionPaused ? 'Pausado por juego en PC' : 'Activo');
-    reply(`📊 Estado: ${estado} | Juegos: ${cfg.games.length}/32 | Farmeando: ${cfg.games.join(', ')}`);
+    reply(`📊 Estado: ${estado} | Juegos: ${cfg.games.length}/32 | Logros en cola: ${cfg.achievementQueue.length}`);
   } else if (cmd === '!pausa' || cmd === '!pause') {
     isPaused = true;
     actualizarFarmeo();
@@ -155,34 +154,40 @@ client.on('friendMessage', (steamID, message) => {
     isPaused = false;
     actualizarFarmeo();
     reply('▶️ Farmeo reanudado.');
-  } else if (cmd === '!invisible') {
-    cfg.personaState = SteamUser.EPersonaState.Invisible;
-    client.setPersona(cfg.personaState);
-    guardarConfig();
-    reply('👻 Modo cambiado a: Invisible.');
-  } else if (cmd === '!online') {
-    cfg.personaState = SteamUser.EPersonaState.Online;
-    client.setPersona(cfg.personaState);
-    guardarConfig();
-    reply('🟢 Modo cambiado a: En Línea.');
-  } else if (cmd === '!add' && args[1]) {
-    const id = parseInt(args[1], 10);
-    if (id && !cfg.games.includes(id) && cfg.games.length < 32) {
-      cfg.games.push(id);
-      guardarConfig();
-      actualizarFarmeo();
-      reply(`✅ Juego ${id} agregado a la lista.`);
-    }
-  } else if (cmd === '!remove' && args[1]) {
-    const id = parseInt(args[1], 10);
-    cfg.games = cfg.games.filter(x => x !== id);
-    guardarConfig();
-    actualizarFarmeo();
-    reply(`🗑️ Juego ${id} quitado de la lista.`);
   } else if (cmd === '!help' || cmd === '!ayuda') {
-    reply('🤖 Comandos: !status, !pausa, !reanudar, !add <id>, !remove <id>, !invisible, !online');
+    reply('🤖 Comandos: !status, !pausa, !reanudar, !invisible, !online');
   }
 });
+
+// MOTOR DE LOGROS ORGÁNICOS (Revisa la cola cada 30 segundos)
+setInterval(() => {
+  if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
+  const now = Date.now();
+  const nextItem = cfg.achievementQueue[0];
+
+  if (now >= nextItem.scheduledTime) {
+    const item = cfg.achievementQueue.shift();
+    cfg.unlockedAchievements[item.appid] = cfg.unlockedAchievements[item.appid] || [];
+    if (!cfg.unlockedAchievements[item.appid].includes(item.apiname)) {
+      cfg.unlockedAchievements[item.appid].push(item.apiname);
+    }
+
+    sendDiscordWebhook(
+      `🏆 ¡Logro Desbloqueado! • ${item.gameName}`,
+      `**${item.name}**\n*${item.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${item.tier} (${item.percent}% de jugadores globales)\n⏱️ **Modo Orgánico:** Cadencia temporal natural simulada.`,
+      item.color,
+      item.icon
+    );
+
+    if (cfg.achievementQueue.length > 0) {
+      const nextDelayMinutes = Math.floor(Math.random() * (85 - 45 + 1)) + 45;
+      cfg.achievementQueue[0].scheduledTime = Date.now() + (nextDelayMinutes * 60 * 1000);
+      console.log(`[Logros] Siguiente logro de la cola programado en ${nextDelayMinutes} minutos.`);
+    }
+
+    guardarConfig();
+  }
+}, 30 * 1000);
 
 function escanearCromos(cb) {
   if (!webCookies) { if (cb) cb([]); return; }
@@ -190,7 +195,7 @@ function escanearCromos(cb) {
     hostname: 'steamcommunity.com',
     path: '/my/badges/',
     method: 'GET',
-    headers: { 'Cookie': webCookies, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    headers: { 'Cookie': webCookies, 'User-Agent': 'Mozilla/5.0' }
   };
   https.get(opts, (res) => {
     let html = '';
@@ -277,6 +282,76 @@ function guardarConfig() {
   } catch (e) {}
 }
 
+// OBTENER ESQUEMA Y LOGROS CON RAREZA GLOBAL
+function obtenerLogrosJuego(appid, cb) {
+  const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
+  const urlXml = `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
+
+  https.get(urlGlobal, (resGlobal) => {
+    let globalData = '';
+    resGlobal.on('data', c => globalData += c);
+    resGlobal.on('end', () => {
+      let percentMap = {};
+      try {
+        const parsedG = JSON.parse(globalData);
+        if (parsedG.achievementpercentages && parsedG.achievementpercentages.achievements) {
+          parsedG.achievementpercentages.achievements.forEach(a => {
+            percentMap[a.name] = parseFloat(a.percent).toFixed(1);
+          });
+        }
+      } catch (e) {}
+
+      https.get(urlXml, (resXml) => {
+        let xmlData = '';
+        resXml.on('data', c => xmlData += c);
+        resXml.on('end', () => {
+          const achievements = [];
+          const achRegex = /<achievement\s+closed="(\d+)">([\s\S]*?)<\/achievement>/gi;
+          let match;
+
+          const getTag = (body, tag) => {
+            const m = new RegExp(`<${tag}>(?:<\\!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`, 'i').exec(body);
+            return m ? m[1].trim() : '';
+          };
+
+          const unlockedLocally = cfg.unlockedAchievements[appid] || [];
+
+          while ((match = achRegex.exec(xmlData)) !== null) {
+            const closedOriginal = match[1] === '1';
+            const body = match[2];
+            const apiname = getTag(body, 'apiname');
+            const pct = parseFloat(percentMap[apiname] || 50.0);
+
+            let tier = '⚪ Común';
+            let colorHex = 0x94a3b8;
+            if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
+            else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
+            else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
+
+            const isUnlocked = closedOriginal || unlockedLocally.includes(apiname);
+            const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === apiname);
+
+            achievements.push({
+              apiname: apiname,
+              name: getTag(body, 'name') || apiname,
+              description: getTag(body, 'description') || 'Logro de Steam',
+              iconClosed: getTag(body, 'iconClosed'),
+              iconOpen: getTag(body, 'iconOpen'),
+              percent: pct,
+              tier: tier,
+              color: colorHex,
+              unlocked: isUnlocked,
+              inQueue: inQueue
+            });
+          }
+
+          cb(achievements);
+        });
+      }).on('error', () => cb([]));
+    });
+  }).on('error', () => cb([]));
+}
+
 const PORT = process.env.PORT || 8000;
 
 const server = http.createServer((req, res) => {
@@ -314,8 +389,22 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // API Logros de un juego
+  if (parsedUrl.pathname === '/api/achievements' && req.method === 'GET') {
+    const appid = parseInt(parsedUrl.query.appid, 10);
+    if (!appid) return res.end('[]');
+
+    obtenerLogrosJuego(appid, (list) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(list));
+    });
+    return;
+  }
+
+  // Estado general
   if (parsedUrl.pathname === '/api/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
+    const nextItem = (cfg.achievementQueue && cfg.achievementQueue.length > 0) ? cfg.achievementQueue[0] : null;
     return res.end(JSON.stringify({
       user: cfg.user,
       games: cfg.games,
@@ -326,6 +415,8 @@ const server = http.createServer((req, res) => {
       isSleepPaused: isSleepPaused,
       cardFarming: cfg.cardFarming,
       cardDropCount: cardDropGames.length,
+      queueCount: cfg.achievementQueue.length,
+      nextAchievementIn: nextItem ? Math.max(0, Math.round((nextItem.scheduledTime - Date.now()) / 60000)) : null,
       sleepMode: cfg.sleepMode,
       customStatus: cfg.customStatus || '',
       discordWebhook: cfg.discordWebhook || '',
@@ -335,6 +426,7 @@ const server = http.createServer((req, res) => {
     }));
   }
 
+  // Rutas POST protegidas por PIN
   if (req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -425,21 +517,73 @@ const server = http.createServer((req, res) => {
         if (parsedUrl.pathname === '/api/set-webhook') {
           cfg.discordWebhook = (data.webhook || '').trim();
           guardarConfig();
-          sendDiscordWebhook('🔔 Webhook Vinculado', '¡Canal de Discord conectado exitosamente!', 3718648, (result) => {
+          sendDiscordWebhook('🔔 Webhook Vinculado', '¡Canal de Discord conectado con éxito!', 3718648, null, (result) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
           });
           return;
         }
 
+        // DESBLOQUEAR LOGRO INMEDIATO
+        if (parsedUrl.pathname === '/api/unlock-achievement-now') {
+          const { appid, gameName, apiname, name, desc, icon, percent, tier, color } = data;
+          cfg.unlockedAchievements[appid] = cfg.unlockedAchievements[appid] || [];
+          if (!cfg.unlockedAchievements[appid].includes(apiname)) {
+            cfg.unlockedAchievements[appid].push(apiname);
+          }
+          guardarConfig();
+
+          sendDiscordWebhook(
+            `🏆 ¡Logro Manual Obtenido! • ${gameName}`,
+            `**${name}**\n*${desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${tier} (${percent}% de jugadores globales)\n⚡ **Modo:** Desbloqueo instantáneo bajo demanda.`,
+            color || 3718648,
+            icon
+          );
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true }));
+        }
+
+        // ENCOLAR PLATINADO ORGÁNICO
+        if (parsedUrl.pathname === '/api/queue-achievements') {
+          const { appid, gameName, items } = data;
+          let baseDelay = 5; // Primer logro en 5 minutos
+          items.forEach(it => {
+            const alreadyQueued = cfg.achievementQueue.some(q => q.appid == appid && q.apiname === it.apiname);
+            if (!alreadyQueued) {
+              const delayMin = baseDelay;
+              cfg.achievementQueue.push({
+                appid: appid,
+                gameName: gameName,
+                apiname: it.apiname,
+                name: it.name,
+                desc: it.description,
+                icon: it.iconOpen || it.iconClosed,
+                percent: it.percent,
+                tier: it.tier,
+                color: it.color,
+                scheduledTime: Date.now() + (delayMin * 60 * 1000)
+              });
+              baseDelay += Math.floor(Math.random() * (85 - 45 + 1)) + 45;
+            }
+          });
+          guardarConfig();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true, count: items.length }));
+        }
+
+        // VACIAR COLA DE LOGROS
+        if (parsedUrl.pathname === '/api/clear-queue') {
+          cfg.achievementQueue = [];
+          guardarConfig();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true }));
+        }
+
         if (parsedUrl.pathname === '/api/toggle-cards') {
           cfg.cardFarming = !cfg.cardFarming;
           guardarConfig();
-          if (cfg.cardFarming) {
-            escanearCromos(() => actualizarFarmeo());
-          } else {
-            actualizarFarmeo();
-          }
+          if (cfg.cardFarming) escanearCromos(() => actualizarFarmeo());
+          else actualizarFarmeo();
         }
 
         if (parsedUrl.pathname === '/api/claim-free') {
@@ -470,14 +614,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // HTML Frontend
+  // FRONTEND DE ÚLTIMA GENERACIÓN (GLASSMORPHISM / CYBERPUNK)
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Steam Hour Booster Enterprise</title>
+  <title>Steam Hour Booster Pro</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
@@ -485,7 +629,7 @@ const server = http.createServer((req, res) => {
   <style>
     :root {
       --bg: #070a13;
-      --card-bg: rgba(18, 24, 38, 0.7);
+      --card-bg: rgba(18, 24, 38, 0.75);
       --card-border: rgba(255, 255, 255, 0.08);
       --primary: #38bdf8;
       --primary-hover: #0ea5e9;
@@ -493,6 +637,7 @@ const server = http.createServer((req, res) => {
       --warning: #f59e0b;
       --danger: #f43f5e;
       --purple: #a855f7;
+      --gold: #f59e0b;
       --text: #f8fafc;
       --text-muted: #94a3b8;
     }
@@ -505,11 +650,12 @@ const server = http.createServer((req, res) => {
       display: flex;
       justify-content: center;
     }
-    .container { width: 100%; max-width: 990px; }
+    .container { width: 100%; max-width: 1000px; }
 
-    #lockModal {
+    /* Modales */
+    .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(7, 10, 19, 0.95);
+      background: rgba(7, 10, 19, 0.94);
       backdrop-filter: blur(20px);
       display: none; align-items: center; justify-content: center; z-index: 1000;
     }
@@ -518,14 +664,43 @@ const server = http.createServer((req, res) => {
       padding: 36px 30px; border-radius: 20px; text-align: center; max-width: 350px; width: 90%;
       box-shadow: 0 20px 45px rgba(0,0,0,0.8);
     }
-    .lock-card h2 { font-size: 1.45rem; font-weight: 800; margin-bottom: 8px; color: #fff; }
-    .lock-card p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 22px; }
     .lock-card input {
       width: 100%; padding: 13px; border-radius: 12px; background: #0b0f19;
       border: 1px solid var(--card-border); color: #fff; font-size: 1.3rem;
-      text-align: center; letter-spacing: 5px; outline: none; margin-bottom: 18px;
+      text-align: center; letter-spacing: 5px; outline: none; margin: 16px 0;
     }
 
+    /* Modal de Logros */
+    .ach-modal-card {
+      background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.2);
+      width: 95%; max-width: 850px; max-height: 90vh; border-radius: 20px;
+      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.9);
+    }
+    .ach-header {
+      padding: 20px 24px; background: #131b2e; border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .ach-header h2 { font-size: 1.3rem; font-weight: 800; color: #fff; }
+    .ach-controls {
+      padding: 14px 24px; background: rgba(0,0,0,0.25); border-bottom: 1px solid var(--card-border);
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    .ach-list { padding: 16px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .ach-item {
+      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 14px;
+      transition: all 0.2s;
+    }
+    .ach-item.gold { border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.04); }
+    .ach-item.purple { border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.04); }
+    .ach-item.blue { border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.04); }
+    .ach-item img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #000; }
+    .ach-info { flex: 1; overflow: hidden; }
+    .ach-title { font-weight: 700; font-size: 0.95rem; color: #fff; }
+    .ach-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
+    .ach-badge { font-size: 0.75rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+
+    /* Barra Superior y Dashboard */
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
     .brand h1 { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .brand p { font-size: 0.85rem; color: var(--text-muted); }
@@ -534,14 +709,13 @@ const server = http.createServer((req, res) => {
     .badge-status { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.25); }
     .badge-status.paused { background: rgba(244, 63, 94, 0.12); color: var(--danger); border-color: rgba(244, 63, 94, 0.25); }
     .badge-status.collision { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: rgba(245, 158, 11, 0.3); }
-    .badge-status.sleep { background: rgba(168, 85, 247, 0.15); color: var(--purple); border-color: rgba(168, 85, 247, 0.3); }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
     .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 7px 13px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
 
     .dashboard-panel { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 18px 22px; margin-bottom: 22px; display: flex; flex-direction: column; gap: 16px; }
-    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
     .stat-item { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.04); padding: 12px 16px; border-radius: 12px; }
     .stat-item label { display: block; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
     .stat-item value { font-size: 1.15rem; font-weight: 800; color: #fff; }
@@ -560,11 +734,12 @@ const server = http.createServer((req, res) => {
     .btn-main { background: var(--primary); color: #04111d; }
     .btn-main:hover { background: var(--primary-hover); }
     .btn-pause { background: rgba(255, 255, 255, 0.08); color: #fff; }
-    .btn-pause:hover { background: rgba(255, 255, 255, 0.15); }
     .btn-clear { background: rgba(244, 63, 94, 0.1); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.2); }
     .btn-clear:hover { background: var(--danger); color: #fff; }
     .btn-purple { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
     .btn-purple:hover { background: var(--purple); color: #fff; }
+    .btn-gold { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .btn-gold:hover { background: var(--gold); color: #000; }
 
     .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
     .tool-box { background: rgba(0, 0, 0, 0.2); padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.04); display: flex; gap: 10px; align-items: center; }
@@ -586,26 +761,50 @@ const server = http.createServer((req, res) => {
     .card:hover { transform: translateY(-4px); border-color: rgba(56, 189, 248, 0.3); }
     .card-banner { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: #0c1220; }
     .card-content { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .card-title { font-size: 0.9rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+    .card-title { font-size: 0.9rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
     .card-appid { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-    .btn-remove { background: rgba(244, 63, 94, 0.12); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.25); padding: 7px 13px; font-size: 0.8rem; border-radius: 8px; }
+    .card-btn-row { display: flex; gap: 6px; }
+    .btn-card { padding: 6px 11px; font-size: 0.75rem; border-radius: 7px; font-weight: 700; }
+    .btn-remove { background: rgba(244, 63, 94, 0.12); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.25); }
     .btn-remove:hover { background: var(--danger); color: #fff; }
+    .btn-ach { background: rgba(56, 189, 248, 0.12); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.25); }
+    .btn-ach:hover { background: var(--primary); color: #04111d; }
   </style>
 </head>
 <body>
-  <div id="lockModal">
+  <!-- Modal Lock -->
+  <div id="lockModal" class="modal-overlay">
     <div class="lock-card">
       <h2>🔒 Panel Enterprise</h2>
-      <p>Introduce tu PIN para acceder</p>
+      <p>Introduce tu PIN para acceder al bot</p>
       <input type="password" id="pinInput" placeholder="••••" maxlength="8">
       <button class="btn-main" style="width:100%;" onclick="unlock()">Desbloquear</button>
+    </div>
+  </div>
+
+  <!-- Modal Logros -->
+  <div id="achModal" class="modal-overlay">
+    <div class="ach-modal-card">
+      <div class="ach-header">
+        <div>
+          <h2 id="achGameTitle">Logros de Steam</h2>
+          <p id="achProgressText" style="font-size:0.8rem; color:var(--text-muted);">Cargando trofeos...</p>
+        </div>
+        <button class="btn-action-sm" onclick="closeAchModal()">✕ Cerrar</button>
+      </div>
+      <div class="ach-controls">
+        <input type="text" id="achSearchInput" placeholder="Buscar logro..." style="flex:1; min-width:160px; padding:8px 12px; font-size:0.85rem;" oninput="filterAchievements()">
+        <button class="btn-gold" style="padding:8px 14px; font-size:0.8rem;" onclick="queueAllOrganic()">⚡ Platinado Orgánico</button>
+        <button class="btn-clear" style="padding:8px 14px; font-size:0.8rem;" onclick="clearAchQueue()">Vaciar Cola</button>
+      </div>
+      <div class="ach-list" id="achListContainer"></div>
     </div>
   </div>
 
   <div class="container">
     <header>
       <div class="brand">
-        <h1>Steam Hour Booster Enterprise</h1>
+        <h1>Steam Hour Booster Pro</h1>
         <p id="userLabel">Conectando cuenta...</p>
       </div>
       <div class="header-actions">
@@ -632,8 +831,8 @@ const server = http.createServer((req, res) => {
           <value id="gamesCountVal">0 / 32</value>
         </div>
         <div class="stat-item">
-          <label>🃏 Juegos con Cromos</label>
-          <value id="cardsCountVal">0 detectados</value>
+          <label>🏆 Cola de Logros</label>
+          <value id="achQueueVal">0 en espera</value>
         </div>
       </div>
       <div>
@@ -686,7 +885,7 @@ const server = http.createServer((req, res) => {
           <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveSleep()">Fijar</button>
         </div>
         <div class="tool-box" style="color:var(--text-muted); font-size:0.8rem;">
-          <span>💬 <strong>Chat Steam Activo:</strong> Escribe <code>!help</code> a este bot en Steam para controlarlo por mensaje.</span>
+          <span>💬 <strong>Chat Steam Activo:</strong> Escribe <code>!status</code> desde otra cuenta para control por mensaje.</span>
         </div>
       </div>
     </div>
@@ -699,6 +898,9 @@ const server = http.createServer((req, res) => {
     var sessionStart = null;
     var activeGamesCount = 0;
     var namesCache = {};
+    var currentAchList = [];
+    var currentAchAppId = null;
+    var currentAchGameName = '';
 
     function checkAuth() {
       if (!savedPin) {
@@ -713,21 +915,13 @@ const server = http.createServer((req, res) => {
     async function unlock() {
       var pin = document.getElementById('pinInput').value.trim();
       if (!pin) return;
-      
-      var res = await fetch('/api/verify-pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pin })
-      });
-
+      var res = await fetch('/api/verify-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pin }) });
       if (res.ok) {
         savedPin = pin;
         localStorage.setItem('farmer_pin', pin);
         document.getElementById('lockModal').style.display = 'none';
         loadStatus();
-      } else {
-        alert('PIN incorrecto. Revisa el valor configurado en config.json.');
-      }
+      } else { alert('PIN incorrecto.'); }
     }
 
     function lock() {
@@ -758,7 +952,7 @@ const server = http.createServer((req, res) => {
         namesCache = data.gameNames || {};
 
         document.getElementById('gamesCountVal').innerText = data.games.length + ' / 32';
-        document.getElementById('cardsCountVal').innerText = data.cardDropCount + ' detectados';
+        document.getElementById('achQueueVal').innerText = data.queueCount + (data.nextAchievementIn !== null ? ' (~' + data.nextAchievementIn + 'm)' : ' en cola');
         var percent = Math.round((data.games.length / 32) * 100);
         document.getElementById('capacityPercent').innerText = percent + '%';
         document.getElementById('capacityFill').style.width = percent + '%';
@@ -790,12 +984,8 @@ const server = http.createServer((req, res) => {
         personaBtn.innerText = (data.personaState === 7) ? '👻 Modo: Invisible' : '🟢 Modo: En Línea';
         cardsBtn.innerText = data.cardFarming ? '🃏 Modo Cromos: ACTIVO' : '🃏 Modo Cromos: Off';
 
-        if (data.customStatus && !document.getElementById('customStatusInput').value) {
-          document.getElementById('customStatusInput').value = data.customStatus;
-        }
-        if (data.discordWebhook && !document.getElementById('webhookInput').value) {
-          document.getElementById('webhookInput').value = data.discordWebhook;
-        }
+        if (data.customStatus && !document.getElementById('customStatusInput').value) document.getElementById('customStatusInput').value = data.customStatus;
+        if (data.discordWebhook && !document.getElementById('webhookInput').value) document.getElementById('webhookInput').value = data.discordWebhook;
         if (data.sleepMode) {
           document.getElementById('sleepEnabled').checked = data.sleepMode.enabled;
           document.getElementById('sleepStart').value = data.sleepMode.start;
@@ -823,7 +1013,7 @@ const server = http.createServer((req, res) => {
       var grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
       if (!games.length) {
-        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No tienes juegos agregados. Agrega uno arriba o activa el Modo Cromos.</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No tienes juegos agregados.</div>';
         return;
       }
 
@@ -838,12 +1028,121 @@ const server = http.createServer((req, res) => {
               '<div class="card-title" title="' + title.replace(/"/g, '&quot;') + '">' + title + '</div>' +
               '<div class="card-appid">AppID: ' + id + '</div>' +
             '</div>' +
-            '<button class="btn-remove" onclick="removeGame(' + id + ')">Quitar</button>' +
+            '<div class="card-btn-row">' +
+              '<button class="btn-card btn-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Logros</button>' +
+              '<button class="btn-card btn-remove" onclick="removeGame(' + id + ')">Quitar</button>' +
+            '</div>' +
           '</div>';
         grid.appendChild(card);
       });
     }
 
+    // GESTIÓN DEL MODAL DE LOGROS
+    async function openAchModal(appid, title) {
+      currentAchAppId = appid;
+      currentAchGameName = title;
+      document.getElementById('achGameTitle').innerText = title;
+      document.getElementById('achProgressText').innerText = 'Consultando base de datos de Steam...';
+      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">Cargando logros y porcentajes mundiales...</p>';
+      document.getElementById('achModal').style.display = 'flex';
+
+      try {
+        var res = await fetch('/api/achievements?appid=' + appid);
+        currentAchList = await res.json();
+        renderAchModal();
+      } catch (e) {
+        document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Este juego no posee logros públicos en Steam o hubo un error al consultar.</p>';
+      }
+    }
+
+    function closeAchModal() { document.getElementById('achModal').style.display = 'none'; }
+
+    function renderAchModal() {
+      var cont = document.getElementById('achListContainer');
+      cont.innerHTML = '';
+      if (!currentAchList.length) {
+        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No se encontraron logros disponibles.</p>';
+        return;
+      }
+
+      var unlocked = currentAchList.filter(x => x.unlocked).length;
+      var pctTotal = Math.round((unlocked / currentAchList.length) * 100);
+      document.getElementById('achProgressText').innerText = 'Progreso: ' + unlocked + ' de ' + currentAchList.length + ' conseguidos (' + pctTotal + '%)';
+
+      currentAchList.forEach(function(a) {
+        var cardClass = 'ach-item';
+        if (a.percent < 5.0) cardClass += ' gold';
+        else if (a.percent < 15.0) cardClass += ' purple';
+        else if (a.percent < 40.0) cardClass += ' blue';
+
+        var div = document.createElement('div');
+        div.className = cardClass;
+        div.innerHTML = 
+          '<img src="' + (a.unlocked ? a.iconOpen : a.iconClosed) + '" onerror="this.src=\\'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png\\'">' +
+          '<div class="ach-info">' +
+            '<div class="ach-title">' + a.name + ' <span class="ach-badge" style="color:var(--text-muted);">(' + a.tier + ' • ' + a.percent + '%)</span></div>' +
+            '<div class="ach-desc">' + a.description + '</div>' +
+          '</div>' +
+          '<div>' +
+            (a.unlocked 
+              ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Desbloqueado</span>' 
+              : (a.inQueue 
+                  ? '<span style="color:var(--warning); font-weight:700; font-size:0.8rem;">⏳ En Cola</span>' 
+                  : '<button class="btn-card btn-ach" onclick="unlockSingleNow(\\'' + a.apiname.replace(/'/g, "\\\\'") + '\\')">Desbloquear</button>')) +
+          '</div>';
+        cont.appendChild(div);
+      });
+    }
+
+    function filterAchievements() {
+      var query = document.getElementById('achSearchInput').value.toLowerCase();
+      var items = document.querySelectorAll('.ach-item');
+      items.forEach(function(it) {
+        var text = it.innerText.toLowerCase();
+        it.style.display = text.includes(query) ? 'flex' : 'none';
+      });
+    }
+
+    async function unlockSingleNow(apiname) {
+      var ach = currentAchList.find(x => x.apiname === apiname);
+      if (!ach) return;
+      await reqAction('/api/unlock-achievement-now', {
+        appid: currentAchAppId,
+        gameName: currentAchGameName,
+        apiname: ach.apiname,
+        name: ach.name,
+        desc: ach.description,
+        icon: ach.iconOpen || ach.iconClosed,
+        percent: ach.percent,
+        tier: ach.tier,
+        color: ach.color
+      });
+      ach.unlocked = true;
+      renderAchModal();
+      loadStatus();
+    }
+
+    async function queueAllOrganic() {
+      var locked = currentAchList.filter(x => !x.unlocked && !x.inQueue);
+      if (!locked.length) return alert('¡Todos los logros de este juego ya están conseguidos o en cola!');
+      await reqAction('/api/queue-achievements', {
+        appid: currentAchAppId,
+        gameName: currentAchGameName,
+        items: locked
+      });
+      alert('⚡ ' + locked.length + ' logros añadidos a la cola orgánica. Se irán desbloqueando cada 45-85 minutos.');
+      closeAchModal();
+      loadStatus();
+    }
+
+    async function clearAchQueue() {
+      if (!confirm('¿Deseas vaciar toda la cola de logros en espera?')) return;
+      await reqAction('/api/clear-queue');
+      closeAchModal();
+      loadStatus();
+    }
+
+    // Buscador interactivo
     var debounceTimer = null;
     var searchInput = document.getElementById('searchInput');
     var searchResults = document.getElementById('searchResults');
@@ -851,11 +1150,7 @@ const server = http.createServer((req, res) => {
     searchInput.addEventListener('input', function(e) {
       clearTimeout(debounceTimer);
       var val = e.target.value.trim();
-      if (!val || !isNaN(val)) {
-        searchResults.style.display = 'none';
-        return;
-      }
-
+      if (!val || !isNaN(val)) { searchResults.style.display = 'none'; return; }
       debounceTimer = setTimeout(async function() {
         try {
           var res = await fetch('/api/search?term=' + encodeURIComponent(val));
@@ -865,122 +1160,66 @@ const server = http.createServer((req, res) => {
             list.forEach(function(it) {
               var div = document.createElement('div');
               div.className = 'search-item';
-              div.innerHTML = 
-                '<img src="' + it.img + '" onerror="this.style.display=\\'none\\'">' +
-                '<div class="search-info">' + it.name + '<span>AppID: ' + it.id + '</span></div>';
-              div.onclick = function() {
-                addGame(it.id, it.name);
-                searchResults.style.display = 'none';
-                searchInput.value = '';
-              };
+              div.innerHTML = '<img src="' + it.img + '" onerror="this.style.display=\\'none\\'"><div class="search-info">' + it.name + '<span>AppID: ' + it.id + '</span></div>';
+              div.onclick = function() { addGame(it.id, it.name); searchResults.style.display = 'none'; searchInput.value = ''; };
               searchResults.appendChild(div);
             });
             searchResults.style.display = 'block';
-          } else {
-            searchResults.style.display = 'none';
-          }
+          } else { searchResults.style.display = 'none'; }
         } catch (e) { searchResults.style.display = 'none'; }
       }, 250);
     });
 
     document.addEventListener('click', function(e) {
-      if (!searchResults.contains(e.target) && e.target !== searchInput) {
-        searchResults.style.display = 'none';
-      }
+      if (!searchResults.contains(e.target) && e.target !== searchInput) searchResults.style.display = 'none';
     });
 
-    function addFromInput() {
-      var v = searchInput.value.trim();
-      if (!v) return;
-      if (!isNaN(v)) addGame(Number(v));
-    }
+    function addFromInput() { var v = searchInput.value.trim(); if (v && !isNaN(v)) addGame(Number(v)); }
 
     async function reqAction(endpoint, body) {
       body = body || {};
       body.pin = savedPin;
-      var res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+      var res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       var data = await res.json();
-      if (res.status === 401) {
-        alert('PIN incorrecto o sesión caducada.');
-        lock();
-        return null;
-      }
+      if (res.status === 401) { alert('PIN incorrecto o sesión caducada.'); lock(); return null; }
       return data;
     }
 
     async function addGame(appid, name) {
       var data = await reqAction('/api/add', { appid: Number(appid), name: name || '' });
       if (data && data.error) alert(data.error);
-      else {
-        searchInput.value = '';
-        loadStatus();
-      }
+      else { searchInput.value = ''; loadStatus(); }
     }
 
-    async function removeGame(appid) {
-      await reqAction('/api/remove', { appid: Number(appid) });
-      loadStatus();
-    }
-
-    async function clearAll() {
-      if (!confirm('¿Seguro que deseas vaciar toda la lista?')) return;
-      await reqAction('/api/clear-all');
-      loadStatus();
-    }
-
-    async function applyPreset(presetKey) {
-      await reqAction('/api/apply-preset', { presetKey: presetKey });
-      loadStatus();
-    }
-
-    async function togglePause() {
-      await reqAction('/api/toggle');
-      loadStatus();
-    }
-
-    async function togglePersona() {
-      await reqAction('/api/persona');
-      loadStatus();
-    }
-
-    async function toggleCards() {
-      await reqAction('/api/toggle-cards');
-      loadStatus();
-    }
-
-    async function claimFreeGames() {
-      var res = await reqAction('/api/claim-free');
-      if (res) alert('Solicitud enviada a Steam para reclamar licencias gratuitas.');
-    }
+    async function removeGame(appid) { await reqAction('/api/remove', { appid: Number(appid) }); loadStatus(); }
+    async function clearAll() { if (confirm('¿Vaciar toda la lista?')) { await reqAction('/api/clear-all'); loadStatus(); } }
+    async function applyPreset(presetKey) { await reqAction('/api/apply-preset', { presetKey: presetKey }); loadStatus(); }
+    async function togglePause() { await reqAction('/api/toggle'); loadStatus(); }
+    async function togglePersona() { await reqAction('/api/persona'); loadStatus(); }
+    async function toggleCards() { await reqAction('/api/toggle-cards'); loadStatus(); }
+    async function claimFreeGames() { var res = await reqAction('/api/claim-free'); if (res) alert('Licencias gratuitas solicitadas.'); }
 
     async function saveSleep() {
-      var enabled = document.getElementById('sleepEnabled').checked;
-      var start = document.getElementById('sleepStart').value;
-      var end = document.getElementById('sleepEnd').value;
-      await reqAction('/api/set-sleep', { enabled: enabled, start: start, end: end });
-      alert('Horario de sueño guardado.');
+      await reqAction('/api/set-sleep', {
+        enabled: document.getElementById('sleepEnabled').checked,
+        start: document.getElementById('sleepStart').value,
+        end: document.getElementById('sleepEnd').value
+      });
+      alert('Horario de descanso guardado.');
       loadStatus();
     }
 
     async function saveCustomStatus() {
-      var status = document.getElementById('customStatusInput').value;
-      await reqAction('/api/custom-status', { status: status });
-      alert('Texto actualizado en Steam.');
+      await reqAction('/api/custom-status', { status: document.getElementById('customStatusInput').value });
+      alert('Texto en Steam guardado.');
       loadStatus();
     }
 
     async function saveWebhook() {
       var webhook = document.getElementById('webhookInput').value.trim();
       var res = await reqAction('/api/set-webhook', { webhook: webhook });
-      if (res && res.success) {
-        alert('✅ ¡Webhook vinculado correctamente! Revisa tu Discord.');
-      } else {
-        alert('❌ Error al enviar mensaje a Discord: ' + (res ? res.error : 'Desconocido'));
-      }
+      if (res && res.success) alert('✅ Webhook vinculado exitosamente.');
+      else alert('❌ Error al enviar mensaje: ' + (res ? res.error : 'Desconocido'));
       loadStatus();
     }
 
