@@ -399,8 +399,8 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       if (url.pathname === '/api/achievements' && req.method === 'GET') {
         rate(`ach:${token}`, 40); const acc = getAccount(req, url); const st = stateFor(acc.id);
         const id = appId(url.searchParams.get('appid'));
-        const method = url.searchParams.get('method') || 'web';
-        if (!['web','protocol'].includes(method)) throw fail('Unknown achievement verification method.');
+        const requestedMethod = url.searchParams.get('method') || 'web';let method=requestedMethod;
+        if (!['web','protocol','auto'].includes(method)) throw fail('Unknown achievement verification method.');
         if (method === 'protocol' && !st.connected) throw fail('Connect to Steam before using direct verification.', 409);
         const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${st.webSessionVersion}:${method}`;
         const cached = achievementCache.get(key);
@@ -408,7 +408,12 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (!achievementPending.has(key)) {
           releaseResource=budget.acquire('heavy');
           const readClient=clients.get(acc.id),readVersion=st.webSessionVersion;
-          const task = Promise.resolve().then(() => method === 'protocol' ? protocolRead(clients.get(acc.id), id) : steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(async result => {
+          const task = Promise.resolve().then(async () => {
+            if(requestedMethod==='auto'&&st.connected&&readClient){try{const result=await protocolRead(readClient,id,{timeoutMs:2500});if(result.verified){method='protocol';return result;}}catch{}method='web';}
+            else if(requestedMethod==='auto')method='web';
+            return method==='protocol'?protocolRead(readClient,id):steamRead(acc,st,id,process.env.STEAM_API_KEY||'');
+          }).then(async result => {
+            result.readingMethod=method;
             if(!cfg.accounts.includes(acc)||states.get(acc.id)!==st||clients.get(acc.id)!==readClient||st.webSessionVersion!==readVersion)throw fail('The selected Steam session changed during verification. Refresh again.',409);
             let receipts=new Map(),historyUnavailable=false;
             if(method==='protocol')try{receipts=await journal.forGame(st.steamId64,id);}catch{historyUnavailable=true;result.historyWarning='Persistent write history is unavailable. Achievement reads remain available, but activation is blocked.';}

@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=9">
+  <link rel="stylesheet" href="/style.css?v=10">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -47,7 +47,7 @@
           </div>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
-          <button class="btn-action-sm" id="directVerifyBtn" title="Read your achievement state directly from your signed-in Steam session">Verify directly</button><button class="btn-action-sm" data-event-4="">Refresh</button>
+<button class="btn-action-sm" id="directVerifyBtn" title="Read your achievement state directly from your signed-in Steam session">Verify directly</button><button id="standardReadBtn" class="btn-action-sm" title="Use Steam Community sources, including rarity when available">Standard reading</button><button class="btn-action-sm" data-event-4="">Refresh</button>
           <button class="btn-action-sm" data-event-5="">Close</button>
         </div>
       </div>
@@ -112,6 +112,7 @@
         <p id="userLabel">Connecting account...</p><p id="connectionDetails" style="font-size:.8rem;color:var(--text-muted);overflow-wrap:anywhere"></p>
       </div>
       <div class="header-actions">
+        <button class="btn-main session-play" id="playBtn" data-event-24="">Resume / Play Now</button>
         <button class="btn-purple" id="cardsBtn" data-event-19="">Cards: OFF</button>
         <button class="btn-action-sm" data-event-20="">Claim free games</button>
         <button class="btn-action-sm" id="personaBtn" data-event-21="">Mode: Online</button>
@@ -153,7 +154,7 @@
 
     <section class="controls" aria-label="Game controls">
       <details id="cardsPanel" class="cards-panel" aria-label="Automatic card farming" hidden>
-        <summary class="cards-panel-heading"><div><span class="eyebrow">AUTOMATIC CARD FARMING</span><h3>Card drops <span class="cards-disclosure" aria-hidden="true">⌄</span></h3></div><span id="cardsSummary" class="cards-summary"></span></summary>
+        <summary class="cards-panel-heading"><div><span class="eyebrow">AUTOMATIC CARD FARMING</span><h3>Card drops <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3></div><span id="cardsSummary" class="cards-summary"></span></summary>
         <p id="cardsStatus" class="cards-panel-status" aria-live="polite"></p>
         <div id="cardsList" class="cards-list"></div>
         <small id="cardsUpdated" class="cards-footnote"></small>
@@ -165,7 +166,6 @@
           <input type="text" id="searchInput" placeholder="Search game title or enter AppID..." autocomplete="off">
           <div class="search-results" id="searchResults"></div>
         </div>
-        <button class="btn-main" id="playBtn" data-event-24="">Resume / Play Now</button>
         <button class="btn-clear" data-event-25="">Clear All Games</button>
       </div>
 
@@ -210,6 +210,6 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager</span></footer>
   </div>
 
-  <script src="/app.js?v=9" defer></script>
+  <script src="/app.js?v=10" defer></script>
 </body>
 </html>

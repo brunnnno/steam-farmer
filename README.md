@@ -34,6 +34,12 @@ Production restart verification: startup at 16:06:32 UTC created the encrypted s
 
 ### Automatic card-farming panel
 
+Pause/Resume is now in the header next to Cards, above the overview and expandable card list. The disclosure uses a small inline SVG chevron with a smooth rotation; reduced-motion preferences disable its animation.
+
+The achievement source line also displays the browser-measured request duration so direct and standard reads can be compared on the user's actual connection. It is not a fabricated Steam performance estimate; the last verification timestamp is shown separately.
+
+Achievement buttons for connected accounts request `method=auto`: a single direct Steam protocol read is attempted first with a 2.5-second response timeout. A complete verified result skips community scraping entirely and receives the same journal/compatibility checks as explicit direct verification. An unavailable or incomplete protocol result falls back to standard web reading; its actual reading method is returned to the browser. Standard reading is always selectable in the modal for rarity/community sources. This reduces unnecessary requests but does not guarantee a fixed Steam response time. Explicit direct reads and achievement write verification are unchanged.
+
 The card panel is a native keyboard/touch-accessible disclosure, closed by default. Its summary remains visible while the details expand with one tap; polling preserves its open state for the selected account and changing accounts resets it closed.
 
 Standard achievement reading starts independent sources concurrently but returns as soon as a personal XML/HTML or complete Web API result verifies every returned achievement. Remaining requests are aborted using the actual fetch signal. Optional rarity information that has not arrived is explicitly unknown. Catalog-only/unsupported responses still wait for all personal sources, so a fast public catalog cannot hide a slower valid personal response. A controlled test verifies that a usable personal response returns without waiting for a stalled optional source; this does not promise a fixed latency from Steam. Direct verification and write verification remain unchanged.

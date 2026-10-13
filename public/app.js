@@ -103,7 +103,7 @@ function renderGames(games) {
     const title = active.gameNames[id] || `AppID ${id}`; const card = element('div',undefined,'card');
     card.append(image(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`,'card-banner'));
     const content = element('div',undefined,'card-content'); content.append(element('div',title,'card-title'),element('div',`#${id}`,'card-appid'));
-    const actions = element('div',undefined,'card-actions'); actions.append(button('Achievements',()=>openAchModal(id,title),'btn-card-ach'),button('Remove',()=>removeGame(id),'btn-card-remove'));
+    const actions = element('div',undefined,'card-actions'); actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web'),'btn-card-ach'),button('Remove',()=>removeGame(id),'btn-card-remove'));
     content.append(actions); card.append(content); grid.append(card);
   }
 }
@@ -145,16 +145,17 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
   currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';
-  const serial = ++achSerial, account = achAccountId;
+  const serial = ++achSerial, account = achAccountId,readStarted=performance.now();
   $('gameRequirements').hidden=true;$('gameRequirements').open=false;loadGameRequirements(id,serial,account);
   try {
-    const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':''}${method==='protocol'?'&method=protocol':''}`);
+    const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':''}${method!=='web'?'&method='+encodeURIComponent(method):''}`);
     if (serial !== achSerial || account !== activeAccountId) return;
+    currentAchMethod=data.readingMethod||method;
     currentAchList=(Array.isArray(data.achievements)?data.achievements:[]).map(a=>({ ...a, name:String(a.name||a.apiname||'Achievement'), description:String(a.description||''), unlocked:typeof a.unlocked==='boolean'?a.unlocked:null, percent:a.percent!=null && a.percent!=='' && Number.isFinite(Number(a.percent))?Number(a.percent):null }));
     $('achReadMessage').textContent=data.message || '';
     $('achPrivacyWarning').style.display=data.message ? 'block':'none';
     $('achGameTitle').textContent=title;
-    $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')}`;
+    $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')} · Read: ${((performance.now()-readStarted)/1000).toFixed(2)} s`;
     renderAchModal();
   } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[])); } }
 }
@@ -284,6 +285,7 @@ document.querySelector('[data-event-1]').addEventListener('click', function(even
 document.querySelector('[data-event-2]').addEventListener('click', function(event) { submitAddAccount(); });
 document.querySelector('[data-event-3]').addEventListener('click', function(event) { closeAddAccModal(); });
 $('directVerifyBtn').addEventListener('click',()=>{if(currentAchAppId)openAchModal(currentAchAppId,currentAchGameName,true,'protocol');});
+$('standardReadBtn').addEventListener('click',()=>{if(currentAchAppId)openAchModal(currentAchAppId,currentAchGameName,true,'web');});
 document.querySelector('[data-event-4]').addEventListener('click', function(event) { forceRefreshAchievements(); });
 document.querySelector('[data-event-5]').addEventListener('click', function(event) { closeAchModal(); });
 document.querySelector('[data-event-6]').addEventListener('click', function(event) { setFilter('status', 'all'); });
