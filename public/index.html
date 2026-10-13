@@ -263,20 +263,20 @@
   <div id="lockModal" class="modal-overlay">
     <div class="modal-box" style="text-align:center;">
       <h2>🔒 SteamFarmer</h2>
-      <p>Ingresá la contraseña del panel que aparece en la terminal al primer inicio.</p>
-      <input type="password" id="pinInput" placeholder="Contraseña del panel" maxlength="256" style="text-align:center; letter-spacing:5px; font-size:1.3rem;">
-      <button class="btn-main" style="width:100%;" data-event-0="">Entrar al panel</button>
+      <p>Enter your PANEL_PASSWORD to access the dashboard.</p>
+      <input type="password" id="pinInput" placeholder="Dashboard password" maxlength="256" style="text-align:center; letter-spacing:5px; font-size:1.3rem;">
+      <button class="btn-main" style="width:100%;" data-event-0="">Sign in</button>
     </div>
   </div>
 
   <div id="addAccModal" class="modal-overlay">
     <div class="modal-box">
       <h2>+ Add Steam Account</h2>
-      <p>Iniciá sesión con tu propia cuenta. La contraseña no se guarda. Steam Guard se completa aquí.</p>
+      <p>Sign in with your own Steam account. Your password is not saved. Complete Steam Guard here.</p>
       <input type="text" id="newAccName" placeholder="Account Label (e.g. Smurf 1, Farm 2)">
-      <input type="text" id="newAccUser" autocomplete="username" placeholder="Nombre de inicio de sesión Steam (no email)">
-      <input type="password" id="newAccPassword" autocomplete="current-password" placeholder="Contraseña de Steam">
-      <p id="steamLoginMessage" role="status" style="overflow-wrap:anywhere"></p><div id="guardControls" hidden><input id="steamGuardCode" autocomplete="one-time-code" maxlength="5" placeholder="Código de Steam Guard"><button class="btn-main" data-event-1="">Enviar código</button></div><div style="display:flex; gap:10px; margin-top:10px;">
+      <input type="text" id="newAccUser" autocomplete="username" placeholder="Steam login name (not email)">
+      <input type="password" id="newAccPassword" autocomplete="current-password" placeholder="Steam password">
+      <p id="steamLoginMessage" role="status" style="overflow-wrap:anywhere"></p><div id="guardControls" hidden><input id="steamGuardCode" autocomplete="one-time-code" maxlength="5" placeholder="Steam Guard code"><button class="btn-main" data-event-1="">Submit code</button></div><div style="display:flex; gap:10px; margin-top:10px;">
         <button class="btn-main" style="flex:1;" id="connectSteamBtn" data-event-2="">Connect Account</button>
         <button class="btn-clear" style="padding:14px;" data-event-3="">Cancel</button>
       </div>
@@ -336,9 +336,9 @@
           <span id="estimatedTimeText" style="color:var(--gold); font-size:0.85rem; margin-left:8px;"></span>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" disabled title="Se requiere un motor verificado">Desbloqueo no disponible</button>
-          <button class="btn-gold" style="padding:8px 16px; font-size:0.8rem;" disabled title="Se requiere un motor verificado">Cola no disponible</button>
-          <button class="btn-clear" style="padding:8px 16px; font-size:0.8rem;" disabled title="Se requiere un motor verificado">Bloqueo no disponible</button>
+          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" disabled title="A verified engine is required">Unlock unavailable</button>
+          <button class="btn-gold" style="padding:8px 16px; font-size:0.8rem;" disabled title="A verified engine is required">Queue unavailable</button>
+          <button class="btn-clear" style="padding:8px 16px; font-size:0.8rem;" disabled title="A verified engine is required">Lock unavailable</button>
         </div>
       </div>
 
@@ -354,20 +354,20 @@
       </div>
       <div style="display:flex; gap:8px;">
         <button class="acc-pill" data-event-15="">+ Add Account</button>
-        <button class="acc-pill" data-event-16="">Reconectar Steam</button><button class="acc-pill" data-event-17="">Cerrar sesión Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="">Eliminar perfil</button>
+        <button class="acc-pill" data-event-16="">Refresh Steam session</button><button class="acc-pill" data-event-17="">Sign out of Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="">Delete profile</button>
       </div>
     </div>
 
     <header>
       <div class="brand">
         <h1>Steam Hour Booster Pro</h1>
-        <p id="userLabel">Connecting account...</p>
+        <p id="userLabel">Connecting account...</p><p id="connectionDetails" style="font-size:.8rem;color:var(--text-muted);overflow-wrap:anywhere"></p>
       </div>
       <div class="header-actions">
         <button class="btn-purple" id="cardsBtn" data-event-19="">🃏 Cards: OFF</button>
         <button class="btn-action-sm" data-event-20="">🎁 Claim Free</button>
         <button class="btn-action-sm" id="personaBtn" data-event-21="">Mode: Online</button>
-        <button class="btn-action-sm" data-event-22="">Cambiar contraseña</button><button class="btn-action-sm" data-event-23="">🔒 Lock</button>
+        <button class="btn-action-sm" data-event-22="">Change password</button><button class="btn-action-sm" data-event-23="">🔒 Lock</button>
         <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Active</span></div>
       </div>
     </header>
@@ -387,7 +387,7 @@
           <value id="gamesCountVal">0 / 32</value>
         </div>
         <div class="stat-item">
-          <label>🏆 Verificación de logros</label>
+          <label>🏆 Achievement verification</label>
           <value id="achQueueVal">0 queued</value>
         </div>
       </div>
@@ -437,10 +437,10 @@
           </label>
           <input type="number" id="sleepStart" placeholder="From (03)" style="width:85px;" min="0" max="23">
           <input type="number" id="sleepEnd" placeholder="To (08)" style="width:85px;" min="0" max="23">
-          <input id="timezoneInput" placeholder="America/Montevideo" aria-label="Zona horaria"><button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-28="">Guardar</button>
+          <input id="timezoneInput" placeholder="America/Montevideo" aria-label="Time zone"><button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-28="">Save</button>
         </div>
         <div class="tool-box" style="color:var(--text-muted); font-size:0.85rem;">
-          <span>💬 <strong>Steam Chat Active:</strong> Solo los SteamID64 autorizados pueden usar !status, !pause y !resume. <button class="btn-action-sm" data-event-29="">Autorizar IDs</button></span>
+          <span>💬 <strong>Steam Chat Active:</strong> Only authorized SteamID64s can use !status, !pause and !resume. <button class="btn-action-sm" data-event-29="">Manage allowed IDs</button></span>
         </div>
       </div>
     </div>
@@ -448,6 +448,6 @@
     <div class="grid" id="gamesGrid"></div>
   </div>
 
-  <script src="/app.js" defer></script>
+  <script src="/app.js?v=3" defer></script>
 </body>
 </html>

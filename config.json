@@ -4,7 +4,7 @@
   "accounts": [
     {
       "id": "main",
-      "name": "Cuenta principal",
+      "name": "Main account",
       "user": "",
       "games": [
         240,

@@ -26,7 +26,7 @@ test('esquema API sigue disponible cuando Steam restringe el estado personal',as
   const result=await achievements({}, {steamId64:sid},240,'key',request);assert.equal(result.outcome,'catalog');assert.equal(result.achievements[0].apiname,'REAL');assert.equal(result.achievements[0].unlocked,null);
 });
 test('fallo remoto no se confunde con ausencia de logros',async()=>{
-  await assert.rejects(achievements({}, {steamId64:sid},240,'',async()=>{throw Error('timeout');}),e=>e.status===502 && e.message.includes('No significa'));
+  await assert.rejects(achievements({}, {steamId64:sid},240,'',async()=>{throw Error('timeout');}),e=>e.status===502 && e.message.includes('does not mean'));
 });
 test('ficha Steam que no declara logros se distingue de error de consulta',async()=>{
   const request=async(url)=>{if(url.includes('appdetails'))return source('',url,JSON.stringify({1118310:{success:true,data:{categories:[{id:2}]}}}));throw Error('unavailable');};
@@ -38,4 +38,16 @@ test('XML sin atributo closed se mantiene sin verificar',()=>{
 });
 test('unlocked por icono real de Steam y 0% se conservan',()=>{
   const rows=parseHtml(row('One','<div class="achieveImgHolderUnlocked"></div>'),true);assert.equal(rows[0].unlocked,true);assert.equal(rows[0].percent,0);
+});
+test('canonical vanity URL remains personal after Steam redirects the account stats request',async()=>{
+  const request=async(url)=>{if(url.includes('/profiles/')&&!url.includes('xml=1'))return {body:row('One','<div class="achieveUnlockTime">Unlocked yesterday</div>'),finalUrl:'https://steamcommunity.com/id/owner-name/stats/L4D2/?tab=achievements&l=english'};if(url.includes('/stats/240/achievements/'))return source('',url,row('One'));throw Error('unavailable');};
+  const result=await achievements({}, {steamId64:sid,webCookies:'session',connected:true},240,'',request);assert.equal(result.source,'Steam Community HTML');assert.equal(result.verified,true);assert.equal(result.achievements[0].unlocked,true);assert.equal(result.diagnostics.webSessionReady,true);
+});
+test('redirect to a different numeric profile cannot confirm the requested account achievements',async()=>{
+  const request=async(url)=>{if(url.includes('/profiles/')&&!url.includes('xml=1'))return {body:row('One','<div class="achieveUnlockTime">Unlocked yesterday</div>'),finalUrl:'https://steamcommunity.com/profiles/76561198000000002/stats/L4D2/'};if(url.includes('/stats/240/achievements/'))return source('',url,row('One'));throw Error('unavailable');};
+  const result=await achievements({}, {steamId64:sid},240,'',request);assert.equal(result.verified,false);assert.equal(result.achievements[0].unlocked,null);
+});
+test('private profile with vanity URL stays unknown',async()=>{
+  const request=async(url)=>{if(url.includes('/profiles/')&&!url.includes('xml=1'))return {body:'<div class="profile_private">This profile is private</div>'+row('One'),finalUrl:'https://steamcommunity.com/id/owner-name/stats/L4D2/'};if(url.includes('/stats/240/achievements/'))return source('',url,row('One'));throw Error('unavailable');};
+  const result=await achievements({}, {steamId64:sid},240,'',request);assert.equal(result.verified,false);assert.equal(result.achievements[0].unlocked,null);
 });

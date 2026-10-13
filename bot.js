@@ -12,10 +12,10 @@ const PRESETS = {
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
   aaa: { name: 'AAA Hits', games: [271590, 1938090, 1091500, 292030, 379720] }
 };
-const WRITE_UNAVAILABLE = 'El desbloqueo y bloqueo remoto no están disponibles: el motor anterior no comprobaba cambios en Steam. Este panel verifica el estado real y no simula éxitos.';
+const WRITE_UNAVAILABLE = 'Remote achievement changes are unavailable. This panel verifies the actual Steam state and does not simulate successful changes.';
 function fail(message, status = 400) { return Object.assign(new Error(message), { status }); }
 function text(value, max = 128) {
-  if (typeof value !== 'string' || value.length > max) throw fail('Texto inválido o demasiado largo.');
+  if (typeof value !== 'string' || value.length > max) throw fail('Invalid or overly long text.');
   return value.trim();
 }
 function createApp(options = {}) {
@@ -27,8 +27,8 @@ function createApp(options = {}) {
   new Intl.DateTimeFormat('en', { timeZone: cfg.timezone });
   const environmentToken = process.env.STEAM_REFRESH_TOKEN || '';
   const environmentAccountId = process.env.STEAM_ACCOUNT_ID || 'main';
-  if (environmentToken && !validClientToken(environmentToken)) throw new Error('STEAM_REFRESH_TOKEN no es un token de cliente válido o ya venció.');
-  if (environmentToken && !cfg.accounts.some(acc => acc.id === environmentAccountId)) cfg.accounts.push({ id: environmentAccountId, name: 'Cuenta principal', user: '', games: [], gameNames: {} });
+  if (environmentToken && !validClientToken(environmentToken)) throw new Error('STEAM_REFRESH_TOKEN is invalid or has expired.');
+  if (environmentToken && !cfg.accounts.some(acc => acc.id === environmentAccountId)) cfg.accounts.push({ id: environmentAccountId, name: 'Main account', user: '', games: [], gameNames: {} });
   const isEnvironmentAccount = acc => Boolean(environmentToken && acc.id === environmentAccountId);
   const vault = new Vault(directory);
   const save = () => atomicWrite(configFile, cfg);
@@ -43,9 +43,9 @@ function createApp(options = {}) {
   for (const field of ['user', 'pass', 'refreshToken', 'webPin', 'activeAccountId', 'games', 'gameNames', 'unlockedAchievements', 'achievementQueue']) delete cfg[field];
   if (!cfg.panelAuth) {
     const password = process.env.PANEL_PASSWORD || crypto.randomBytes(18).toString('base64url');
-    if (password.length < 12 || password.length > 256) throw new Error('PANEL_PASSWORD debe tener entre 12 y 256 caracteres.');
+    if (password.length < 12 || password.length > 256) throw new Error('PANEL_PASSWORD must contain 12 to 256 characters.');
     cfg.panelAuth = hashPassword(password);
-    if (!process.env.PANEL_PASSWORD && !options.silent) console.log(`Contraseña inicial del panel (guardala): ${password}`);
+    if (!process.env.PANEL_PASSWORD && !options.silent) console.log(`Initial dashboard password (save it): ${password}`);
   }
   save();
   const sessions = new Map(), attempts = new Map(), rates = new Map(), clients = new Map(), states = new Map();
@@ -55,7 +55,7 @@ function createApp(options = {}) {
   const achievementCache = new Map(), achievementPending = new Map();
   let closing = false;
   function stateFor(id) {
-    if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
+    if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', webSessionVersion: 0, linkCheckStarted: false, lastWebRefresh: 0, profileName: '', tokenAccountMatches: false, steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
     return states.get(id);
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
@@ -71,7 +71,7 @@ function createApp(options = {}) {
       if (games.length && !st.isFarming) st.sessionStartTime = Date.now();
       if (!games.length) st.sessionStartTime = null;
       st.isFarming = games.length > 0;
-    } catch { st.isFarming = false; st.sessionStartTime = null; st.error = 'No se pudo actualizar la actividad Steam.'; }
+    } catch { st.isFarming = false; st.sessionStartTime = null; st.error = 'Could not update Steam activity.'; }
   }
   async function webhook(title, description) {
     if (!cfg.discordWebhook) return;
@@ -86,34 +86,40 @@ function createApp(options = {}) {
       const found = new Map();
       for (let page = 1; page <= 50; page++) {
         const result = await remote(`https://steamcommunity.com/my/badges/?l=english&p=${page}`, { cookie: st.webCookies });
-        if (/\/login/.test(result.finalUrl) || !/badge_row|badges_empty|badge_empty/i.test(result.body)) throw new Error('Sesión web vencida o respuesta de insignias no reconocida.');
+        if (/\/login/.test(result.finalUrl) || !/badge_row|badges_empty|badge_empty/i.test(result.body)) throw new Error('Web session expired or unrecognized badge response.');
         for (const item of parseCards(result.body)) found.set(item.appid, item);
         if (!new RegExp('[?&](?:amp;)?p=' + (page + 1) + '(?:["&])').test(result.body)) break;
-        if (page === 50) throw new Error('Demasiadas páginas de insignias; escaneo incompleto.');
+        if (page === 50) throw new Error('Too many badge pages; scan incomplete.');
       }
       if (!cfg.accounts.includes(acc)) return;
       st.cardDropGames = [...found.values()]; st.cardsReady = true; st.cardError = ''; farming(acc);
-    } catch { st.cardError = 'No se pudieron actualizar los cromos; se conserva el último escaneo.'; try { clients.get(acc.id)?.webLogOn(); } catch {} }
+    } catch { st.cardError = 'Could not update card drops; keeping the previous scan.'; try { clients.get(acc.id)?.webLogOn(); } catch {} }
     finally { st.scanning = false; }
   }
   function connect(acc) {
     if (closing || clients.has(acc.id)) return;
     const st = stateFor(acc.id); const token = isEnvironmentAccount(acc) ? environmentToken : vault.get(acc.id);
-    if (!token || !validClientToken(token)) { st.error = 'Necesitás iniciar sesión de nuevo.'; return; }
+    if (!token || !validClientToken(token)) { st.error = 'Please sign in again.'; return; }
     const client = new User({ renewRefreshTokens: !isEnvironmentAccount(acc), autoRelogin: false, dataDirectory: path.join(directory, 'steam-cache') });
-    clients.set(acc.id, client); st.error = 'Conectando con Steam…';
+    clients.set(acc.id, client); st.error = 'Connecting to Steam…';
     const isCurrent = () => !closing && clients.get(acc.id) === client && cfg.accounts.includes(acc);
-    client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'No se pudo guardar la sesión renovada.'; } } });
+    client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
       st.connected = true; st.error = ''; st.retryCount = 0; st.steamId64 = client.steamID.toString();
+      try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
+      console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
       acc.mySteamID = st.steamId64; save();
       st.isCollisionPaused = Boolean(client.playingState?.blocked);
       client.setPersona(acc.personaState ?? SteamUser.EPersonaState.Online); farming(acc);
-      notify(`${acc.name} conectado`, 'Sesión Steam conectada.');
+      notify(`${acc.name} connected`, 'Steam session connected.');
       resolveNames(acc).catch(() => {});
     });
-    client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); if (acc.cardFarming) scan(acc).catch(() => {}); } });
+    client.on('accountInfo', name => { if (isCurrent()) st.profileName = name || ''; });
+    client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); st.webSessionVersion++; console.log(`[Steam] ${acc.id}: authenticated web session ready`);
+      const checkApp = acc.games.includes(550) ? 550 : acc.games[0];
+      if (checkApp && !st.linkCheckStarted) { st.linkCheckStarted = true; steamRead(acc, st, checkApp, process.env.STEAM_API_KEY || '').then(result => { if (isCurrent()) console.log(`[Steam link check] account=${acc.id} app=${checkApp} source=${result.source || 'none'} personalVerified=${Boolean(result.verified)} count=${result.achievements?.length || 0}`); }).catch(() => { if (isCurrent()) console.warn(`[Steam link check] account=${acc.id}: achievement retrieval unavailable`); }); }
+      if (acc.cardFarming) scan(acc).catch(() => {}); } });
     client.on('playingState', blocked => {
       if (!isCurrent()) return;
       const changed = st.isCollisionPaused !== blocked; st.isCollisionPaused = blocked;
@@ -123,8 +129,9 @@ function createApp(options = {}) {
       if (!isCurrent()) return;
       st.connected = false; st.isFarming = false; st.sessionStartTime = null; st.playedGames = []; st.webCookies = ''; st.cardsReady = false;
       const needsLogin = [5, 15, 27, 63, 65, 85, 88].includes(err?.eresult);
-      st.error = needsLogin ? 'Sesión rechazada. Iniciá sesión de nuevo.' : 'Steam desconectado; reintentando…';
-      if (needsLogin) { if (isEnvironmentAccount(acc)) st.error = 'Actualizá STEAM_REFRESH_TOKEN en Render: Steam rechazó la sesión.'; else vault.remove(acc.id); return; }
+      console.warn(`[Steam] ${acc.id}: disconnected; result code: ${Number(err?.eresult)||0}`);
+      st.error = needsLogin ? 'Steam rejected the session. Please sign in again.' : 'Steam disconnected; reconnecting…';
+      if (needsLogin) { if (isEnvironmentAccount(acc)) st.error = 'Update STEAM_REFRESH_TOKEN in Render: Steam rejected the session.'; else vault.remove(acc.id); return; }
       if (!st.reconnectTimer) st.reconnectTimer = setTimeout(() => {
         st.reconnectTimer = null; if (!isCurrent()) return;
         clients.delete(acc.id); client.removeAllListeners(); client.on('error', () => {}); try { client.logOff(); } catch {} connect(acc);
@@ -138,11 +145,11 @@ function createApp(options = {}) {
       if (command === '!resume') st.isPaused = false;
       if (command === '!pause' || command === '!resume') farming(acc);
       if (['!pause', '!resume', '!status', '!help'].includes(command)) {
-        try { client.chatMessage(steamid, `SteamFarmer: ${st.connected ? 'conectado' : 'desconectado'}, ${st.isFarming ? 'actividad enviada' : 'pausado'}. Comandos: !status !pause !resume`); } catch {}
+        try { client.chatMessage(steamid, `SteamFarmer: ${st.connected ? 'connected' : 'disconnected'}, ${st.isFarming ? 'activity sent' : 'paused'}. Commands: !status !pause !resume`); } catch {}
       }
     });
     try { client.logOn({ refreshToken: token, logonID: crypto.randomInt(1, 0xffffffff), machineName: 'SteamFarmer personal' }); }
-    catch { st.error = 'No se pudo usar la sesión. Iniciá sesión nuevamente.'; clients.delete(acc.id); }
+    catch { st.error = 'Could not use the saved session. Please sign in again.'; clients.delete(acc.id); }
   }
   function disconnect(id) {
     const st = states.get(id); if (st?.reconnectTimer) clearTimeout(st.reconnectTimer);
@@ -157,78 +164,78 @@ function createApp(options = {}) {
   }
   function getAccount(req, url, data = {}) {
     const id = data.accountId || url.searchParams.get('accountId');
-    if (!id) throw fail('Seleccioná una cuenta explícitamente.');
-    const acc = cfg.accounts.find(a => a.id === id); if (!acc) throw fail('Cuenta no encontrada.', 404); return acc;
+    if (!id) throw fail('Select an account explicitly.');
+    const acc = cfg.accounts.find(a => a.id === id); if (!acc) throw fail('Account not found.', 404); return acc;
   }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
-    return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, gameCount: acc.games.length };
+    return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
-    if (++r.count > limit) throw fail('Demasiados intentos. Esperá un momento.', 429);
+    if (++r.count > limit) throw fail('Too many requests. Please wait a moment.', 429);
   }
   function panelSession(req) {
     const token = (req.headers.cookie || '').match(/(?:^|;\s*)sf_session=([a-f0-9]{64})(?:;|$)/)?.[1];
     const session = token ? sessions.get(token) : null;
-    if (!session || session.expires <= Date.now()) { if (token) sessions.delete(token); throw fail('Iniciá sesión en el panel.', 401); }
+    if (!session || session.expires <= Date.now()) { if (token) sessions.delete(token); throw fail('Sign in to the dashboard.', 401); }
     return { token, session };
   }
   const originValue = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';
   const origin = originValue ? new URL(originValue).origin : null;
-  if (origin && !origin.startsWith('https://')) throw new Error('El origen público debe usar HTTPS.');
+  if (origin && !origin.startsWith('https://')) throw new Error('The public origin must use HTTPS.');
   function checkOrigin(req, publicGet = false) {
     const expected = origin || `http://${req.headers.host}`;
-    if (!origin && !/^((localhost|127\.0\.0\.1|\[::1\])(:\d+)?)$/.test(req.headers.host || '')) throw fail('Host inválido. Configurá PUBLIC_ORIGIN para acceso remoto.', 403);
-    if (!publicGet && req.headers.origin && req.headers.origin !== expected) throw fail('Origen no permitido.', 403);
-    if (!publicGet && req.headers['sec-fetch-site'] === 'cross-site') throw fail('Solicitud externa rechazada.', 403);
+    if (!origin && !/^((localhost|127\.0\.0\.1|\[::1\])(:\d+)?)$/.test(req.headers.host || '')) throw fail('Invalid host. Configure PUBLIC_ORIGIN for remote access.', 403);
+    if (!publicGet && req.headers.origin && req.headers.origin !== expected) throw fail('Origin not allowed.', 403);
+    if (!publicGet && req.headers['sec-fetch-site'] === 'cross-site') throw fail('Cross-site request rejected.', 403);
   }
   function json(res, status, body) { if (!res.writableEnded && !res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); } }
   async function readBody(req) {
-    if (!(req.headers['content-type'] || '').startsWith('application/json')) throw fail('Se requiere application/json.', 415);
+    if (!(req.headers['content-type'] || '').startsWith('application/json')) throw fail('application/json is required.', 415);
     let size = 0, body = '';
-    for await (const chunk of req) { size += chunk.length; if (size > 65536) throw fail('Solicitud demasiado grande.', 413); body += chunk; }
-    try { const parsed = JSON.parse(body || '{}'); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error(); return parsed; } catch { throw fail('JSON inválido.'); }
+    for await (const chunk of req) { size += chunk.length; if (size > 65536) throw fail('Request too large.', 413); body += chunk; }
+    try { const parsed = JSON.parse(body || '{}'); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error(); return parsed; } catch { throw fail('Invalid JSON.'); }
   }
   function cancelAttempt(id) {
     const a = attempts.get(id); if (!a) return; a.phase = 'cancelled';
     try { a.login.cancelLoginAttempt(); } catch {} attempts.delete(id);
   }
   function findAttempt(id, owner) {
-    const a = attempts.get(id); if (!a || a.owner !== owner) throw fail('Intento de login no encontrado.', 404); return a;
+    const a = attempts.get(id); if (!a || a.owner !== owner) throw fail('Login attempt not found.', 404); return a;
   }
   function attemptView(a) { return { attemptId: a.id, phase: a.phase, guards: a.guards, error: a.error || '', accountId: a.accountId || null }; }
   async function startLogin(data, owner) {
     rate(`steam:${owner}`, 5, 5 * 60000);
     for (const [id, a] of attempts) if (a.owner === owner) cancelAttempt(id);
-    if (attempts.size >= 20) throw fail('Hay demasiados inicios de sesión pendientes.', 429);
+    if (attempts.size >= 20) throw fail('Too many pending login attempts.', 429);
     const user = text(data.user, 128); const name = text(data.name || user, 64);
-    if (!user || typeof data.password !== 'string' || !data.password || data.password.length > 256) throw fail('Ingresá el nombre de inicio de sesión de Steam y la contraseña.');
+    if (!user || typeof data.password !== 'string' || !data.password || data.password.length > 256) throw fail('Enter your Steam login name and password.');
     let existing;
     if (data.accountId) existing = getAccount(null, new URL('http://localhost'), data);
-    if (existing && isEnvironmentAccount(existing)) throw fail('Esta cuenta usa STEAM_REFRESH_TOKEN de Render. Actualizá esa variable para cambiar la sesión.', 409);
+    if (existing && isEnvironmentAccount(existing)) throw fail('This account uses STEAM_REFRESH_TOKEN in Render. Update that variable to replace its session.', 409);
     const login = new Session(EAuthTokenPlatformType.SteamClient, { machineFriendlyName: 'SteamFarmer personal', machineId: true });
     login.loginTimeout = 120000;
     const a = { id: crypto.randomUUID(), login, owner, phase: 'starting', guards: [], error: '', created: Date.now(), targetId: existing?.id };
     attempts.set(a.id, a);
     const alive = () => attempts.get(a.id) === a && ['starting', 'guard', 'waiting'].includes(a.phase) && sessions.has(owner) && !closing;
-    login.on('timeout', () => { if (alive()) { a.phase = 'expired'; a.error = 'El intento venció. Volvé a iniciar sesión.'; } });
-    login.on('error', () => { if (alive()) { a.phase = 'failed'; a.error = 'Steam rechazó el inicio de sesión o no está disponible.'; } });
+    login.on('timeout', () => { if (alive()) { a.phase = 'expired'; a.error = 'Login attempt expired. Please try again.'; } });
+    login.on('error', () => { if (alive()) { a.phase = 'failed'; a.error = 'Steam rejected the login or is unavailable.'; } });
     login.on('authenticated', () => {
       if (!alive()) return;
       try {
         const steamid = login.steamID.toString();
         let acc = a.targetId ? cfg.accounts.find(acc => acc.id === a.targetId) : cfg.accounts.find(acc => acc.mySteamID === steamid || acc.user.toLowerCase() === login.accountName.toLowerCase());
-        if (a.targetId && (!acc || (acc.mySteamID && acc.mySteamID !== steamid))) throw Error('Identidad distinta');
-        if (acc && isEnvironmentAccount(acc)) throw Error('Cuenta administrada mediante variable de entorno');
-        if (acc && [...attempts.values()].some(other => other !== a && other.targetId === acc.id && ['starting', 'guard', 'waiting'].includes(other.phase))) throw Error('Login simultáneo');
+        if (a.targetId && (!acc || (acc.mySteamID && acc.mySteamID !== steamid))) throw Error('Account identity mismatch');
+        if (acc && isEnvironmentAccount(acc)) throw Error('Account managed through an environment variable');
+        if (acc && [...attempts.values()].some(other => other !== a && other.targetId === acc.id && ['starting', 'guard', 'waiting'].includes(other.phase))) throw Error('Concurrent login attempt');
         const fresh = !acc;
         acc ||= { id: crypto.randomUUID(), name, user: login.accountName, games: [], gameNames: {}, personaState: SteamUser.EPersonaState.Online, cardFarming: false, sleepMode: { enabled: false, start: 3, end: 8 }, customStatus: '', chatAdmins: [] };
         vault.set(acc.id, login.refreshToken);
         acc.mySteamID = steamid; acc.user = login.accountName;
         if (fresh) cfg.accounts.push(acc); save(); disconnect(acc.id); connect(acc);
         a.accountId = acc.id; a.phase = 'authenticated';
-      } catch { a.phase = 'failed'; a.error = 'No se pudo guardar la sesión o la cuenta no coincide con el perfil seleccionado.'; }
+      } catch { a.phase = 'failed'; a.error = 'Could not save the session or the account does not match the selected profile.'; }
     });
     try {
       const result = await login.startWithCredentials({ accountName: user, password: data.password });
@@ -236,7 +243,7 @@ function createApp(options = {}) {
         a.guards = (result.validActions || []).map(g => ({ type: g.type, label: EAuthSessionGuardType[g.type] || 'Steam Guard', detail: g.detail || '' }));
         a.phase = result.actionRequired ? 'guard' : 'waiting';
       }
-    } catch { if (alive()) { a.phase = 'failed'; a.error = 'Credenciales incorrectas, límite de Steam o conexión no disponible.'; } }
+    } catch { if (alive()) { a.phase = 'failed'; a.error = 'Invalid credentials, Steam rate limit or connection unavailable.'; } }
     return attemptView(a);
   }
   const server = http.createServer(async (req, res) => {
@@ -252,18 +259,18 @@ function createApp(options = {}) {
       // Public GET pages may be reached from bookmarks, search engines or external links.
       // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
       checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/manifest.json'].includes(url.pathname));
-      if (!['GET', 'POST'].includes(req.method)) throw fail('Método no permitido.', 405);
+      if (!['GET', 'POST'].includes(req.method)) throw fail('Method not allowed.', 405);
       if (!url.pathname.startsWith('/api/')) {
-        if (req.method !== 'GET') throw fail('Ruta no encontrada.', 404);
+        if (req.method !== 'GET') throw fail('Route not found.', 404);
         const files = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'] };
-        const item = files[url.pathname]; if (!item) throw fail('Ruta no encontrada.', 404);
+        const item = files[url.pathname]; if (!item) throw fail('Route not found.', 404);
         res.writeHead(200, { 'Content-Type': item[1] + '; charset=utf-8' }); return res.end(fs.readFileSync(path.join(__dirname, 'public', item[0])));
       }
       const ip = req.socket.remoteAddress; rate(`api:${ip}`, 180);
       if (url.pathname === '/api/panel/login' && req.method === 'POST') {
         rate(`panel:${ip}`, 5, 5 * 60000);
         const data = await readBody(req);
-        if (!verifyPassword(data.password, cfg.panelAuth)) throw fail('Contraseña incorrecta.', 401);
+        if (!verifyPassword(data.password, cfg.panelAuth)) throw fail('Incorrect password.', 401);
         const token = crypto.randomBytes(32).toString('hex'), csrf = crypto.randomBytes(32).toString('hex');
         sessions.set(token, { csrf, expires: Date.now() + 12 * 3600000 });
         res.setHeader('Set-Cookie', `sf_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${origin?.startsWith('https:') ? '; Secure' : ''}`);
@@ -273,7 +280,7 @@ function createApp(options = {}) {
       if (url.pathname === '/api/panel/session' && req.method === 'GET') return json(res, 200, { csrf: session.csrf });
       let data = {};
       if (req.method === 'POST') {
-        if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Sesión inválida. Recargá el panel.', 403);
+        if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Invalid session. Reload the dashboard.', 403);
         data = await readBody(req);
       }
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
@@ -281,8 +288,8 @@ function createApp(options = {}) {
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
       }
       if (url.pathname === '/api/panel/password' && req.method === 'POST') {
-        const password = text(data.password, 256); if (password.length < 12) throw fail('Usá al menos 12 caracteres.');
-        if (!verifyPassword(data.currentPassword, cfg.panelAuth)) throw fail('La contraseña actual es incorrecta.', 401);
+        const password = text(data.password, 256); if (password.length < 12) throw fail('Use at least 12 characters.');
+        if (!verifyPassword(data.currentPassword, cfg.panelAuth)) throw fail('The current password is incorrect.', 401);
         cfg.panelAuth = hashPassword(password); save();
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
@@ -293,9 +300,9 @@ function createApp(options = {}) {
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }
       if (url.pathname === '/api/steam/guard' && req.method === 'POST') {
         rate(`guard:${token}`, 8, 5 * 60000); const a = findAttempt(data.attemptId, token);
-        if (a.phase !== 'guard') throw fail('Este intento ya no acepta códigos.');
-        const code = text(data.code, 10); if (!/^[a-zA-Z0-9]{5}$/.test(code)) throw fail('El código de Steam Guard debe tener 5 caracteres.');
-        try { await a.login.submitSteamGuardCode(code); if (a.phase === 'guard') a.phase = 'waiting'; } catch { throw fail('Código incorrecto o vencido. Reintentá.'); }
+        if (a.phase !== 'guard') throw fail('This login attempt no longer accepts codes.');
+        const code = text(data.code, 10); if (!/^[a-zA-Z0-9]{5}$/.test(code)) throw fail('Steam Guard codes must contain 5 characters.');
+        try { await a.login.submitSteamGuardCode(code); if (a.phase === 'guard') a.phase = 'waiting'; } catch { throw fail('Incorrect or expired code. Please retry.'); }
         return json(res, 200, attemptView(a));
       }
       if (url.pathname === '/api/search' && req.method === 'GET') {
@@ -307,13 +314,16 @@ function createApp(options = {}) {
       if (url.pathname === '/api/achievements' && req.method === 'GET') {
         rate(`ach:${token}`, 40); const acc = getAccount(req, url); const st = stateFor(acc.id);
         const id = appId(url.searchParams.get('appid'));
-        const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${Boolean(st.webCookies)}`;
+        const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${st.webSessionVersion}`;
         const cached = achievementCache.get(key);
         if (url.searchParams.get('refresh') !== '1' && cached && cached.expires > Date.now()) return json(res, 200, cached.result);
         if (!achievementPending.has(key)) {
           const task = Promise.resolve().then(() => steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(result => {
             if (achievementCache.size >= 100) achievementCache.delete(achievementCache.keys().next().value);
-            achievementCache.set(key, { result, expires: Date.now() + 60000 }); return result;
+            achievementCache.set(key, { result, expires: Date.now() + 60000 });
+            console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} webSession=${Boolean(st.webCookies)}`);
+            if (result.outcome === 'catalog' && st.connected && Date.now() - st.lastWebRefresh > 120000) { st.lastWebRefresh = Date.now(); try { clients.get(acc.id)?.webLogOn(); } catch {} }
+            return result;
           }).finally(() => achievementPending.delete(key));
           achievementPending.set(key, task);
         }
@@ -322,48 +332,52 @@ function createApp(options = {}) {
       if (['/api/unlock-batch', '/api/lock-batch', '/api/queue-achievements'].includes(url.pathname) && req.method === 'POST') throw fail(WRITE_UNAVAILABLE, 501);
       if (url.pathname === '/api/set-webhook' && req.method === 'POST') {
         const target = text(data.webhook || '', 512);
-        if (target && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(target)) throw fail('Ingresá un webhook HTTPS oficial de Discord.');
-        cfg.discordWebhook = target; save(); if (target) await webhook('SteamFarmer conectado', 'Webhook configurado directamente con Discord.'); return json(res, 200, { success: true });
+        if (target && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(target)) throw fail('Enter an official HTTPS Discord webhook URL.');
+        cfg.discordWebhook = target; save(); if (target) await webhook('SteamFarmer connected', 'Webhook configured directly with Discord.'); return json(res, 200, { success: true });
       }
-      const routes = ['/api/account/remove', '/api/steam/logout', '/api/add', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
-      if (req.method !== 'POST' || !routes.includes(url.pathname)) throw fail('Ruta no encontrada.', 404);
+      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
+      if (req.method !== 'POST' || !routes.includes(url.pathname)) throw fail('Route not found.', 404);
       const acc = getAccount(req, url, data); const st = stateFor(acc.id);
-      if (isEnvironmentAccount(acc) && ['/api/account/remove', '/api/steam/logout'].includes(url.pathname)) throw fail('Para olvidar esta cuenta, quitá STEAM_REFRESH_TOKEN en Render y desplegá de nuevo. Para pausar la actividad usá Pausar.', 409);
+      if (isEnvironmentAccount(acc) && ['/api/account/remove', '/api/steam/logout'].includes(url.pathname)) throw fail('To forget this account, remove STEAM_REFRESH_TOKEN in Render and redeploy. Use Pause to stop activity.', 409);
       switch (url.pathname) {
+        case '/api/steam/web-session':
+          if (st.connected) { st.lastWebRefresh = Date.now(); clients.get(acc.id).webLogOn(); }
+          else { disconnect(acc.id); connect(acc); }
+          break;
         case '/api/account/remove':
           for (const [id, a] of attempts) if (a.targetId === acc.id) cancelAttempt(id);
           disconnect(acc.id); vault.remove(acc.id); cfg.accounts = cfg.accounts.filter(a => a.id !== acc.id); save(); break;
         case '/api/steam/logout':
           for (const [id, a] of attempts) if (a.targetId === acc.id) cancelAttempt(id);
-          disconnect(acc.id); vault.remove(acc.id); stateFor(acc.id).error = 'Sesión eliminada. Volvé a iniciar sesión.'; break;
+          disconnect(acc.id); vault.remove(acc.id); stateFor(acc.id).error = 'Session removed. Please sign in again.'; break;
         case '/api/add': {
-          const id = appId(data.appid); if (!acc.games.includes(id)) { if (acc.games.length >= 32) throw fail('Máximo 32 juegos.'); acc.games.push(id); }
+          const id = appId(data.appid); if (!acc.games.includes(id)) { if (acc.games.length >= 32) throw fail('Maximum 32 games.'); acc.games.push(id); }
           if (data.name) acc.gameNames[id] = text(data.name, 256); save(); farming(acc); resolveNames(acc).catch(() => {}); break;
         }
         case '/api/remove': { const id = appId(data.appid); acc.games = acc.games.filter(g => g !== id); delete acc.gameNames[id]; save(); farming(acc); break; }
         case '/api/clear-all': acc.games = []; acc.gameNames = {}; save(); farming(acc); break;
-        case '/api/apply-preset': { const p = PRESETS[data.presetKey]; if (!p) throw fail('Preset inválido.'); acc.games = [...new Set([...acc.games, ...p.games])].slice(0, 32); save(); farming(acc); resolveNames(acc).catch(() => {}); break; }
+        case '/api/apply-preset': { const p = PRESETS[data.presetKey]; if (!p) throw fail('Invalid preset.'); acc.games = [...new Set([...acc.games, ...p.games])].slice(0, 32); save(); farming(acc); resolveNames(acc).catch(() => {}); break; }
         case '/api/toggle': st.isPaused = !st.isPaused; farming(acc); break;
         case '/api/persona': acc.personaState = acc.personaState === 7 ? 1 : 7; if (st.connected) clients.get(acc.id).setPersona(acc.personaState); save(); break;
         case '/api/custom-status': acc.customStatus = text(data.status || '', 64); save(); farming(acc); break;
         case '/api/toggle-cards': acc.cardFarming = !acc.cardFarming; save(); farming(acc); if (acc.cardFarming) scan(acc).catch(() => {}); break;
         case '/api/set-sleep': {
-          if (typeof data.enabled !== 'boolean') throw fail('Estado de horario inválido.');
-          const zone = text(data.timezone || cfg.timezone, 64); try { new Intl.DateTimeFormat('en', { timeZone: zone }); } catch { throw fail('Zona horaria inválida.'); }
+          if (typeof data.enabled !== 'boolean') throw fail('Invalid sleep schedule state.');
+          const zone = text(data.timezone || cfg.timezone, 64); try { new Intl.DateTimeFormat('en', { timeZone: zone }); } catch { throw fail('Invalid time zone.'); }
           acc.sleepMode = { enabled: data.enabled, start: hour(data.start), end: hour(data.end) }; cfg.timezone = zone; save(); cfg.accounts.forEach(farming); break;
         }
         case '/api/chat-admins': {
-          if (!Array.isArray(data.steamids) || data.steamids.length > 20 || data.steamids.some(id => typeof id !== 'string' || !/^7656119\d{10}$/.test(id))) throw fail('Ingresá SteamID64 válidos.');
+          if (!Array.isArray(data.steamids) || data.steamids.length > 20 || data.steamids.some(id => typeof id !== 'string' || !/^7656119\d{10}$/.test(id))) throw fail('Enter valid SteamID64s.');
           acc.chatAdmins = [...new Set(data.steamids)]; save(); break;
         }
         case '/api/claim-free': {
-          if (!st.connected) throw fail('Steam no está conectado.', 409);
-          const result = await Promise.race([new Promise((resolve, reject) => clients.get(acc.id).requestFreeLicense([730, 440, 570, 230410, 1172470], (err, packages, apps) => err ? reject(fail('Steam rechazó las licencias.', 502)) : resolve({ packages: packages || [], apps: apps || [] }))), new Promise((_, reject) => { const t = setTimeout(() => reject(fail('Steam no respondió a tiempo.', 504)), 15000); t.unref(); })]);
+          if (!st.connected) throw fail('Steam is not connected.', 409);
+          const result = await Promise.race([new Promise((resolve, reject) => clients.get(acc.id).requestFreeLicense([730, 440, 570, 230410, 1172470], (err, packages, apps) => err ? reject(fail('Steam rejected the license request.', 502)) : resolve({ packages: packages || [], apps: apps || [] }))), new Promise((_, reject) => { const t = setTimeout(() => reject(fail('Steam did not respond in time.', 504)), 15000); t.unref(); })]);
           return json(res, 200, { success: true, granted: result });
         }
       }
       return json(res, 200, { success: true });
-    } catch (err) { json(res, err.status || 502, { error: err.status ? err.message : 'La operación falló. Revisá la conexión o los permisos del servidor.' }); }
+    } catch (err) { json(res, err.status || 502, { error: err.status ? err.message : 'The operation failed. Check the server connection or permissions.' }); }
   });
   server.requestTimeout = 20000; server.headersTimeout = 10000;
   const timers = [setInterval(() => { if (!closing) cfg.accounts.forEach(farming); }, 30000), setInterval(() => { if (!closing) for (const acc of cfg.accounts) if (acc.cardFarming) scan(acc).catch(() => {}); }, 10 * 60000), setInterval(() => {
@@ -379,10 +393,10 @@ if (require.main === module) {
   const port = Number(process.env.PORT || 8000);
   const host = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
   const publicOrigin = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT inválido.');
-  if (host !== '127.0.0.1' && !publicOrigin) throw new Error('Para acceso remoto configurá PUBLIC_ORIGIN.');
-  if (publicOrigin && !publicOrigin.startsWith('https://')) throw new Error('El origen público debe usar HTTPS.');
-  if (process.env.RENDER && !process.env.PANEL_PASSWORD) throw new Error('Configurá PANEL_PASSWORD en Environment de Render (mínimo 12 caracteres).');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT.');
+  if (host !== '127.0.0.1' && !publicOrigin) throw new Error('Configure PUBLIC_ORIGIN for remote access.');
+  if (publicOrigin && !publicOrigin.startsWith('https://')) throw new Error('The public origin must use HTTPS.');
+  if (process.env.RENDER && !process.env.PANEL_PASSWORD) throw new Error('Set PANEL_PASSWORD in Render Environment (at least 12 characters).');
   const app = createApp();
   app.server.listen(port, host, () => console.log(`SteamFarmer: ${publicOrigin || `http://${host}:${port}`} · health /healthz`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => app.close().then(() => process.exit(0)));

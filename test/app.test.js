@@ -9,7 +9,7 @@ const { createApp } = require('../bot');
 const { atomicWrite, Vault, appId, hour, sleepNow } = require('../lib/core');
 const { parseXml, parseHtml, parseCards } = require('../lib/steam-data');
 const PASSWORD = 'panel-test-password-123';
-function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',aud:['client','web'],exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.signature`; }
+function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.signature`; }
 class FakeLogin extends EventEmitter {
   static latest;
   constructor(){super();FakeLogin.latest=this;this.steamID={toString:()=> '76561198000000001'};this.accountName='owner';this.refreshToken=token();}
@@ -150,4 +150,11 @@ test('caché de logros por cuenta y actualización manual real',async t=>{
   const f=await fixture(t,{accounts:[account]},{achievements:async()=>{calls++;return{achievements:[{name:'One',unlocked:false}],checkedAt:new Date().toISOString()};}});await f.login();
   await f.request('/api/achievements?accountId=a&appid=240');await f.request('/api/achievements?accountId=a&appid=240');assert.equal(calls,1);
   await f.request('/api/achievements?accountId=a&appid=240&refresh=1');assert.equal(calls,2);
+});
+test('connection status confirms token account, persona and web session without returning cookies',async t=>{
+  const f=await fixture(t);await f.login();const login=await f.request('/api/steam/login',{user:'owner',password:'pw'});const done=await f.request('/api/steam/guard',{attemptId:login.data.attemptId,code:'ABCDE'});
+  FakeUser.latest.emit('accountInfo','Steam profile name');FakeUser.latest.emit('webSession','sid',['steamLoginSecure=SECRET; Path=/','sessionid=SECRET2']);
+  const result=await f.request('/api/status');const a=result.data.accounts.find(a=>a.id===done.data.accountId);
+  assert.equal(a.connected,true);assert.equal(a.tokenAccountMatches,true);assert.equal(a.webSessionReady,true);assert.equal(a.linkedSteamId,'76561198000000001');assert.equal(a.profileName,'Steam profile name');assert.ok(!JSON.stringify(result.data).includes('SECRET'));
+  assert.equal((await f.request('/api/steam/web-session',{accountId:a.id})).response.status,200);
 });
