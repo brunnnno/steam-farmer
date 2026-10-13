@@ -8,6 +8,14 @@ function ui(t, responder) {
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('compact Cards panel shows automatic games, pending drops, active status and keeps the manual list',async t=>{
+  const account={id:'a',name:'Owner',games:[220],gameNames:{220:'Manual game'},connected:true,cardFarming:true,cardsReady:true,isFarming:true,runningGames:[240],sleepMode:{enabled:false,start:3,end:8},cardDropGames:[{appid:240,name:'Counter-Strike: Source',remaining:3},{appid:550,name:'<img src=x onerror=alert(1)>',remaining:5}],cardScanAt:'2026-10-13T16:00:00Z'};
+  const w=ui(t,()=>({accounts:[account],presets:[],timezone:'America/Montevideo'}));w.testUI.authenticate();await w.testUI.load();
+  assert.equal(w.document.getElementById('cardsPanel').hidden,false);assert.match(w.document.getElementById('cardsSummary').textContent,/1\/2 active.*8 pending/);assert.equal(w.document.querySelector('#cardsList .cards-game-state').textContent,'Active');assert.match(w.document.getElementById('cardsList').textContent,/Counter-Strike: Source/);assert.equal(w.document.querySelectorAll('#cardsList img').length,0);assert.match(w.document.getElementById('gamesGrid').textContent,/Manual game/);
+  const row=w.document.querySelector('#cardsList .cards-game');await w.testUI.load();assert.equal(w.document.querySelector('#cardsList .cards-game'),row);
+  account.isPaused=true;account.isFarming=false;account.runningGames=[];await w.testUI.load();assert.match(w.document.getElementById('cardsSummary').textContent,/0\/2 active/);assert.equal(w.document.querySelector('#cardsList .cards-game-state').textContent,'Paused');
+  account.cardFarming=false;await w.testUI.load();assert.equal(w.document.getElementById('cardsPanel').hidden,true);assert.equal(w.document.querySelectorAll('#cardsList .cards-game').length,0);assert.match(w.document.getElementById('gamesGrid').textContent,/Manual game/);
+});
 test('cambiar de juego limpia filtros y búsquedas que ocultaban logros',async t=>{
   const w=ui(t,()=>response([{name:'First',description:'',unlocked:false,percent:25}]));
   await w.testUI.open(240,'One');w.testUI.search('nothing');assert.equal(w.document.querySelectorAll('.ach-item').length,0);

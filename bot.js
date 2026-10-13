@@ -129,7 +129,7 @@ function createApp(options = {}) {
         if (page === 50) throw new Error('Too many badge pages; scan incomplete.');
       }
       if (!current()) return;
-      st.cardDropGames = [...found.values()]; st.cardsReady = true; st.cardError = ''; farming(acc);
+      st.cardDropGames = [...found.values()]; st.cardsReady = true; st.cardError = '';st.cardScanAt=new Date().toISOString(); farming(acc);
     } catch { if(current()){st.cardError = 'Could not update card drops; keeping the previous scan.'; try { client?.webLogOn(); } catch {}} }
     finally { st.scanning = false;release(); }
   }
@@ -225,7 +225,7 @@ budget.run(()=>runReadOnlyProbes(client)).then(result=>{if(isCurrent()&&st.conne
   }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
-    return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, gameCount: acc.games.length };
+return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }

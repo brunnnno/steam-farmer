@@ -47,6 +47,7 @@ async function loadStatus() {
     const memory=data.applicationStorage;
     $('resourceUsage').textContent=data.resources?`Process RAM: ${(data.resources.rssBytes/1048576).toFixed(1)} MiB · Heap: ${(data.resources.heapUsedBytes/1048576).toFixed(1)} MiB · ${data.resources.steamConnections}/3 Steam connections · ${data.resources.activeHeavy}/1 heavy operations`:'Server resource data unavailable.';
     $('historyStorage').textContent=storage?.persistent?(storage.available?(memory?.persistent&&memory.available?'Persistent memory connected: write history and encrypted configuration saved.':'Persistent write history connected; configuration is still local.'):'Persistent history unavailable. Achievement activation is blocked.'):'Local history only. Records can be lost when the host restarts or redeploys.';
+    renderCardFarming(active);
     if (!active) { $('connectionDetails').textContent=''; $('userLabel').textContent = 'Add your Steam account to get started'; $('statusText').textContent = 'No account'; $('badgeStatus').className = 'badge-status paused'; $('gamesGrid').replaceChildren(); gamesSnapshot=''; $('timerVal').textContent = '00h 00m 00s'; $('hoursVal').textContent = '0.0 estimated hrs'; $('gamesCountVal').textContent = '0 / 32'; $('capacityPercent').textContent = '0%'; $('capacityFill').style.width = '0%'; return; }
     $('userLabel').textContent = [active.name,active.profileName || active.user].filter(Boolean).join(' · ');
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${active.linkedSteamId?' · Steam ID: '+active.linkedSteamId:''}`;
@@ -64,7 +65,29 @@ async function loadStatus() {
     renderGames(active.games);
   } catch (e) { notice(e.message); } finally { statusBusy = false; }
 }
-let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '';
+let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '',cardsSnapshot='';
+function renderCardFarming(account){
+  const panel=$('cardsPanel');panel.hidden=!account?.cardFarming;
+  if(panel.hidden){cardsSnapshot='';$('cardsList').replaceChildren();return;}
+  const games=Array.isArray(account.cardDropGames)?account.cardDropGames:[];
+  const running=new Set(account.isFarming?(account.runningGames||[]):[]);
+  const stopped=!account.connected?'Steam disconnected':account.isCollisionPaused?'Playing on another device':account.isSleepPaused?'Sleep schedule active':account.isPaused?'Paused':null;
+  const total=games.reduce((n,g)=>n+(Number.isSafeInteger(g.remaining)&&g.remaining>0?g.remaining:0),0);
+  const activeCount=games.filter(g=>running.has(g.appid)).length;
+  $('cardsSummary').textContent=account.cardsReady?`${activeCount}/${games.length} active · ${total} pending drops`:'Checking Steam…';
+  $('cardsStatus').textContent=account.cardError?account.cardError+' Counts may be outdated.':stopped?stopped+'. No card-farming activity is being sent.':!account.cardsReady?'Reading games with remaining card drops…':games.length?'Activity is sent to Steam for the active games; drops are not guaranteed immediately.':'Steam reports no games with pending card drops.';
+  $('cardsUpdated').textContent=account.cardScanAt?`Last scan: ${new Date(account.cardScanAt).toLocaleTimeString('en-US')} · Badge counts are checked about every 10 minutes.`:'Badge counts are checked about every 10 minutes.';
+  const snapshot=JSON.stringify([account.id,games,account.gameNames,[...running],stopped,account.cardsReady]);if(snapshot===cardsSnapshot)return;cardsSnapshot=snapshot;
+  const list=$('cardsList');list.replaceChildren();
+  for(const game of games.slice(0,80)){
+    const row=element('div',undefined,'cards-game');
+    const title=game.name||account.gameNames?.[game.appid]||`AppID ${game.appid}`;
+    const identity=element('div',undefined,'cards-game-identity');identity.append(element('strong',title),element('small',`#${game.appid}`));
+    const state=running.has(game.appid)?'Active':stopped?'Paused':account.cardsReady?'Waiting':'Checking';
+    row.append(identity,element('span',state,'cards-game-state'+(running.has(game.appid)?' active':'')),element('span',`${game.remaining} pending`, 'cards-game-remaining'));list.append(row);
+  }
+  if(games.length>80)list.append(element('small',`Showing the first 80 of ${games.length} games to keep the panel lightweight.`));
+}
 function renderAccountsTabs(list, selected) {
   const snapshot = JSON.stringify([selected,list.map(a=>[a.id,a.name,a.games.length])]); if(snapshot===tabsSnapshot)return; tabsSnapshot=snapshot;
   $('accountsTabsContainer').replaceChildren(...list.map(a => button(`${a.name} (${a.games.length})`, () => switchAccount(a.id), 'acc-pill' + (a.id === selected ? ' active' : ''))));

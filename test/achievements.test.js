@@ -1,7 +1,8 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');
-const {achievements,parseXml,parseHtml,remote}=require('../lib/steam-data');
+const {achievements,parseXml,parseHtml,remote,parseCards}=require('../lib/steam-data');
 const sid='76561198000000001';
+test('badge parser reads real titles and remaining drops without view-details decoration',()=>{const html='<div class="badge_row"><a class="badge_row_overlay" href="https://steamcommunity.com/my/gamecards/240/"></a><div class="badge_title">Counter-Strike: Source<div class="badge_view_details">View details</div></div><span class="progress_info_bold">3 card drops remaining</span></div>';assert.deepEqual(parseCards(html),[{appid:240,remaining:3,name:'Counter-Strike: Source'}]);});
 const row=(name,extra='')=>`<div class="achieveRow"><img src="https://example.test/icon.png"><h3>${name}</h3><h5>Description</h5>${extra}<div class="achievePercent">0.0%</div></div>`;
 function source(name,url,body){return {body,finalUrl:url};}
 test('fuentes paralelas toleran API caída y enriquecen HTML personal con rareza global',async()=>{

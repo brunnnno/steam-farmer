@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=7">
+  <link rel="stylesheet" href="/style.css?v=8">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -152,6 +152,13 @@
     </section>
 
     <section class="controls" aria-label="Game controls">
+      <section id="cardsPanel" class="cards-panel" aria-label="Automatic card farming" hidden>
+        <div class="cards-panel-heading"><div><span class="eyebrow">AUTOMATIC CARD FARMING</span><h3>Card drops</h3></div><span id="cardsSummary" class="cards-summary"></span></div>
+        <p id="cardsStatus" class="cards-panel-status" aria-live="polite"></p>
+        <div id="cardsList" class="cards-list"></div>
+        <small id="cardsUpdated" class="cards-footnote"></small>
+        <small class="cards-footnote">Pending counts come from Steam badges. Steam provides no completion time. This automatic list does not replace your saved manual games.</small>
+      </section>
       <div class="section-heading"><div><span class="eyebrow">MAKE IT YOURS</span><h2>Game controls</h2></div></div>
       <div class="input-row">
         <div class="search-box-wrapper">
@@ -203,6 +210,6 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager</span></footer>
   </div>
 
-  <script src="/app.js?v=7" defer></script>
+  <script src="/app.js?v=8" defer></script>
 </body>
 </html>
