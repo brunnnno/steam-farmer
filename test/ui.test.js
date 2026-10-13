@@ -4,7 +4,7 @@ function ui(t, responder) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
-  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;}};`);
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
@@ -51,11 +51,23 @@ test('direct verification uses the protocol endpoint and preserves it when refre
   await w.testUI.refresh();assert.ok(urls.at(-1).includes('method=protocol'));assert.match(w.document.getElementById('achListContainer').textContent,/Server-controlled/);
 });
 
-test('experimental unlock button is restricted to the exact target, direct reading and main account',async t=>{
-  const target={name:'Model Mania',description:'View all models.',apiname:'MODEL_API',unlocked:false,permission:null,blockPermission:null};
+test('individual activation requires direct reading, eligible schema and the main account',async t=>{
+  const target={name:'Any achievement',description:'A description',apiname:'REAL',unlocked:false,compatibility:{status:'provisional',canUnlock:true,reason:'Provisional'}};
   const w=ui(t,()=>response([target]));w.testUI.activate({tokenSource:'environment'});
-  await w.testUI.open(3764200,'Resident Evil Requiem');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
-  await w.testUI.open(3764200,'Resident Evil Requiem',true,'protocol');assert.match(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
-  w.testUI.activate({tokenSource:'local'});await w.testUI.refresh();assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
-  w.testUI.activate({tokenSource:'environment'});await w.testUI.open(550,'Another game',true,'protocol');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
+  await w.testUI.open(550,'A game');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);
+  await w.testUI.open(550,'A game',true,'protocol');assert.match(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);assert.match(w.document.getElementById('achListContainer').textContent,/Provisional compatibility/);
+  w.testUI.activate({tokenSource:'local'});await w.testUI.refresh();assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);
+  w.testUI.activate({tokenSource:'environment'});target.compatibility={status:'dependency',canUnlock:false,reason:'Progress stat'};await w.testUI.refresh();assert.equal(w.document.querySelector('.ach-info button').disabled,true);assert.match(w.document.getElementById('achListContainer').textContent,/Progress stat/);
+});
+test('cancelling individual activation sends no write request',async t=>{
+  const urls=[];const target={name:'One',apiname:'ONE',unlocked:false,compatibility:{status:'provisional',canUnlock:true}};
+  const w=ui(t,url=>{urls.push(url);return response([target]);});w.testUI.activate({tokenSource:'environment'});w.confirm=()=>false;
+  await w.testUI.open(550,'Game',true,'protocol');await w.testUI.unlock(target);assert.ok(!urls.includes('/api/achievement/unlock'));
+});
+test('individual activation submits only the chosen account, game and API name',async t=>{
+  const target={name:'One',apiname:'FIRST',unlocked:false,compatibility:{status:'provisional',canUnlock:true}};
+  const w=ui(t,()=>response([target]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});w.confirm=()=>true;
+  await w.testUI.open(550,'Game',true,'protocol');let submitted;
+  w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock'){submitted=JSON.parse(options.body);return {ok:true,json:async()=>({outcome:'unknown',message:'Not confirmed'})};}return {ok:true,json:async()=>response([target])};};
+  await w.testUI.unlock(target);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'FIRST'});assert.equal(w.document.querySelector('.ach-item').textContent.includes('Locked'),true);
 });

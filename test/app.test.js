@@ -9,7 +9,8 @@ const { createApp } = require('../bot');
 const { atomicWrite, Vault, appId, hour, sleepNow } = require('../lib/core');
 const { parseXml, parseHtml, parseCards } = require('../lib/steam-data');
 const PASSWORD = 'panel-test-password-123';
-function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.signature`; }
+const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
+function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:TOKEN_EXPIRY})).toString('base64url')}.signature`; }
 class FakeLogin extends EventEmitter {
   static latest;
   constructor(){super();FakeLogin.latest=this;this.steamID={toString:()=> '76561198000000001'};this.accountName='owner';this.refreshToken=token();}
@@ -187,4 +188,26 @@ test('single achievement experiment requires auth, CSRF, exact target and the ve
   const first=await f.request('/api/achievement-experiment',body);assert.equal(first.data.outcome,'confirmed');assert.equal(calls,1);
   assert.equal((await f.request('/api/achievement-experiment',body)).response.status,409);
   assert.equal(f.app.cfg.achievementExperiments['76561198000000001:3764200'].outcome,'confirmed');
+});
+test('individual unlock API preserves authentication, one-target validation, journal and cooldown',async t=>{
+  const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let calls=0;
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{individualWriter:async(_,id,apiname,options)=>{
+    calls++;options.beforeSend({appid:id,apiname,name:'Chosen',before:false});return {appid:id,apiname,outcome:'confirmed',after:true};
+  },protocolReader:async()=>({achievements:[{apiname:'FIRST',unlocked:true,compatibility:{status:'provisional',canUnlock:false}}],verified:true})});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  const body={accountId:'main',appid:550,apiname:'FIRST'};
+  assert.equal((await f.request('/api/achievement/unlock',body,{auth:false})).response.status,401);await f.login();
+  assert.equal((await f.request('/api/achievement/unlock',body,{csrf:false})).response.status,403);
+  await f.request('/api/status');const st=f.app.states.get('main');Object.assign(st,{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
+  assert.equal((await f.request('/api/achievement/unlock',{...body,achievements:['FIRST','SECOND']})).response.status,400);assert.equal(calls,0);
+  assert.equal((await f.request('/api/achievement/unlock',body)).data.outcome,'confirmed');
+  assert.equal((await f.request('/api/achievement/unlock',body)).response.status,409);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,apiname:'SECOND'})).response.status,429);
+  assert.ok(!f.app.cfg.achievementWrites['76561198000000001:550:SECOND']);
+  const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.data.achievements[0].compatibility.validatedOnAccount,true);
+});
+test('post-reconnect persistence check reads Model Mania and sends no achievement write',async t=>{
+  const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let writes=0;
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[550],gameNames:{550:'L4D2'}}]},{connect:true,protocolReader:async(_,id)=>({achievements:id===3764200?[{apiname:'46',name:'Model Mania',unlocked:true}]:[],verified:true,diagnostics:{serverControlled:0}})});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  const c=f.app.clients.get('main');c._send=()=>writes++;c.emit('webSession','unused',['sessionid=private']);await new Promise(resolve=>setImmediate(resolve));await f.login();
+  const status=await f.request('/api/status');assert.equal(status.data.achievementPersistence.unlocked,true);assert.equal(status.data.achievementPersistence.afterReconnect,true);assert.equal(writes,0);
 });

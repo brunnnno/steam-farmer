@@ -8,6 +8,7 @@ const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require(
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
 const { readProtocol } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
+const { unlockAchievement } = require('./lib/achievement-writer');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
@@ -57,6 +58,7 @@ function createApp(options = {}) {
   const steamRead = options.achievements || achievements;
   const protocolRead = options.protocolReader || readProtocol;
   const experimentWrite = options.experimentWriter || unlockModelMania;
+  const individualWrite = options.individualWriter || unlockAchievement;
   const experimentBusy = new Set();
   const achievementCache = new ResultCache(), achievementPending = new Map();
   const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
@@ -116,7 +118,7 @@ function createApp(options = {}) {
     client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
-      st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.steamId64 = client.steamID.toString();
+      st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.achievementPersistence = null; st.steamId64 = client.steamID.toString();
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
       acc.mySteamID = st.steamId64; save();
@@ -127,8 +129,14 @@ function createApp(options = {}) {
     });
     client.on('accountInfo', name => { if (isCurrent()) st.profileName = name || ''; });
     client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); st.webSessionVersion++; console.log(`[Steam] ${acc.id}: authenticated web session ready`);
-      const checkApp = acc.games.includes(550) ? 550 : acc.games[0];
+      const checkApp = acc.games.includes(550) ? 550 : acc.games[0] || 3764200;
       if (checkApp && st.connected && client.steamID && !st.linkCheckStarted) { st.linkCheckStarted = true;
+        if (isEnvironmentAccount(acc) && typeof client._send === 'function') protocolRead(client,3764200).then(result=>{
+          if(!isCurrent() || !st.connected) return;
+          const rows=result.achievements.filter(a=>a.apiname==='46' && a.name==='Model Mania');
+          st.achievementPersistence={appid:3764200,apiname:'46',name:'Model Mania',unlocked:rows.length===1?rows[0].unlocked:null,checkedAt:new Date().toISOString(),afterReconnect:true};
+          console.log('[Achievement persistence check] '+JSON.stringify(st.achievementPersistence));
+        }).catch(()=>{if(isCurrent())st.achievementPersistence={appid:3764200,name:'Model Mania',unlocked:null,error:'Could not read the achievement after reconnect.'};});
         if (typeof client._send === 'function') protocolRead(client, checkApp).then(result => { if (isCurrent()) console.log(`[Steam protocol check] app=${checkApp} verified=${result.verified} count=${result.achievements.length} unlocked=${result.achievements.filter(a=>a.unlocked===true).length} serverControlled=${result.diagnostics.serverControlled}`); }).catch(err => { if (isCurrent()) console.warn(`[Steam protocol check] app=${checkApp}: ${err.status ? err.message : 'unavailable'}`); });
         steamRead(acc, st, checkApp, process.env.STEAM_API_KEY || '').then(result => { if (isCurrent()) console.log(`[Steam link check] account=${acc.id} app=${checkApp} source=${result.source || 'none'} personalVerified=${Boolean(result.verified)} count=${result.achievements?.length || 0} unlocked=${(result.achievements || []).filter(a=>a.unlocked===true).length} diagnostics=${JSON.stringify(result.diagnostics?.personal || {})}`); }).catch(() => { if (isCurrent()) console.warn(`[Steam link check] account=${acc.id}: achievement retrieval unavailable`); }); }
       if (acc.cardFarming) scan(acc).catch(() => {}); } });
@@ -307,7 +315,7 @@ function createApp(options = {}) {
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), capabilities: { achievementRead: true, achievementWrite: false } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual', achievementBatchWrite:false } });
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }
@@ -335,6 +343,13 @@ function createApp(options = {}) {
         if (url.searchParams.get('refresh') !== '1' && cached) return json(res, 200, cached);
         if (!achievementPending.has(key)) {
           const task = Promise.resolve().then(() => method === 'protocol' ? protocolRead(clients.get(acc.id), id) : steamRead(acc, st, id, process.env.STEAM_API_KEY || '')).then(result => {
+            if(method==='protocol') for(const row of result.achievements||[]) {
+              const original=cfg.achievementExperiments?.[st.steamId64+':'+id];
+              const receipt=cfg.achievementWrites?.[st.steamId64+':'+id+':'+row.apiname] || (original?.apiname===row.apiname?original:null);
+              if(receipt) row.lastWriteOutcome=receipt.outcome;
+              if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
+              if(receipt && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,canUnlock:false,reason:'A write was already attempted for this achievement. Check the result; automatic retries are disabled.'};
+            }
             achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} webSession=${Boolean(st.webCookies)}`);
             if (result.outcome === 'catalog' && st.connected && Date.now() - st.lastWebRefresh > 120000) { st.lastWebRefresh = Date.now(); try { clients.get(acc.id)?.webLogOn(); } catch {} }
@@ -343,6 +358,34 @@ function createApp(options = {}) {
           achievementPending.set(key, task);
         }
         return json(res, 200, await achievementPending.get(key));
+      }
+      if (url.pathname === '/api/achievement/unlock' && req.method === 'POST') {
+        const acc=getAccount(req,url,data),st=stateFor(acc.id);
+        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches)throw fail('Individual activation requires the connected main account managed by Render.',409);
+        if(st.isCollisionPaused)throw fail('Stop playing on the other device before unlocking an achievement.',409);
+        const id=appId(data.appid),apiName=text(data.apiname,256);
+        if(!apiName||data.achievements!==undefined||data.unlock===false)throw fail('Select exactly one achievement to activate.');
+        rate(`individual:${acc.id}`,5,60000);
+        if(experimentBusy.has(acc.id))throw fail('An achievement activation is already running.',409);
+        const client=clients.get(acc.id);if(!client)throw fail('Steam is not connected.',409);
+        experimentBusy.add(acc.id);
+        const auditKey=st.steamId64+':'+id+':'+apiName;
+        try {
+          const result=await individualWrite(client,id,apiName,{beforeSend:evidence=>{
+            if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('The Steam session changed.',409);
+            cfg.achievementWrites ||= {};
+            const original=cfg.achievementExperiments?.[st.steamId64+':'+id];
+            if(cfg.achievementWrites[auditKey] || original?.apiname===apiName)throw fail('A write was already attempted for this achievement. Refresh to verify; retries require review.',409);
+            if(st.lastAchievementWrite && Date.now()-st.lastAchievementWrite<60000)throw fail('Wait one minute between achievement writes.',429);
+            const entries=Object.entries(cfg.achievementWrites);
+            if(entries.length>=128){const completed=entries.find(([,v])=>['confirmed','already_unlocked'].includes(v.outcome));if(!completed)throw fail('The local write journal is full of unresolved results. Review them before continuing.',409);delete cfg.achievementWrites[completed[0]];}
+            cfg.achievementWrites[auditKey]={...evidence,outcome:'requested'};save();st.lastAchievementWrite=Date.now();
+            console.log('[Achievement activation requested] '+JSON.stringify(evidence));
+          }});
+          if(cfg.achievementWrites?.[auditKey]){cfg.achievementWrites[auditKey]=result;save();}
+          console.log('[Achievement activation result] '+JSON.stringify(result));
+          return json(res,200,result);
+        } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
       }
       if (url.pathname === '/api/achievement-experiment' && req.method === 'POST') {
         rate(`experiment:${token}`, 3, 60000);
@@ -358,7 +401,7 @@ function createApp(options = {}) {
             if(clients.get(acc.id)!==client || !st.connected || st.isCollisionPaused) throw fail('The Steam session changed.',409);
             const key=st.steamId64+':'+TARGET.appid;
             cfg.achievementExperiments ||= {};
-            if(cfg.achievementExperiments[key]) throw fail('One write was already attempted for this account. Refresh to verify; retries require a new review.',409);
+            if(cfg.achievementWrites?.[key+':'+data.apiname] || cfg.achievementExperiments[key]) throw fail('One write was already attempted for this account. Refresh to verify; retries require a new review.',409);
             cfg.achievementExperiments[key]={...evidence,outcome:'requested'};save();
             console.log('[Achievement experiment requested] '+JSON.stringify(evidence));
           }});

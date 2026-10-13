@@ -329,3 +329,7 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
   .ach-toolbar > div:last-child { width:100%; min-width:0; flex-wrap:wrap; }
   .ach-toolbar select,.ach-toolbar input { min-width:0; flex:1 1 140px; }
 }
+
+.ach-compatibility { margin-top:8px; color:#9dc8da; font-size:10px; line-height:1.5; }
+.ach-write-reason { display:block; margin-top:6px; line-height:1.5; }
+.ach-info button { margin-top:10px; white-space:normal; }

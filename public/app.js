@@ -151,20 +151,28 @@ function renderAchModal() {
     if(a.unlockTimestamp) info.append(element('small',' · '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'))); else if(a.unlockDate) info.append(element('small',a.unlockDate));
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
     if(a.hasProgressDependency) info.append(element('small',' · Progress dependency: experimental write unavailable'));
-    if(currentAchAppId===3764200 && currentAchMethod==='protocol' && a.name==='Model Mania' && a.description==='View all models.' && a.unlocked===false && active?.tokenSource==='environment') {
-      const unlock=button(experimentBusy?'Checking Steam…':'Unlock Model Mania (experiment)',()=>unlockModelManiaFromWeb(a));unlock.disabled=experimentBusy || a.serverControlled || a.hasProgressDependency || [a.permission,a.blockPermission].some(p=>p!=null && String(p)!=='0'); info.append(unlock);
-    }
+    if(currentAchMethod==='protocol' && a.compatibility) {
+      const labels={provisional:'Provisional compatibility',restricted:'Restricted',dependency:'Progress dependent',insufficient_data:'Insufficient data'};
+      const label=element('div',a.compatibility.validatedOnAccount?'Verified on this account':labels[a.compatibility.status]||'Insufficient data','ach-compatibility');
+      label.title=a.compatibility.reason;info.append(label);
+      if(a.unlocked===false && active?.tokenSource==='environment') {
+        const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));
+        unlock.disabled=experimentBusy || !a.compatibility.canUnlock;unlock.title=a.compatibility.reason;info.append(unlock);
+        if(!a.compatibility.canUnlock)info.append(element('small',a.compatibility.reason,'ach-write-reason'));
+      }
+    } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Use Verify directly to check activation compatibility.','ach-write-reason'));
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
   }
   if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
 }
-async function unlockModelManiaFromWeb(row) {
-  if(experimentBusy || currentAchAppId!==3764200 || row.name!=='Model Mania' || !confirm('Activate only Model Mania in Resident Evil Requiem on the selected main Steam account? Steam will be re-read before and after one write.')) return;
-  const account=activeAccountId;
+async function unlockIndividualAchievement(row) {
+  if(experimentBusy || currentAchMethod!=='protocol' || !row.compatibility?.canUnlock || !currentAchAppId) return;
+  const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;
+  if(!confirm(`Activate only "${row.name}" in "${title}" on the selected main Steam account? Steam will be re-read before and after one write. Compatibility is provisional until verified.`))return;
   experimentBusy=true;renderAchModal();
-  try {const result=await api('/api/achievement-experiment',{accountId:account,appid:3764200,name:'Model Mania',apiname:row.apiname});notice(result.message);}
+  try {const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname});notice(result.message);}
   catch(e){notice(e.message);}
-  finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===3764200)await openAchModal(3764200,currentAchGameName,true,'protocol');}
+  finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===id && $('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');else if($('achModal').style.display==='flex')renderAchModal();}
 }
 async function addGame(id,name) { const account=activeAccountId; const result=await action('/api/add',{appid:Number(id),name:name||''}); if(result && account===activeAccountId) $('searchInput').value=''; }
 function removeGame(id){return action('/api/remove',{appid:id});}
