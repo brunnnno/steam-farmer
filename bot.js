@@ -7,6 +7,7 @@ const SteamUser = require('steam-user');
 const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require('steam-session');
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
 const { readProtocol } = require('./lib/steam-protocol');
+const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
@@ -55,6 +56,8 @@ function createApp(options = {}) {
   const Session = options.LoginSession || LoginSession;
   const steamRead = options.achievements || achievements;
   const protocolRead = options.protocolReader || readProtocol;
+  const experimentWrite = options.experimentWriter || unlockModelMania;
+  const experimentBusy = new Set();
   const achievementCache = new ResultCache(), achievementPending = new Map();
   const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
@@ -340,6 +343,29 @@ function createApp(options = {}) {
           achievementPending.set(key, task);
         }
         return json(res, 200, await achievementPending.get(key));
+      }
+      if (url.pathname === '/api/achievement-experiment' && req.method === 'POST') {
+        rate(`experiment:${token}`, 3, 60000);
+        const acc = getAccount(req,url,data), st = stateFor(acc.id);
+        if (!isEnvironmentAccount(acc) || !st.connected || !st.tokenAccountMatches) throw fail('The experiment requires the connected main account managed by Render.',409);
+        if (st.isCollisionPaused) throw fail('Stop playing on the other device before the experiment.',409);
+        if (data.appid !== TARGET.appid || data.name !== TARGET.name || typeof data.apiname !== 'string' || !data.apiname || data.apiname.length>256) throw fail('Only the selected Model Mania achievement is authorized for this experiment.');
+        if (experimentBusy.has(acc.id)) throw fail('An experiment is already running.',409);
+        const client=clients.get(acc.id); if(!client) throw fail('Steam is not connected.',409);
+        experimentBusy.add(acc.id);
+        try {
+          const result=await experimentWrite(client,{expectedApiname:data.apiname,beforeSend:evidence=>{
+            if(clients.get(acc.id)!==client || !st.connected || st.isCollisionPaused) throw fail('The Steam session changed.',409);
+            const key=st.steamId64+':'+TARGET.appid;
+            cfg.achievementExperiments ||= {};
+            if(cfg.achievementExperiments[key]) throw fail('One write was already attempted for this account. Refresh to verify; retries require a new review.',409);
+            cfg.achievementExperiments[key]={...evidence,outcome:'requested'};save();
+            console.log('[Achievement experiment requested] '+JSON.stringify(evidence));
+          }});
+          if(cfg.achievementExperiments?.[st.steamId64+':'+TARGET.appid]) {cfg.achievementExperiments[st.steamId64+':'+TARGET.appid]=result;save();}
+          console.log('[Achievement experiment result] '+JSON.stringify(result));
+          return json(res,200,result);
+        } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
       }
       if (['/api/unlock-batch', '/api/lock-batch', '/api/queue-achievements'].includes(url.pathname) && req.method === 'POST') throw fail(WRITE_UNAVAILABLE, 501);
       if (url.pathname === '/api/set-webhook' && req.method === 'POST') {

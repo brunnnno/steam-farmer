@@ -33,3 +33,7 @@ The test suite covers block/bit mapping, bit 31, missing values, timestamps that
 Implement a separate explicit user action for a chosen client-writable achievement. Fetch a fresh account/game snapshot; validate schema identifiers and permissions; merge only the selected changes with the current mask; send the current CRC; reject failed validation or stale state; then re-read from Steam and independently confirm the requested state. Do not update the UI from a local mask or an HTTP success alone. Handle progress-dependent stats and competing writes before adding batches.
 
 Reading a protected achievement does not grant permission to change it. No compatibility guarantee is made for every game or for future Steam protocol changes.
+
+## Selected single-achievement experiment
+
+The user selected Resident Evil Requiem, Model Mania (View all models), AppID 3764200. `lib/achievement-experiment.js` prepares a single-bit mutation using a fresh schema, preserves unrelated stats, uses the current CRC and same authenticated account, validates the response and immediately re-reads Steam. Unknown permissions, progress dependencies, missing state, identity changes, competing sessions and repeated writes are rejected. A separate authenticated CSRF-protected POST and explicit UI confirmation initiate the experiment. No startup code writes anything. General unlock/reset/batch endpoints remain disabled. Evidence is stored before sending; local evidence retention remains subject to Render Free filesystem limits. No live inspection or write has yet been performed.

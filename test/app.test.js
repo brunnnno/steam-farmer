@@ -175,3 +175,16 @@ test('direct verification requires a connected account and stays separate from w
   assert.equal((await f.request('/api/achievements?accountId=a&appid=550&method=unknown')).response.status,400);
   const css=await fetch(f.base+'/style.css',{headers:{'Sec-Fetch-Site':'cross-site'}});assert.equal(css.status,200);assert.match(css.headers.get('content-type'),/text\/css/);
 });
+test('single achievement experiment requires auth, CSRF, exact target and the verified main account',async t=>{
+  const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();
+  let calls=0;
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{experimentWriter:async(_,options)=>{calls++;options.beforeSend({appid:3764200,apiname:'MODEL_API',name:'Model Mania',before:false});return {outcome:'confirmed',appid:3764200,apiname:'MODEL_API',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  const body={accountId:'main',appid:3764200,name:'Model Mania',apiname:'MODEL_API'};
+  assert.equal((await f.request('/api/achievement-experiment',body,{auth:false})).response.status,401);
+  await f.login();assert.equal((await f.request('/api/achievement-experiment',body,{csrf:false})).response.status,403);
+  await f.request('/api/status');const st=f.app.states.get('main');st.connected=true;st.tokenAccountMatches=true;st.steamId64='76561198000000001';f.app.clients.set('main',new FakeUser({}));
+  assert.equal((await f.request('/api/achievement-experiment',{...body,appid:550})).response.status,400);assert.equal(calls,0);
+  const first=await f.request('/api/achievement-experiment',body);assert.equal(first.data.outcome,'confirmed');assert.equal(calls,1);
+  assert.equal((await f.request('/api/achievement-experiment',body)).response.status,409);
+  assert.equal(f.app.cfg.achievementExperiments['76561198000000001:3764200'].outcome,'confirmed');
+});

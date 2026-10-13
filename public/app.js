@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 let csrf = '', activeAccountId = sessionStorage.getItem('sf_account') || '', accounts = [], active = null;
 let currentAchList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '', currentAchMethod = 'web';
+let experimentBusy = false;
 let filterStatus = 'all', filterRarity = 'all', currentSort = 'default', searchQuery = '';
 let loginAttempt = null, loginTimer = null, loginTarget = null, loginSerial = 0, noticeTimer, statusBusy = false, searchSerial = 0, achSerial = 0;
 function notice(message) { $('notice').textContent = message; $('notice').hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').hidden = true, 10000); }
@@ -149,9 +150,21 @@ function renderAchModal() {
     const info=element('div',undefined,'ach-info'); info.append(element('div',a.name,'ach-title'),element('div',a.description,'ach-desc'),element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
     if(a.unlockTimestamp) info.append(element('small',' · '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'))); else if(a.unlockDate) info.append(element('small',a.unlockDate));
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
+    if(a.hasProgressDependency) info.append(element('small',' · Progress dependency: experimental write unavailable'));
+    if(currentAchAppId===3764200 && currentAchMethod==='protocol' && a.name==='Model Mania' && a.description==='View all models.' && a.unlocked===false && active?.tokenSource==='environment') {
+      const unlock=button(experimentBusy?'Checking Steam…':'Unlock Model Mania (experiment)',()=>unlockModelManiaFromWeb(a));unlock.disabled=experimentBusy || a.serverControlled || a.hasProgressDependency || [a.permission,a.blockPermission].some(p=>p!=null && String(p)!=='0'); info.append(unlock);
+    }
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
   }
   if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+}
+async function unlockModelManiaFromWeb(row) {
+  if(experimentBusy || currentAchAppId!==3764200 || row.name!=='Model Mania' || !confirm('Activate only Model Mania in Resident Evil Requiem on the selected main Steam account? Steam will be re-read before and after one write.')) return;
+  const account=activeAccountId;
+  experimentBusy=true;renderAchModal();
+  try {const result=await api('/api/achievement-experiment',{accountId:account,appid:3764200,name:'Model Mania',apiname:row.apiname});notice(result.message);}
+  catch(e){notice(e.message);}
+  finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===3764200)await openAchModal(3764200,currentAchGameName,true,'protocol');}
 }
 async function addGame(id,name) { const account=activeAccountId; const result=await action('/api/add',{appid:Number(id),name:name||''}); if(result && account===activeAccountId) $('searchInput').value=''; }
 function removeGame(id){return action('/api/remove',{appid:id});}

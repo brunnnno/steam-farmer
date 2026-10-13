@@ -4,7 +4,7 @@ function ui(t, responder) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
-  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;}};`);
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;}};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
@@ -49,4 +49,13 @@ test('direct verification uses the protocol endpoint and preserves it when refre
   const urls=[];const w=ui(t,url=>{urls.push(url);return response([{name:'Direct',unlocked:true,serverControlled:true}]);});
   await w.testUI.open(550,'Left 4 Dead 2',true,'protocol');assert.ok(urls.at(-1).includes('method=protocol'));
   await w.testUI.refresh();assert.ok(urls.at(-1).includes('method=protocol'));assert.match(w.document.getElementById('achListContainer').textContent,/Server-controlled/);
+});
+
+test('experimental unlock button is restricted to the exact target, direct reading and main account',async t=>{
+  const target={name:'Model Mania',description:'View all models.',apiname:'MODEL_API',unlocked:false,permission:null,blockPermission:null};
+  const w=ui(t,()=>response([target]));w.testUI.activate({tokenSource:'environment'});
+  await w.testUI.open(3764200,'Resident Evil Requiem');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
+  await w.testUI.open(3764200,'Resident Evil Requiem',true,'protocol');assert.match(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
+  w.testUI.activate({tokenSource:'local'});await w.testUI.refresh();assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
+  w.testUI.activate({tokenSource:'environment'});await w.testUI.open(550,'Another game',true,'protocol');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock Model Mania/);
 });
