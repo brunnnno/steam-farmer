@@ -14,7 +14,7 @@ test('fuentes paralelas toleran API caída y enriquecen HTML personal con rareza
     return source('',url,row('One')+row('Two'));
   };
   const pending=achievements({}, {steamId64:sid,webCookies:'session'},240,'',request);
-  assert.equal(called.length,5);release();const result=await pending;
+  assert.equal(called.length,6);release();const result=await pending;
   assert.equal(result.verified,true);assert.equal(result.achievements.length,2);assert.equal(result.achievements[0].unlocked,true);assert.equal(result.achievements[1].unlocked,false);assert.equal(result.achievements[0].percent,0);
 });
 test('catálogo global funciona sin sesión y no inventa estados ni apinames',async()=>{
