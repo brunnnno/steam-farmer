@@ -29,8 +29,20 @@ let webCookies = '';
 let cardDropGames = [];
 let mySteamID = cfg.mySteamID || '';
 
-// Memoria caché para evitar bloqueos de Steam Community
-const achCache = {};
+// Memoria caché para evitar saturación de Steam y garantizar carga instantánea
+const achMemoryCache = {};
+
+const VALVE_ALIASES = {
+  550: 'L4D2',
+  440: 'TF2',
+  730: 'CSGO',
+  240: 'CSS',
+  220: 'HL2',
+  620: 'Portal2',
+  500: 'L4D',
+  300: 'DODS',
+  10: 'CS'
+};
 
 const PRESETS = {
   competitivos: {
@@ -50,6 +62,7 @@ const PRESETS = {
   }
 };
 
+// Cliente HTTP con soporte nativo de redirecciones 301/302 y cookies Age Gate
 function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   if (typeof customHeaders === 'function') {
     cb = customHeaders;
@@ -99,6 +112,7 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   }
 }
 
+// Webhook de Discord con proxy anti-1015
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
@@ -178,6 +192,7 @@ client.on('webSession', (sessionID, cookies) => {
 
 client.on('error', (e) => console.error('Error Steam:', e.message));
 
+// Anti-Colisión Instantáneo
 client.on('playingElsewhere', () => {
   console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC. Pausando bot...');
   isCollisionPaused = true;
@@ -193,6 +208,7 @@ client.on('playingElsewhere', () => {
   }, 10 * 60 * 1000);
 });
 
+// Comandos por Chat de Steam
 client.on('friendMessage', (steamID, message) => {
   const msg = message.trim().toLowerCase();
   const args = msg.split(' ');
@@ -216,6 +232,7 @@ client.on('friendMessage', (steamID, message) => {
   }
 });
 
+// Motor de logros orgánicos
 setInterval(() => {
   if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
   const now = Date.now();
@@ -348,6 +365,7 @@ function getTag(body, tag) {
   return content;
 }
 
+// Extractor XML de perfil
 function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   const achievements = [];
   const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
@@ -393,16 +411,21 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   return achievements;
 }
 
-function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
+// Extractor HTML con expresiones regulares tolerantes a espacios y clases dinámicas
+function parseAchievementsFromHtml(html, unlockedSet) {
   const list = [];
-  const parts = html.split('<div class="achieveRow">');
-  for (let i = 1; i < parts.length; i++) {
-    const block = parts[i];
+  const regexBlock = /<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["'][^>]*>([\s\S]*?)(?=(?:<div\b[^>]*class=["'][^"']*\bachieveRow\b[^"']*["']|<div\s+id=["']footer["']|$))/gi;
+  let match;
+
+  while ((match = regexBlock.exec(html)) !== null) {
+    const classAttr = match[1];
+    const block = match[2];
+
     const imgM = /<img\b[^>]*src=["']([^"']+)["']/i.exec(block);
     const h3M = /<h3>([\s\S]*?)<\/h3>/i.exec(block);
     const h5M = /<h5>([\s\S]*?)<\/h5>/i.exec(block);
-    const pctM = /<div\b[^>]*class=["'][^"']*achievePercent[^"']*["'][^>]*>\s*([0-9.]+)\s*%/i.exec(block);
-    const dateM = /<div\b[^>]*class=["'][^"']*achieveUnlockTime[^"']*["'][^>]*>([\s\S]*?)<\/div>/i.exec(block);
+    const pctM = /class=["'][^"']*achievePercent[^"']*["'][^>]*>\s*([0-9.]+)\s*%/i.exec(block);
+    const dateM = /class=["'][^"']*achieveUnlockTime[^"']*["'][^>]*>([\s\S]*?)<\/div>/i.exec(block);
 
     if (h3M) {
       const name = h3M[1].replace(/<[^>]+>/g, '').trim();
@@ -418,7 +441,7 @@ function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
       else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
 
       const rawDate = dateM ? dateM[1].replace(/<[^>]+>/g, '').replace(/Desbloqueado el\s*/i, '').trim() : null;
-      const isUnlocked = Boolean(rawDate) || unlockedLocally.includes(apiname);
+      const isUnlocked = classAttr.includes('unlocked') || Boolean(rawDate) || unlockedSet.has(name) || unlockedSet.has(apiname);
 
       list.push({
         apiname: apiname,
@@ -439,19 +462,23 @@ function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   return list;
 }
 
-// Extractor con memoria caché local
+// Motor de obtención de logros con fallback en cascada y caché
 function obtenerLogrosJuego(appid, cb) {
-  // 1. Si ya se cargaron antes, devolverlos directamente de la memoria caché
-  if (achCache[appid] && achCache[appid].achievements && achCache[appid].achievements.length > 0) {
-    const unlockedLocally = cfg.unlockedAchievements[appid] || [];
-    const cachedList = achCache[appid].achievements.map(a => ({
+  const unlockedLocally = cfg.unlockedAchievements[appid] || [];
+  const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
+  const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
+
+  // 1. Verificación en caché de memoria
+  if (achMemoryCache[appid] && achMemoryCache[appid].achievements && achMemoryCache[appid].achievements.length > 0) {
+    const cachedList = achMemoryCache[appid].achievements.map(a => ({
       ...a,
-      unlocked: a.unlocked || unlockedLocally.includes(a.apiname),
-      inQueue: (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === a.apiname)
+      unlocked: a.unlocked || unlockedLocally.includes(a.apiname) || unlockedLocally.includes(a.name),
+      inQueue: (cfg.achievementQueue || []).some(q => q.appid == appid && (q.apiname === a.apiname || q.name === a.name))
     }));
-    return cb({ achievements: cachedList, isPrivate: achCache[appid].isPrivate });
+    return cb({ achievements: cachedList, isPrivate: achMemoryCache[appid].isPrivate });
   }
 
+  // 2. Porcentajes globales oficiales
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -464,13 +491,11 @@ function obtenerLogrosJuego(appid, cb) {
       }
     } catch (e) {}
 
-    const unlockedLocally = cfg.unlockedAchievements[appid] || [];
-    const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
-    const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
-
+    // 3. Consulta de perfil por XML
+    const aliasOrId = VALVE_ALIASES[appid] || appid;
     const targetXmlUrl = userSteamId
-      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
-      : `https://steamcommunity.com/my/stats/${appid}/?xml=1`;
+      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${aliasOrId}/?xml=1`
+      : `https://steamcommunity.com/stats/${aliasOrId}/achievements/?xml=1`;
 
     fetchWithRedirects(targetXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
       let isProfilePrivate = false;
@@ -481,39 +506,40 @@ function obtenerLogrosJuego(appid, cb) {
       if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
         const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
         if (list.length > 0) {
-          achCache[appid] = { achievements: list, isPrivate: false };
-          return cb(achCache[appid]);
+          achMemoryCache[appid] = { achievements: list, isPrivate: false };
+          return cb(achMemoryCache[appid]);
         }
       }
 
-      const targetUserHtml = userSteamId
-        ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?tab=achievements&l=spanish`
-        : `https://steamcommunity.com/my/stats/${appid}/?tab=achievements&l=spanish`;
+      // 4. Consulta directa de la página HTML pública (contiene los 101 logros y porcentajes reales)
+      const unlockedSet = new Set(unlockedLocally);
+      const urlGlobalHtml = `https://steamcommunity.com/stats/${aliasOrId}/achievements/?l=spanish`;
 
-      fetchWithRedirects(targetUserHtml, xmlHeaders, 5, (errUHtml, uHtmlData) => {
-        if (uHtmlData && (uHtmlData.includes('profile_private') || uHtmlData.includes('Este perfil es privado') || uHtmlData.includes('This profile is private'))) {
-          isProfilePrivate = true;
-        }
-
-        if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow') && !isProfilePrivate) {
-          const listU = parseAchievementsFromHtml(uHtmlData, percentMap, unlockedLocally);
-          if (listU.length > 0) {
-            achCache[appid] = { achievements: listU, isPrivate: false };
-            return cb(achCache[appid]);
+      fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
+        if (!errHtml && htmlData && (htmlData.includes('achieveRow') || htmlData.includes('achieveTxtHolder'))) {
+          const listG = parseAchievementsFromHtml(htmlData, unlockedSet);
+          if (listG.length > 0) {
+            achMemoryCache[appid] = { achievements: listG, isPrivate: isProfilePrivate };
+            return cb(achMemoryCache[appid]);
           }
         }
 
-        const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
-        fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
-          if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
-            const listG = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
-            if (listG.length > 0) {
-              achCache[appid] = { achievements: listG, isPrivate: isProfilePrivate };
-              return cb(achCache[appid]);
+        // Intento secundario por ID numérico si se utilizó un alias
+        if (aliasOrId !== appid) {
+          const urlNumHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
+          fetchWithRedirects(urlNumHtml, {}, 5, (errNum, numHtml) => {
+            if (!errNum && numHtml && numHtml.includes('achieveRow')) {
+              const listNum = parseAchievementsFromHtml(numHtml, unlockedSet);
+              if (listNum.length > 0) {
+                achMemoryCache[appid] = { achievements: listNum, isPrivate: isProfilePrivate };
+                return cb(achMemoryCache[appid]);
+              }
             }
-          }
+            cb({ achievements: [], isPrivate: isProfilePrivate });
+          });
+        } else {
           cb({ achievements: [], isPrivate: isProfilePrivate });
-        });
+        }
       });
     });
   });
@@ -696,6 +722,9 @@ const server = http.createServer((req, res) => {
             if (!cfg.unlockedAchievements[appid].includes(it.apiname)) {
               cfg.unlockedAchievements[appid].push(it.apiname);
             }
+            if (!cfg.unlockedAchievements[appid].includes(it.name)) {
+              cfg.unlockedAchievements[appid].push(it.name);
+            }
           });
           guardarConfig();
 
@@ -735,7 +764,7 @@ const server = http.createServer((req, res) => {
           const { appid, gameName, items } = data;
           let baseDelay = 5;
           items.forEach(it => {
-            const alreadyQueued = cfg.achievementQueue.some(q => q.appid == appid && q.apiname === it.apiname);
+            const alreadyQueued = cfg.achievementQueue.some(q => q.appid == appid && (q.apiname === it.apiname || q.name === it.name));
             if (!alreadyQueued) {
               const delayMin = baseDelay;
               cfg.achievementQueue.push({
@@ -1008,19 +1037,19 @@ const server = http.createServer((req, res) => {
       </div>
 
       <div class="privacy-banner" id="achPrivacyWarning">
-        ⚠️ <strong>Aviso de Privacidad:</strong> Tus <em>«Detalles de los juegos»</em> están configurados en <strong>Privado</strong> o <em>Solo amigos</em> en Steam. El bot muestra el catálogo general, pero Steam no permite leer qué logros tienes conseguidos hasta que cambies esa opción a <strong>Público</strong> en tu perfil de Steam.
+        ⚠️ <strong>Aviso de Privacidad:</strong> Tus <em>«Detalles de los juegos»</em> están en <strong>Privado</strong> o <em>Solo amigos</em> en Steam. El bot muestra el catálogo público pero no puede leer tu progreso hasta que cambies esa opción a <strong>Público</strong> en tu perfil de Steam.
       </div>
 
       <div class="ach-toolbar">
         <div class="ach-filters">
-          <button class="filter-btn active" onclick="setFilter('status', 'all')">Todos</button>
-          <button class="filter-btn" onclick="setFilter('status', 'unlocked')">✓ Conseguidos</button>
-          <button class="filter-btn" onclick="setFilter('status', 'locked')">🔒 Bloqueados</button>
-          <button class="filter-btn" onclick="setFilter('status', 'queue')">⏳ En Cola</button>
+          <button class="filter-btn active" data-filter="status" data-val="all" onclick="setFilter('status', 'all')">Todos</button>
+          <button class="filter-btn" data-filter="status" data-val="unlocked" onclick="setFilter('status', 'unlocked')">✓ Conseguidos</button>
+          <button class="filter-btn" data-filter="status" data-val="locked" onclick="setFilter('status', 'locked')">🔒 Bloqueados</button>
+          <button class="filter-btn" data-filter="status" data-val="queue" onclick="setFilter('status', 'queue')">⏳ En Cola</button>
           <span style="color:rgba(255,255,255,0.2);">|</span>
-          <button class="filter-btn" onclick="setFilter('rarity', 'mythic')">🟡 Míticos (&lt;5%)</button>
-          <button class="filter-btn" onclick="setFilter('rarity', 'epic')">🟣 Épicos (5-15%)</button>
-          <button class="filter-btn" onclick="setFilter('rarity', 'rare')">🔵 Raros (15-40%)</button>
+          <button class="filter-btn" data-filter="rarity" data-val="mythic" onclick="setFilter('rarity', 'mythic')">🟡 Míticos (&lt;5%)</button>
+          <button class="filter-btn" data-filter="rarity" data-val="epic" onclick="setFilter('rarity', 'epic')">🟣 Épicos (5-15%)</button>
+          <button class="filter-btn" data-filter="rarity" data-val="rare" onclick="setFilter('rarity', 'rare')">🔵 Raros (15-40%)</button>
         </div>
         
         <div style="display:flex; gap:8px; align-items:center;">
@@ -1032,7 +1061,7 @@ const server = http.createServer((req, res) => {
             <option value="rarity_common">Más comunes primero</option>
             <option value="alpha">Alfabético (A-Z)</option>
           </select>
-          <input type="text" id="achSearchInput" placeholder="Buscar logro..." style="max-width:180px; padding:6px 12px; font-size:0.8rem;" oninput="applyFilters()">
+          <input type="text" id="achSearchInput" placeholder="Buscar logro..." style="max-width:180px; padding:6px 12px; font-size:0.8rem;" oninput="onSearchInput(this.value)">
         </div>
       </div>
 
@@ -1157,6 +1186,7 @@ const server = http.createServer((req, res) => {
     var filterStatus = 'all';
     var filterRarity = 'all';
     var currentSort = 'default';
+    var searchQuery = '';
 
     function checkAuth() {
       if (!savedPin) {
@@ -1293,6 +1323,7 @@ const server = http.createServer((req, res) => {
       });
     }
 
+    // Modal de Logros con Caché
     async function openAchModal(appid, title) {
       currentAchAppId = appid;
       currentAchGameName = title;
@@ -1300,13 +1331,18 @@ const server = http.createServer((req, res) => {
       filterStatus = 'all';
       filterRarity = 'all';
       currentSort = 'default';
+      searchQuery = '';
+      
       document.getElementById('achSortSelect').value = 'default';
+      document.getElementById('achSearchInput').value = '';
       document.getElementById('achGameTitle').innerText = title;
       document.getElementById('achProgressText').innerText = 'Consultando base de datos de Steam...';
       document.getElementById('achProgressFill').style.width = '0%';
       document.getElementById('achPrivacyWarning').style.display = 'none';
-      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Cargando catálogo de trofeos y verificando privacidad...</p>';
+      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Cargando catálogo completo de trofeos y sincronizando perfil...</p>';
       document.getElementById('achModal').style.display = 'flex';
+      
+      updateFilterButtonsUI();
       updateBatchToolbar();
 
       try {
@@ -1326,18 +1362,28 @@ const server = http.createServer((req, res) => {
 
     function closeAchModal() { document.getElementById('achModal').style.display = 'none'; }
 
-    function setFilter(type, val) {
-      if (type === 'status') filterStatus = val;
-      if (type === 'rarity') filterRarity = val;
-      
-      document.querySelectorAll('.filter-btn').forEach(b => {
-        var txt = b.innerText.toLowerCase();
-        if (val === 'all' && txt === 'todos') b.classList.add('active');
-        else if (val !== 'all' && txt.includes(val)) b.classList.add('active');
-        else if (type === 'status' && (txt === 'todos' || txt.includes('conseguidos') || txt.includes('bloqueados') || txt.includes('cola'))) b.classList.remove('active');
-        else if (type === 'rarity' && (txt.includes('míticos') || txt.includes('épicos') || txt.includes('raros'))) b.classList.remove('active');
+    function updateFilterButtonsUI() {
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        var type = btn.getAttribute('data-filter');
+        var val = btn.getAttribute('data-val');
+        if (type === 'status') {
+          if (val === filterStatus) btn.classList.add('active');
+          else btn.classList.remove('active');
+        } else if (type === 'rarity') {
+          if (val === filterRarity) btn.classList.add('active');
+          else btn.classList.remove('active');
+        }
       });
-      applyFilters();
+    }
+
+    function setFilter(type, val) {
+      if (type === 'status') {
+        filterStatus = val;
+      } else if (type === 'rarity') {
+        filterRarity = (filterRarity === val) ? 'all' : val;
+      }
+      updateFilterButtonsUI();
+      renderAchModal();
     }
 
     function setSort(val) {
@@ -1345,50 +1391,15 @@ const server = http.createServer((req, res) => {
       renderAchModal();
     }
 
-    function getSortedList() {
-      var arr = [...currentAchList];
-      if (currentSort === 'locked_first') {
-        arr.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? 1 : -1));
-      } else if (currentSort === 'unlocked_first') {
-        arr.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? -1 : 1));
-      } else if (currentSort === 'rarity_rare') {
-        arr.sort((a, b) => a.percent - b.percent);
-      } else if (currentSort === 'rarity_common') {
-        arr.sort((a, b) => b.percent - a.percent);
-      } else if (currentSort === 'alpha') {
-        arr.sort((a, b) => a.name.localeCompare(b.name));
-      }
-      return arr;
-    }
-
-    function applyFilters() {
-      var query = document.getElementById('achSearchInput').value.toLowerCase();
-      var items = document.querySelectorAll('.ach-item');
-      
-      items.forEach(function(it) {
-        var apiname = it.getAttribute('data-apiname');
-        var a = currentAchList.find(x => x.apiname === apiname);
-        if (!a) return;
-
-        var matchesQuery = a.name.toLowerCase().includes(query) || a.description.toLowerCase().includes(query);
-        
-        var matchesStatus = true;
-        if (filterStatus === 'locked') matchesStatus = !a.unlocked;
-        else if (filterStatus === 'unlocked') matchesStatus = a.unlocked;
-        else if (filterStatus === 'queue') matchesStatus = a.inQueue;
-
-        var matchesRarity = true;
-        if (filterRarity === 'mythic') matchesRarity = a.percent < 5.0;
-        else if (filterRarity === 'epic') matchesRarity = a.percent >= 5.0 && a.percent < 15.0;
-        else if (filterRarity === 'rare') matchesRarity = a.percent >= 15.0 && a.percent < 40.0;
-
-        it.style.display = (matchesQuery && matchesStatus && matchesRarity) ? 'flex' : 'none';
-      });
+    function onSearchInput(val) {
+      searchQuery = val.trim().toLowerCase();
+      renderAchModal();
     }
 
     function renderAchModal() {
       var cont = document.getElementById('achListContainer');
       cont.innerHTML = '';
+
       if (!currentAchList || !currentAchList.length) {
         document.getElementById('achProgressText').innerText = '0 logros disponibles';
         document.getElementById('achProgressFill').style.width = '0%';
@@ -1396,18 +1407,55 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      var unlocked = currentAchList.filter(x => x.unlocked).length;
-      var pctTotal = Math.round((unlocked / currentAchList.length) * 100);
-      document.getElementById('achProgressText').innerText = unlocked + ' de ' + currentAchList.length + ' conseguidos (' + pctTotal + '%)';
+      var totalUnlocked = currentAchList.filter(x => x.unlocked).length;
+      var pctTotal = Math.round((totalUnlocked / currentAchList.length) * 100);
+      document.getElementById('achProgressText').innerText = totalUnlocked + ' de ' + currentAchList.length + ' conseguidos (' + pctTotal + '%)';
       document.getElementById('achProgressFill').style.width = pctTotal + '%';
 
-      var listToRender = getSortedList();
+      // 1. Filtrado reactivo en memoria
+      var filteredList = currentAchList.filter(function(a) {
+        var matchesSearch = !searchQuery || a.name.toLowerCase().includes(searchQuery) || (a.description && a.description.toLowerCase().includes(searchQuery));
+        
+        var matchesStatus = true;
+        if (filterStatus === 'locked') matchesStatus = !a.unlocked;
+        else if (filterStatus === 'unlocked') matchesStatus = a.unlocked;
+        else if (filterStatus === 'queue') matchesStatus = a.inQueue;
 
-      listToRender.forEach(function(a) {
+        var matchesRarity = true;
+        var p = parseFloat(a.percent) || 0;
+        if (filterRarity === 'mythic') matchesRarity = p < 5.0;
+        else if (filterRarity === 'epic') matchesRarity = p >= 5.0 && p < 15.0;
+        else if (filterRarity === 'rare') matchesRarity = p >= 15.0 && p < 40.0;
+
+        return matchesSearch && matchesStatus && matchesRarity;
+      });
+
+      // 2. Ordenamiento en memoria
+      if (currentSort === 'locked_first') {
+        filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? 1 : -1));
+      } else if (currentSort === 'unlocked_first') {
+        filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? -1 : 1));
+      } else if (currentSort === 'rarity_rare') {
+        filteredList.sort((a, b) => (parseFloat(a.percent) || 0) - (parseFloat(b.percent) || 0));
+      } else if (currentSort === 'rarity_common') {
+        filteredList.sort((a, b) => (parseFloat(b.percent) || 0) - (parseFloat(a.percent) || 0));
+      } else if (currentSort === 'alpha') {
+        filteredList.sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      if (!filteredList.length) {
+        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No hay logros que coincidan con los filtros seleccionados.</p>';
+        updateBatchToolbar();
+        return;
+      }
+
+      // 3. Renderizado limpio
+      filteredList.forEach(function(a) {
+        var pctNum = parseFloat(a.percent) || 0;
         var rarityClass = 'gray';
-        if (a.percent < 5.0) rarityClass = 'gold';
-        else if (a.percent < 15.0) rarityClass = 'purple';
-        else if (a.percent < 40.0) rarityClass = 'blue';
+        if (pctNum < 5.0) rarityClass = 'gold';
+        else if (pctNum < 15.0) rarityClass = 'purple';
+        else if (pctNum < 40.0) rarityClass = 'blue';
 
         var statusClass = a.unlocked ? 'unlocked-item' : 'locked-item';
 
@@ -1442,7 +1490,6 @@ const server = http.createServer((req, res) => {
         cont.appendChild(div);
       });
 
-      applyFilters();
       updateBatchToolbar();
     }
 
@@ -1462,16 +1509,16 @@ const server = http.createServer((req, res) => {
       selectedApinames.clear();
       var visibleRows = document.querySelectorAll('.ach-item');
       visibleRows.forEach(row => {
-        if (row.style.display !== 'none') {
-          var apiname = row.getAttribute('data-apiname');
-          if (isChecked) {
-            selectedApinames.add(apiname);
-            row.classList.add('selected');
-            row.querySelector('.ach-checkbox').checked = true;
-          } else {
-            row.classList.remove('selected');
-            row.querySelector('.ach-checkbox').checked = false;
-          }
+        var apiname = row.getAttribute('data-apiname');
+        if (isChecked) {
+          selectedApinames.add(apiname);
+          row.classList.add('selected');
+          var cb = row.querySelector('.ach-checkbox');
+          if (cb) cb.checked = true;
+        } else {
+          row.classList.remove('selected');
+          var cb = row.querySelector('.ach-checkbox');
+          if (cb) cb.checked = false;
         }
       });
       updateBatchToolbar();
