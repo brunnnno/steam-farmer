@@ -15,3 +15,7 @@ test('probes do not report a pass when state changed or preparation would allow 
   assert.equal(changed.results[0].outcome,'inconclusive');
   const eligible=await runReadOnlyProbes(client(),{targets:[{appid:550,apiname:'TARGET',expectedCode:'server_controlled'}],read:async()=>snap()});assert.equal(eligible.results[0].outcome,'inconclusive');assert.equal(eligible.results[0].writesSent,0);
 });
+test('already unlocked progress is observed without offering another completion plan or write',async()=>{
+  const result=await runReadOnlyProbes(client(),{targets:[{appid:550,apiname:'TARGET',expectedCode:'progress_dependency'}],read:async()=>snap({progress:true,mask:1})});
+  assert.equal(result.results[0].outcome,'observed_unlocked');assert.equal(result.results[0].progressPreview.supported,false);assert.equal(result.results[0].progressPreview.code,'already_unlocked');assert.equal(result.results[0].writesSent,0);
+});
