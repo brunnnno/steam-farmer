@@ -9,6 +9,7 @@ const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault,
 const { readProtocol } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement } = require('./lib/achievement-writer');
+const { gameRequirements } = require('./lib/game-requirements');
 const { ResultCache } = require('./lib/cache');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
@@ -59,6 +60,8 @@ function createApp(options = {}) {
   const protocolRead = options.protocolReader || readProtocol;
   const experimentWrite = options.experimentWriter || unlockModelMania;
   const individualWrite = options.individualWriter || unlockAchievement;
+  const requirementsRead = options.requirementsReader || gameRequirements;
+  const requirementsCache = new ResultCache({maxEntries:32,maxBytes:128*1024,ttl:3600000}),requirementsPending=new Map();
   const experimentBusy = new Set();
   const achievementCache = new ResultCache(), achievementPending = new Map();
   const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
@@ -332,6 +335,12 @@ function createApp(options = {}) {
         const r = JSON.parse((await remote(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=UY`)).body);
         return json(res, 200, (r.items || []).slice(0, 6).map(i => ({ id: i.id, name: i.name, img: i.tiny_image })));
       }
+      if(url.pathname === '/api/game-requirements' && req.method === 'GET') {
+        const id=appId(url.searchParams.get('appid'));const cached=requirementsCache.get(String(id));if(cached)return json(res,200,cached);
+        rate(`requirements:${token}`,20,60000);
+        if(!requirementsPending.has(id))requirementsPending.set(id,Promise.resolve().then(()=>requirementsRead(id)).then(result=>{requirementsCache.set(String(id),result);return result;}).finally(()=>requirementsPending.delete(id)));
+        return json(res,200,await requirementsPending.get(id));
+      }
       if (url.pathname === '/api/achievements' && req.method === 'GET') {
         rate(`ach:${token}`, 40); const acc = getAccount(req, url); const st = stateFor(acc.id);
         const id = appId(url.searchParams.get('appid'));
@@ -348,7 +357,7 @@ function createApp(options = {}) {
               const receipt=cfg.achievementWrites?.[st.steamId64+':'+id+':'+row.apiname] || (original?.apiname===row.apiname?original:null);
               if(receipt) row.lastWriteOutcome=receipt.outcome;
               if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
-              if(receipt && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,canUnlock:false,reason:'A write was already attempted for this achievement. Check the result; automatic retries are disabled.'};
+              if(receipt && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,status:receipt.outcome==='rejected'?'steam_rejected':receipt.outcome==='unknown'||receipt.outcome==='requested'?'pending_verification':'attempted',canUnlock:false,reason:receipt.message||'A write was already attempted for this achievement. The result must be checked; automatic retries are disabled.',code:receipt.diagnostic?.code||'previous_attempt',action:receipt.diagnostic?.action||'Refresh to verify the actual Steam state. A repeated write requires review.'};
             }
             achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} webSession=${Boolean(st.webCookies)}`);
@@ -458,18 +467,18 @@ function createApp(options = {}) {
         }
       }
       return json(res, 200, { success: true });
-    } catch (err) { json(res, err.status || 502, { error: err.status ? err.message : 'The operation failed. Check the server connection or permissions.' }); }
+    } catch (err) { json(res, err.status || 502, { error: err.status ? err.message : 'The operation failed. Check the server connection or permissions.',...(err.diagnostic?{diagnostic:err.diagnostic}:{}) }); }
   });
   server.requestTimeout = 20000; server.headersTimeout = 10000;
   const timers = [setInterval(() => { if (!closing) cfg.accounts.forEach(farming); }, 30000), setInterval(() => { if (!closing) for (const acc of cfg.accounts) if (acc.cardFarming) scan(acc).catch(() => {}); }, 10 * 60000), setInterval(() => {
     for (const [token, s] of sessions) if (s.expires <= Date.now()) sessions.delete(token);
     for (const [id, a] of attempts) if (Date.now() - a.created > 5 * 60000 || !sessions.has(a.owner)) cancelAttempt(id);
-    achievementCache.prune();
+    achievementCache.prune();requirementsCache.prune();
     for (const [key, r] of rates) if (r.until <= Date.now()) rates.delete(key);
   }, 30000)];
   timers.forEach(t => t.unref());
   if (options.connect !== false) cfg.accounts.forEach(connect);
-  return { server, cfg, vault, clients, states, attempts, sessions, close: async () => { closing = true; timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); } };
+  return { server, cfg, vault, clients, states, attempts, sessions, close: async () => { closing = true; timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear();requirementsCache.clear(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); } };
 }
 if (require.main === module) {
   const port = Number(process.env.PORT || 8000);

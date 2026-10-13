@@ -211,3 +211,10 @@ test('post-reconnect persistence check reads Model Mania and sends no achievemen
   const c=f.app.clients.get('main');c._send=()=>writes++;c.emit('webSession','unused',['sessionid=private']);await new Promise(resolve=>setImmediate(resolve));await f.login();
   const status=await f.request('/api/status');assert.equal(status.data.achievementPersistence.unlocked,true);assert.equal(status.data.achievementPersistence.afterReconnect,true);assert.equal(writes,0);
 });
+test('game requirements are authenticated, cached, and protocol errors preserve diagnostic actions',async t=>{
+  let calls=0;const f=await fixture(t,{accounts:[{id:'a',name:'Main',games:[]}]},{requirementsReader:async id=>{calls++;return {appid:id,facts:['Requires publisher account'],externalAccountOrSoftware:true};},protocolReader:async()=>{throw Object.assign(new Error('No usable definitions'),{status:502,diagnostic:{code:'schema_unavailable',action:'Try the standard reading'}});}});
+  assert.equal((await f.request('/api/game-requirements?appid=123')).response.status,401);await f.login();
+  assert.equal((await f.request('/api/game-requirements?appid=123')).data.externalAccountOrSoftware,true);await f.request('/api/game-requirements?appid=123');assert.equal(calls,1);
+  await f.request('/api/status');f.app.states.get('a').connected=true;
+  const result=await f.request('/api/achievements?accountId=a&appid=123&method=protocol');assert.equal(result.response.status,502);assert.equal(result.data.diagnostic.code,'schema_unavailable');assert.equal(result.data.diagnostic.action,'Try the standard reading');
+});

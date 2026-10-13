@@ -71,3 +71,8 @@ test('individual activation submits only the chosen account, game and API name',
   w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock'){submitted=JSON.parse(options.body);return {ok:true,json:async()=>({outcome:'unknown',message:'Not confirmed'})};}return {ok:true,json:async()=>response([target])};};
   await w.testUI.unlock(target);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'FIRST'});assert.equal(w.document.querySelector('.ach-item').textContent.includes('Locked'),true);
 });
+test('publisher requirements show explanatory context as text without inventing an activation restriction',async t=>{
+  const w=ui(t,url=>url.startsWith('/api/game-requirements')?{facts:['<b>Publisher account</b>'],explanation:'An external launcher alone does not establish writability.',action:'Check the official game.',metadataAvailable:true,externalAccountOrSoftware:true,sourceUrl:'https://store.steampowered.com/app/123/'}:response([{name:'One',unlocked:false}]));
+  await w.testUI.open(123,'Game');await new Promise(resolve=>setImmediate(resolve));
+  const context=w.document.getElementById('gameRequirements');assert.equal(context.hidden,false);assert.equal(context.open,true);assert.match(context.textContent,/does not establish/);assert.equal(context.querySelector('b'),null);
+});

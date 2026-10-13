@@ -49,3 +49,7 @@ Local access defaults to `http://127.0.0.1:8000`. Keep credentials in environmen
 - `package-lock.json`: reproducible dependency installation.
 
 Render documentation: [Free services](https://render.com/docs/free), [Environment variables](https://render.com/docs/environment-variables), [Web services](https://render.com/docs/web-services).
+
+## Activation diagnostics
+
+The panel explains per-achievement restrictions, unsupported permissions, progress dependencies, missing personal state, missing statistics versions and ambiguous identifiers. Steam rejection messages distinguish stale statistics, validation failures and unknown results without inferring a publisher/launcher cause from a generic error. A separate Game integration & activation limits section shows established Steam Store account/DRM/launcher requirements; these are context and never automatically block an otherwise eligible Steam achievement. The panel cannot inspect external account linking or modify publisher progress. Missing metadata stays unknown. Store lookups are parallel, bounded, deduplicated and cached (32 entries, 128 KiB, one hour).

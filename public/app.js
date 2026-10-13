@@ -12,7 +12,7 @@ async function api(endpoint, body) {
   const response = await fetch(endpoint, options); const data = await response.json();
   if (!response.ok) {
     if (response.status === 401 && endpoint !== '/api/panel/login' && endpoint !== '/api/panel/password') showLock();
-    throw new Error(data.error || 'The operation failed.');
+    throw Object.assign(new Error(data.error || 'The operation failed.'),{diagnostic:data.diagnostic});
   }
   return data;
 }
@@ -117,6 +117,7 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
   currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';
   const serial = ++achSerial, account = achAccountId;
+  $('gameRequirements').hidden=true;$('gameRequirements').open=false;loadGameRequirements(id,serial,account);
   try {
     const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':''}${method==='protocol'?'&method=protocol':''}`);
     if (serial !== achSerial || account !== activeAccountId) return;
@@ -126,7 +127,19 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
     $('achGameTitle').textContent=title;
     $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')}`;
     renderAchModal();
-  } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message)); } }
+  } catch(e) { if(serial===achSerial) { $('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[])); } }
+}
+async function loadGameRequirements(id,serial,account) {
+  try {
+    const data=await api('/api/game-requirements?appid='+id);
+    if(serial!==achSerial||account!==activeAccountId)return;
+    const container=$('gameRequirementsContent');container.replaceChildren();
+    for(const fact of data.facts||[])container.append(element('p',String(fact)));
+    container.append(element('p',data.explanation),element('p',data.action));
+    if(!data.metadataAvailable)container.append(element('small','Live Steam Store metadata unavailable; only established facts are shown.'));
+    const link=element('a','Source: Steam Store');const url=new URL(data.sourceUrl);if(url.protocol==='https:'&&url.hostname==='store.steampowered.com'){link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';container.append(link);}
+    $('gameRequirements').hidden=false;$('gameRequirements').open=Boolean(data.externalAccountOrSoftware);
+  } catch {if(serial===achSerial){$('gameRequirementsContent').replaceChildren(element('p','Game integration requirements could not be retrieved. This does not establish a launcher restriction.'));$('gameRequirements').hidden=false;}}
 }
 function closeAchModal() { document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none'; }
 function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true,currentAchMethod); }
@@ -152,13 +165,13 @@ function renderAchModal() {
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
     if(a.hasProgressDependency) info.append(element('small',' · Progress dependency: experimental write unavailable'));
     if(currentAchMethod==='protocol' && a.compatibility) {
-      const labels={provisional:'Provisional compatibility',restricted:'Restricted',dependency:'Progress dependent',insufficient_data:'Insufficient data'};
+      const labels={provisional:'Provisional compatibility',restricted:'Restricted',dependency:'Progress dependent',insufficient_data:'Insufficient data',steam_rejected:'Steam rejected the write',pending_verification:'Verification pending',attempted:'Previously attempted'};
       const label=element('div',a.compatibility.validatedOnAccount?'Verified on this account':labels[a.compatibility.status]||'Insufficient data','ach-compatibility');
       label.title=a.compatibility.reason;info.append(label);
       if(a.unlocked===false && active?.tokenSource==='environment') {
         const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));
         unlock.disabled=experimentBusy || !a.compatibility.canUnlock;unlock.title=a.compatibility.reason;info.append(unlock);
-        if(!a.compatibility.canUnlock)info.append(element('small',a.compatibility.reason,'ach-write-reason'));
+        if(!a.compatibility.canUnlock)info.append(element('small',a.compatibility.reason,'ach-write-reason'),element('small',a.compatibility.action||'','ach-write-reason'));
       }
     } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Use Verify directly to check activation compatibility.','ach-write-reason'));
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
@@ -170,8 +183,8 @@ async function unlockIndividualAchievement(row) {
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;
   if(!confirm(`Activate only "${row.name}" in "${title}" on the selected main Steam account? Steam will be re-read before and after one write. Compatibility is provisional until verified.`))return;
   experimentBusy=true;renderAchModal();
-  try {const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname});notice(result.message);}
-  catch(e){notice(e.message);}
+  try {const result=await api('/api/achievement/unlock',{accountId:account,appid:id,apiname:row.apiname});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));}
+  catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
   finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===id && $('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');else if($('achModal').style.display==='flex')renderAchModal();}
 }
 async function addGame(id,name) { const account=activeAccountId; const result=await action('/api/add',{appid:Number(id),name:name||''}); if(result && account===activeAccountId) $('searchInput').value=''; }

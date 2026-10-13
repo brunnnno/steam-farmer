@@ -333,3 +333,10 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 .ach-compatibility { margin-top:8px; color:#9dc8da; font-size:10px; line-height:1.5; }
 .ach-write-reason { display:block; margin-top:6px; line-height:1.5; }
 .ach-info button { margin-top:10px; white-space:normal; }
+
+.game-requirements { padding:12px 24px; border-bottom:1px solid var(--card-border); color:var(--text-muted); font-size:11px; line-height:1.6; flex-shrink:0; }
+.game-requirements summary { cursor:pointer; color:var(--primary); font-weight:700; }
+.game-requirements[open] { max-height:180px; overflow-y:auto; }
+.game-requirements p { margin:8px 0; }
+.game-requirements a { color:var(--primary); }
+@media(max-width:600px) { .game-requirements { padding:12px 14px; } }

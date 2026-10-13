@@ -9,7 +9,7 @@ const ack=()=>({game_id:String(TARGET.appid),eresult:1,stats_out_of_date:false,s
 test('single target plan preserves every other achievement bit, numeric stats and CRC',()=>{const p=prepare(snapshot());assert.deepEqual(p.payload.stats,[{stat_id:7,stat_value:0x80000001}]);assert.equal(p.payload.crc_stats,42);assert.equal(p.payload.explicit_reset,false);});
 test('permissions, dependencies, missing CRC and unverified initial state prevent sending',()=>{
   for(const input of [snapshot({bit:{permission:'1'}}),snapshot({block:{permission:'2'}}),snapshot({bit:{progress:{max_val:'44'}}}),snapshot({extra:{stats:[]}})])assert.throws(()=>prepare(input));
-  const s=snapshot();delete s.crc_stats;assert.throws(()=>prepare(s),/CRC/);
+  const s=snapshot();delete s.crc_stats;assert.throws(()=>prepare(s),/statistics version/);
   assert.throws(()=>prepare(snapshot({bit:{display:{name:{english:'Wrong'},desc:{english:TARGET.description}}}})),/identified/);
 });
 test('only a clean acknowledgement plus a fresh exact state change is confirmed',async()=>{
