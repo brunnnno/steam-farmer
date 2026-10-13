@@ -1,0 +1,4 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict');const {globalPercentages}=require('../lib/steam-percentages');
+test('global percentages preserve genuine zero, reject missing/invalid values and ambiguous names',async()=>{const r=await globalPercentages(550,async(url,opts)=>{assert.match(url,/gameid=550/);assert.equal(opts.maxBytes,512*1024);return {body:JSON.stringify({achievementpercentages:{achievements:[{name:'COMMON',percent:95},{name:'ZERO',percent:0},{name:'UNKNOWN',percent:null},{name:'EMPTY',percent:''},{name:'INVALID',percent:101},{name:'DUP',percent:5},{name:'DUP',percent:10}]}})}});assert.equal(r.percentages.COMMON,95);assert.equal(r.percentages.ZERO,0);assert.deepEqual(Object.keys(r.percentages),['COMMON','ZERO']);});
+test('missing percentage response stays unavailable, not an invented zero list',async()=>{await assert.rejects(globalPercentages(550,async()=>({body:'{}'})),e=>e.status===502);});

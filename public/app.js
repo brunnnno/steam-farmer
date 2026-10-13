@@ -174,7 +174,21 @@ async function loadGameRequirements(id,serial,account) {
 function closeAchModal() { document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentAchAppId=null;achAccountId=null;$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren(); }
 function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true,currentAchMethod); }
 function setFilter(type,val) { if(type==='status') filterStatus=val; else filterRarity=filterRarity===val?'all':val; renderAchModal(); }
-function setSort(val) { currentSort=val; renderAchModal(); }
+let percentageRequest=null;
+function setSort(val) {
+  currentSort=val;renderAchModal();
+  if(['percentage_desc','rarity_common','rarity_rare'].includes(val)&&currentAchList.some(a=>a.percent===null&&a.apiname))loadAchievementPercentages();
+}
+async function loadAchievementPercentages(){
+  const serial=achSerial,id=currentAchAppId,account=achAccountId,key=serial+':'+account+':'+id;
+  if(!id||percentageRequest===key)return;percentageRequest=key;
+  try{
+    const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}`);
+    if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
+    currentAchList=currentAchList.map(a=>{const p=a.apiname&&Object.hasOwn(result.percentages,a.apiname)?result.percentages[a.apiname]:a.percent;return {...a,percent:p,tier:p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common'};});renderAchModal();
+    if(currentAchList.every(a=>a.percent===null))notice('Steam did not return percentages for these achievements. Unknown values remain at the end.');
+  }catch(e){if(serial===achSerial)notice(e.message);}finally{if(percentageRequest===key)percentageRequest=null;}
+}
 function onSearchInput(val) { searchQuery=val.trim().toLowerCase(); renderAchModal(); }
 function renderAchModal(page=0) {
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
@@ -183,7 +197,7 @@ function renderAchModal(page=0) {
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
   let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<15||filterRarity==='rare'&&a.percent>=15&&a.percent<40)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
-  if(currentSort==='rarity_rare'||currentSort==='rarity_common') list.sort((a,b)=>a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
+  if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
   if(currentSort==='locked_first'||currentSort==='unlocked_first') list.sort((a,b)=>Number(a.unlocked===true)-Number(b.unlocked===true));
   if(currentSort==='unlocked_first') list.reverse();
   const cont=$('achListContainer'); cont.replaceChildren();
