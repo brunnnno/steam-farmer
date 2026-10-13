@@ -29,6 +29,19 @@ let webCookies = '';
 let cardDropGames = [];
 let mySteamID = cfg.mySteamID || '';
 
+// Mapeo canónico de nombres en Steam Community
+const VALVE_ALIASES = {
+  550: 'L4D2',
+  440: 'TF2',
+  730: 'CSGO',
+  240: 'CSS',
+  220: 'HL2',
+  620: 'Portal2',
+  500: 'L4D',
+  300: 'DODS',
+  10: 'CS'
+};
+
 const PRESETS = {
   competitivos: {
     name: '🎯 Competitivos',
@@ -47,28 +60,34 @@ const PRESETS = {
   }
 };
 
-// Cliente HTTP con soporte nativo de redirecciones 301/302
-function fetchWithRedirects(targetUrl, headers, maxRedirects, cb) {
-  if (typeof headers === 'function') {
-    cb = headers;
-    headers = {};
-    maxRedirects = 4;
+// Cliente HTTP con soporte de redirecciones y cookies de Age-Gate
+function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
+  if (typeof customHeaders === 'function') {
+    cb = customHeaders;
+    customHeaders = {};
+    maxRedirects = 5;
   }
-  if (maxRedirects === undefined) maxRedirects = 4;
+  if (maxRedirects === undefined) maxRedirects = 5;
   if (maxRedirects <= 0) return cb(new Error('Demasiadas redirecciones'), null);
 
   try {
     const parsed = new URL(targetUrl);
     const clientLib = parsed.protocol === 'http:' ? http : https;
+    
+    // Inyección de cookies de Age Gate de Steam (Nacimiento 1990 + contenido maduro)
+    const ageCookies = 'birthtime=631152001; mature_content=1; wants_mature_content=1; lastagecheckage=1-January-1990;';
+    const combinedCookies = customHeaders['Cookie'] ? `${customHeaders['Cookie']}; ${ageCookies}` : ageCookies;
+
     const options = {
       hostname: parsed.hostname,
       port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
       path: parsed.pathname + parsed.search,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-        ...headers
+        ...customHeaders,
+        'Cookie': combinedCookies
       }
     };
 
@@ -78,7 +97,7 @@ function fetchWithRedirects(targetUrl, headers, maxRedirects, cb) {
         if (!next.startsWith('http')) {
           next = parsed.protocol + '//' + parsed.hostname + next;
         }
-        return fetchWithRedirects(next, headers, maxRedirects - 1, cb);
+        return fetchWithRedirects(next, customHeaders, maxRedirects - 1, cb);
       }
 
       let data = '';
@@ -209,7 +228,7 @@ client.on('friendMessage', (steamID, message) => {
   }
 });
 
-// Motor de logros orgánicos (Revisa cola cada 30 segundos)
+// Motor de logros orgánicos (Revisa la cola cada 30 segundos)
 setInterval(() => {
   if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
   const now = Date.now();
@@ -224,7 +243,7 @@ setInterval(() => {
 
     sendDiscordWebhook(
       `🏆 ¡Logro Desbloqueado! • ${item.gameName}`,
-      `**${item.name}**\n*${item.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${item.tier} (${item.percent}% de jugadores globales)\n⏱️ **Modo Orgánico:** Cadencia temporal natural simulada.`,
+      `**${item.name}**\n*${item.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${item.tier} (${item.percent}% global)\n⏱️ **Modo Orgánico:** Cadencia temporal natural simulada.`,
       item.color,
       item.icon
     );
@@ -232,7 +251,7 @@ setInterval(() => {
     if (cfg.achievementQueue.length > 0) {
       const nextDelayMinutes = Math.floor(Math.random() * (85 - 45 + 1)) + 45;
       cfg.achievementQueue[0].scheduledTime = Date.now() + (nextDelayMinutes * 60 * 1000);
-      console.log(`[Logros] Siguiente logro de la cola programado en ${nextDelayMinutes} minutos.`);
+      console.log(`[Logros] Siguiente logro en cola programado en ${nextDelayMinutes} minutos.`);
     }
 
     guardarConfig();
@@ -343,16 +362,18 @@ function getTag(body, tag) {
   return content;
 }
 
-// Fallback HTML en caso de que el perfil XML no tenga el juego iniciado
+// Extractor robusto de logros HTML mediante expresiones regulares
 function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   const list = [];
-  const parts = html.split('<div class="achieveRow">');
-  for (let i = 1; i < parts.length; i++) {
-    const block = parts[i].split('<div class="achieveRow">')[0];
-    const imgM = /<img\s+src="([^"]+)"/i.exec(block);
+  const regexBlock = /<div\b[^>]*class=["'][^"']*achieveRow[^"']*["'][^>]*>([\s\S]*?)(?:<div\b[^>]*class=["'][^"']*achieveRow[^"']*["']|$)/gi;
+  let match;
+
+  while ((match = regexBlock.exec(html)) !== null) {
+    const block = match[1];
+    const imgM = /<img\b[^>]*src=["']([^"']+)["']/i.exec(block);
     const h3M = /<h3>([\s\S]*?)<\/h3>/i.exec(block);
     const h5M = /<h5>([\s\S]*?)<\/h5>/i.exec(block);
-    const pctM = /<div class="achievePercent">\s*([0-9.]+)\s*%\s*<\/div>/i.exec(block);
+    const pctM = /<div\b[^>]*class=["'][^"']*achievePercent[^"']*["'][^>]*>\s*([0-9.]+)\s*%/i.exec(block);
 
     if (h3M) {
       const name = h3M[1].replace(/<[^>]+>/g, '').trim();
@@ -386,8 +407,48 @@ function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
   return list;
 }
 
-// Buscador maestro de logros con seguimiento de redirecciones y fallback
+// Extractor de XML para perfiles y comunidad
+function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
+  const achievements = [];
+  const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
+  let match;
+
+  while ((match = achRegex.exec(xmlData)) !== null) {
+    const closedOriginal = match[1] === '1';
+    const body = match[2];
+    const apiname = getTag(body, 'apiname');
+    const pct = parseFloat(percentMap[apiname] || 50.0);
+
+    let tier = '⚪ Común';
+    let colorHex = 0x94a3b8;
+    if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
+    else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
+    else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
+
+    const isUnlocked = closedOriginal || unlockedLocally.includes(apiname);
+    const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === apiname);
+
+    achievements.push({
+      apiname: apiname,
+      name: getTag(body, 'name') || apiname,
+      description: getTag(body, 'description') || 'Logro de Steam',
+      iconClosed: getTag(body, 'iconClosed'),
+      iconOpen: getTag(body, 'iconOpen'),
+      percent: pct,
+      tier: tier,
+      color: colorHex,
+      unlocked: isUnlocked,
+      inQueue: inQueue
+    });
+  }
+  return achievements;
+}
+
+// Buscador maestro con soporte de alias de Valve y bypass de restricciones
 function obtenerLogrosJuego(appid, cb) {
+  const aliasOrId = VALVE_ALIASES[appid] || appid;
+
+  // 1. Obtener porcentajes globales oficiales
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -400,62 +461,41 @@ function obtenerLogrosJuego(appid, cb) {
       }
     } catch (e) {}
 
+    const unlockedLocally = cfg.unlockedAchievements[appid] || [];
     const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
-    let targetXmlUrl = userSteamId 
-      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
-      : `https://steamcommunity.com/my/stats/${appid}/?xml=1`;
 
-    const xmlHeaders = {};
-    if (webCookies) xmlHeaders['Cookie'] = webCookies;
+    // 2. Intentar XML de perfil del usuario (con alias y con ID)
+    const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
+    const tryXmlUrl = userSteamId
+      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${aliasOrId}/?xml=1`
+      : `https://steamcommunity.com/stats/${aliasOrId}/achievements/?xml=1`;
 
-    fetchWithRedirects(targetXmlUrl, xmlHeaders, 4, (errXml, xmlData) => {
-      const unlockedLocally = cfg.unlockedAchievements[appid] || [];
-      const achievements = [];
-
+    fetchWithRedirects(tryXmlUrl, xmlHeaders, 4, (errXml, xmlData) => {
       if (!errXml && xmlData && xmlData.includes('<achievement')) {
-        const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
-        let match;
-
-        while ((match = achRegex.exec(xmlData)) !== null) {
-          const closedOriginal = match[1] === '1';
-          const body = match[2];
-          const apiname = getTag(body, 'apiname');
-          const pct = parseFloat(percentMap[apiname] || 50.0);
-
-          let tier = '⚪ Común';
-          let colorHex = 0x94a3b8;
-          if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
-          else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
-          else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
-
-          const isUnlocked = closedOriginal || unlockedLocally.includes(apiname);
-          const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === apiname);
-
-          achievements.push({
-            apiname: apiname,
-            name: getTag(body, 'name') || apiname,
-            description: getTag(body, 'description') || 'Logro de Steam',
-            iconClosed: getTag(body, 'iconClosed'),
-            iconOpen: getTag(body, 'iconOpen'),
-            percent: pct,
-            tier: tier,
-            color: colorHex,
-            unlocked: isUnlocked,
-            inQueue: inQueue
-          });
-        }
+        const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
+        if (list.length > 0) return cb(list);
       }
 
-      if (achievements.length > 0) return cb(achievements);
-
-      // Si el XML no devolvió logros, recurre al listado público de la comunidad
-      const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/`;
-      fetchWithRedirects(urlGlobalHtml, {}, 4, (errHtml, htmlData) => {
-        if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
+      // 3. Fallback a la web pública de la comunidad con bypass de Age-Gate
+      const urlWebCommunity = `https://steamcommunity.com/stats/${aliasOrId}/achievements/?l=spanish`;
+      fetchWithRedirects(urlWebCommunity, {}, 4, (errHtml, htmlData) => {
+        if (!errHtml && htmlData && (htmlData.includes('achieveRow') || htmlData.includes('achieveTxtHolder'))) {
           const fallbackList = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
-          return cb(fallbackList);
+          if (fallbackList.length > 0) return cb(fallbackList);
         }
-        cb([]);
+
+        // 4. Último intento directo por AppID numérico si se usó un alias
+        if (aliasOrId !== appid) {
+          const urlNumHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
+          fetchWithRedirects(urlNumHtml, {}, 4, (errNum, numHtml) => {
+            if (!errNum && numHtml && (numHtml.includes('achieveRow') || numHtml.includes('achieveTxtHolder'))) {
+              return cb(parseAchievementsFromHtml(numHtml, percentMap, unlockedLocally));
+            }
+            cb([]);
+          });
+        } else {
+          cb([]);
+        }
       });
     });
   });
@@ -633,26 +673,53 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // Desbloquear logro individual
-        if (parsedUrl.pathname === '/api/unlock-achievement-now') {
-          const { appid, gameName, apiname, name, desc, icon, percent, tier, color } = data;
+        // Desbloqueo múltiple inmediato
+        if (parsedUrl.pathname === '/api/unlock-batch') {
+          const { appid, gameName, items } = data;
           cfg.unlockedAchievements[appid] = cfg.unlockedAchievements[appid] || [];
-          if (!cfg.unlockedAchievements[appid].includes(apiname)) {
-            cfg.unlockedAchievements[appid].push(apiname);
-          }
+          
+          items.forEach(it => {
+            if (!cfg.unlockedAchievements[appid].includes(it.apiname)) {
+              cfg.unlockedAchievements[appid].push(it.apiname);
+            }
+          });
           guardarConfig();
 
-          sendDiscordWebhook(
-            `🏆 ¡Logro Manual Obtenido! • ${gameName}`,
-            `**${name}**\n*${desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${tier} (${percent}% de jugadores globales)\n⚡ **Modo:** Desbloqueo manual bajo demanda.`,
-            color || 3718648,
-            icon
-          );
+          if (items.length === 1) {
+            const it = items[0];
+            sendDiscordWebhook(
+              `🏆 ¡Logro Manual Obtenido! • ${gameName}`,
+              `**${it.name}**\n*${it.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${it.tier} (${it.percent}% global)`,
+              it.color || 3718648,
+              it.icon
+            );
+          } else {
+            sendDiscordWebhook(
+              `🏆 Desbloqueo Masivo • ${gameName}`,
+              `Se han desbloqueado **${items.length} logros** de forma manual bajo demanda.`,
+              3718648
+            );
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true }));
         }
 
-        // Cola de platinado orgánico
+        // Bloquear / Resetear logros en lote
+        if (parsedUrl.pathname === '/api/lock-batch') {
+          const { appid, apinames } = data;
+          if (cfg.unlockedAchievements[appid]) {
+            cfg.unlockedAchievements[appid] = cfg.unlockedAchievements[appid].filter(id => !apinames.includes(id));
+          }
+          // Remover también de la cola si estaban programados
+          cfg.achievementQueue = cfg.achievementQueue.filter(q => !(q.appid == appid && apinames.includes(q.apiname)));
+          guardarConfig();
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true }));
+        }
+
+        // Encolar platinado orgánico con selección múltiple
         if (parsedUrl.pathname === '/api/queue-achievements') {
           const { appid, gameName, items } = data;
           let baseDelay = 5;
@@ -759,11 +826,11 @@ const server = http.createServer((req, res) => {
       display: flex;
       justify-content: center;
     }
-    .container { width: 100%; max-width: 1000px; }
+    .container { width: 100%; max-width: 1020px; }
 
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(7, 10, 19, 0.94);
+      background: rgba(7, 10, 19, 0.95);
       backdrop-filter: blur(20px);
       display: none; align-items: center; justify-content: center; z-index: 1000;
     }
@@ -778,34 +845,54 @@ const server = http.createServer((req, res) => {
       text-align: center; letter-spacing: 5px; outline: none; margin: 16px 0;
     }
 
+    /* Modal de Logros Enterprise */
     .ach-modal-card {
-      background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.2);
-      width: 95%; max-width: 850px; max-height: 90vh; border-radius: 20px;
-      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.9);
+      background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);
+      width: 96%; max-width: 920px; max-height: 92vh; border-radius: 22px;
+      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 65px rgba(0,0,0,0.95);
     }
     .ach-header {
-      padding: 20px 24px; background: #131b2e; border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center;
+      padding: 18px 24px; background: #131b2e; border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
     }
-    .ach-header h2 { font-size: 1.3rem; font-weight: 800; color: #fff; }
-    .ach-controls {
-      padding: 14px 24px; background: rgba(0,0,0,0.25); border-bottom: 1px solid var(--card-border);
-      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    .ach-header h2 { font-size: 1.35rem; font-weight: 800; color: #fff; }
+    
+    .ach-toolbar {
+      padding: 12px 24px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
     }
-    .ach-list { padding: 16px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .ach-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .filter-btn {
+      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border);
+      color: var(--text-muted); padding: 5px 12px; border-radius: 8px; font-size: 0.75rem;
+      font-weight: 700; cursor: pointer; transition: 0.15s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: rgba(56, 189, 248, 0.15); border-color: var(--primary); color: #fff; }
+
+    .ach-batch-actions {
+      padding: 10px 24px; background: rgba(15, 23, 42, 0.7); border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.85rem;
+    }
+    .ach-batch-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .ach-list { padding: 16px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .ach-item {
       background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border);
       border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 14px;
-      transition: all 0.2s;
+      transition: all 0.2s; user-select: none;
     }
-    .ach-item.gold { border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.04); }
-    .ach-item.purple { border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.04); }
-    .ach-item.blue { border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.04); }
-    .ach-item img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #000; }
+    .ach-item.selected { background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.4); }
+    .ach-item.gold { border-left: 4px solid var(--gold); }
+    .ach-item.purple { border-left: 4px solid var(--purple); }
+    .ach-item.blue { border-left: 4px solid var(--primary); }
+    .ach-item.gray { border-left: 4px solid #64748b; }
+
+    .ach-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
+    .ach-item img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #000; flex-shrink: 0; }
     .ach-info { flex: 1; overflow: hidden; }
-    .ach-title { font-weight: 700; font-size: 0.95rem; color: #fff; }
+    .ach-title { font-weight: 700; font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 8px; }
     .ach-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
-    .ach-badge { font-size: 0.75rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+    .ach-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
 
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
     .brand h1 { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -878,7 +965,6 @@ const server = http.createServer((req, res) => {
   </style>
 </head>
 <body>
-  <!-- Modal Lock -->
   <div id="lockModal" class="modal-overlay">
     <div class="lock-card">
       <h2>🔒 Panel Enterprise</h2>
@@ -888,7 +974,6 @@ const server = http.createServer((req, res) => {
     </div>
   </div>
 
-  <!-- Modal Logros -->
   <div id="achModal" class="modal-overlay">
     <div class="ach-modal-card">
       <div class="ach-header">
@@ -898,11 +983,34 @@ const server = http.createServer((req, res) => {
         </div>
         <button class="btn-action-sm" onclick="closeAchModal()">✕ Cerrar</button>
       </div>
-      <div class="ach-controls">
-        <input type="text" id="achSearchInput" placeholder="Buscar logro..." style="flex:1; min-width:160px; padding:8px 12px; font-size:0.85rem;" oninput="filterAchievements()">
-        <button class="btn-gold" style="padding:8px 14px; font-size:0.8rem;" onclick="queueAllOrganic()">⚡ Platinado Orgánico</button>
-        <button class="btn-clear" style="padding:8px 14px; font-size:0.8rem;" onclick="clearAchQueue()">Vaciar Cola</button>
+
+      <div class="ach-toolbar">
+        <div class="ach-filters">
+          <button class="filter-btn active" onclick="setFilter('status', 'all')">Todos</button>
+          <button class="filter-btn" onclick="setFilter('status', 'locked')">Bloqueados</button>
+          <button class="filter-btn" onclick="setFilter('status', 'unlocked')">Conseguidos</button>
+          <button class="filter-btn" onclick="setFilter('status', 'queue')">En Cola</button>
+          <span style="color:rgba(255,255,255,0.2);">|</span>
+          <button class="filter-btn" onclick="setFilter('rarity', 'mythic')">🟡 Míticos</button>
+          <button class="filter-btn" onclick="setFilter('rarity', 'epic')">🟣 Épicos</button>
+          <button class="filter-btn" onclick="setFilter('rarity', 'rare')">🔵 Raros</button>
+        </div>
+        <input type="text" id="achSearchInput" placeholder="Buscar logro por nombre o texto..." style="max-width:240px; padding:6px 12px; font-size:0.8rem;" oninput="applyFilters()">
       </div>
+
+      <div class="ach-batch-actions">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="width:16px; height:16px; accent-color:var(--primary);">
+          <span id="selectedCountText">0 seleccionados</span>
+          <span id="estimatedTimeText" style="color:var(--gold); font-size:0.75rem; margin-left:6px;"></span>
+        </div>
+        <div class="ach-batch-btns">
+          <button class="btn-main" style="padding:6px 12px; font-size:0.75rem;" onclick="unlockSelected()">⚡ Desbloquear</button>
+          <button class="btn-gold" style="padding:6px 12px; font-size:0.75rem;" onclick="queueSelectedOrganic()">⏳ Encolar Orgánico</button>
+          <button class="btn-clear" style="padding:6px 12px; font-size:0.75rem;" onclick="lockSelected()">🔒 Bloquear</button>
+        </div>
+      </div>
+
       <div class="ach-list" id="achListContainer"></div>
     </div>
   </div>
@@ -1007,6 +1115,9 @@ const server = http.createServer((req, res) => {
     var currentAchList = [];
     var currentAchAppId = null;
     var currentAchGameName = '';
+    var selectedApinames = new Set();
+    var filterStatus = 'all';
+    var filterRarity = 'all';
 
     function checkAuth() {
       if (!savedPin) {
@@ -1143,13 +1254,18 @@ const server = http.createServer((req, res) => {
       });
     }
 
+    // MODAL DE LOGROS ENTERPRISE
     async function openAchModal(appid, title) {
       currentAchAppId = appid;
       currentAchGameName = title;
+      selectedApinames.clear();
+      filterStatus = 'all';
+      filterRarity = 'all';
       document.getElementById('achGameTitle').innerText = title;
       document.getElementById('achProgressText').innerText = 'Consultando base de datos de Steam...';
-      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">Cargando logros y porcentajes mundiales...</p>';
+      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Cargando catálogo completo de trofeos y rarezas...</p>';
       document.getElementById('achModal').style.display = 'flex';
+      updateBatchToolbar();
 
       try {
         var res = await fetch('/api/achievements?appid=' + appid);
@@ -1162,6 +1278,43 @@ const server = http.createServer((req, res) => {
     }
 
     function closeAchModal() { document.getElementById('achModal').style.display = 'none'; }
+
+    function setFilter(type, val) {
+      if (type === 'status') filterStatus = val;
+      if (type === 'rarity') filterRarity = val;
+      
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        if (b.innerText.toLowerCase().includes(val)) b.classList.add('active');
+        else if (val === 'all' && (b.innerText === 'Todos')) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      applyFilters();
+    }
+
+    function applyFilters() {
+      var query = document.getElementById('achSearchInput').value.toLowerCase();
+      var items = document.querySelectorAll('.ach-item');
+      
+      items.forEach(function(it) {
+        var apiname = it.getAttribute('data-apiname');
+        var a = currentAchList.find(x => x.apiname === apiname);
+        if (!a) return;
+
+        var matchesQuery = a.name.toLowerCase().includes(query) || a.description.toLowerCase().includes(query);
+        
+        var matchesStatus = true;
+        if (filterStatus === 'locked') matchesStatus = !a.unlocked;
+        else if (filterStatus === 'unlocked') matchesStatus = a.unlocked;
+        else if (filterStatus === 'queue') matchesStatus = a.inQueue;
+
+        var matchesRarity = true;
+        if (filterRarity === 'mythic') matchesRarity = a.percent < 5.0;
+        else if (filterRarity === 'epic') matchesRarity = a.percent >= 5.0 && a.percent < 15.0;
+        else if (filterRarity === 'rare') matchesRarity = a.percent >= 15.0 && a.percent < 40.0;
+
+        it.style.display = (matchesQuery && matchesStatus && matchesRarity) ? 'flex' : 'none';
+      });
+    }
 
     function renderAchModal() {
       var cont = document.getElementById('achListContainer');
@@ -1177,14 +1330,17 @@ const server = http.createServer((req, res) => {
       document.getElementById('achProgressText').innerText = 'Progreso: ' + unlocked + ' de ' + currentAchList.length + ' conseguidos (' + pctTotal + '%)';
 
       currentAchList.forEach(function(a) {
-        var cardClass = 'ach-item';
-        if (a.percent < 5.0) cardClass += ' gold';
-        else if (a.percent < 15.0) cardClass += ' purple';
-        else if (a.percent < 40.0) cardClass += ' blue';
+        var rarityClass = 'gray';
+        if (a.percent < 5.0) rarityClass = 'gold';
+        else if (a.percent < 15.0) rarityClass = 'purple';
+        else if (a.percent < 40.0) rarityClass = 'blue';
 
         var div = document.createElement('div');
-        div.className = cardClass;
+        div.className = 'ach-item ' + rarityClass + (selectedApinames.has(a.apiname) ? ' selected' : '');
+        div.setAttribute('data-apiname', a.apiname);
+        
         div.innerHTML = 
+          '<input type="checkbox" class="ach-checkbox" ' + (selectedApinames.has(a.apiname) ? 'checked' : '') + ' onclick="event.stopPropagation(); toggleSelectSingle(\\'' + a.apiname.replace(/'/g, "\\\\'") + '\\', this.checked)">' +
           '<img src="' + (a.unlocked ? a.iconOpen : a.iconClosed) + '" onerror="this.src=\\'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png\\'">' +
           '<div class="ach-info">' +
             '<div class="ach-title">' + a.name + ' <span class="ach-badge" style="color:var(--text-muted);">(' + a.tier + ' • ' + a.percent + '%)</span></div>' +
@@ -1192,60 +1348,115 @@ const server = http.createServer((req, res) => {
           '</div>' +
           '<div>' +
             (a.unlocked 
-              ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Desbloqueado</span>' 
+              ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Conseguido</span>' 
               : (a.inQueue 
                   ? '<span style="color:var(--warning); font-weight:700; font-size:0.8rem;">⏳ En Cola</span>' 
-                  : '<button class="btn-card btn-ach" onclick="unlockSingleNow(\\'' + a.apiname.replace(/'/g, "\\\\'") + '\\')">Desbloquear</button>')) +
+                  : '<span style="color:var(--text-muted); font-size:0.8rem;">🔒 Bloqueado</span>')) +
           '</div>';
+
+        div.onclick = function() {
+          var isChecked = !selectedApinames.has(a.apiname);
+          toggleSelectSingle(a.apiname, isChecked);
+          div.querySelector('.ach-checkbox').checked = isChecked;
+        };
+
         cont.appendChild(div);
       });
+
+      updateBatchToolbar();
     }
 
-    function filterAchievements() {
-      var query = document.getElementById('achSearchInput').value.toLowerCase();
-      var items = document.querySelectorAll('.ach-item');
-      items.forEach(function(it) {
-        var text = it.innerText.toLowerCase();
-        it.style.display = text.includes(query) ? 'flex' : 'none';
+    function toggleSelectSingle(apiname, isSelected) {
+      if (isSelected) selectedApinames.add(apiname);
+      else selectedApinames.delete(apiname);
+      
+      var row = document.querySelector('.ach-item[data-apiname="' + apiname + '"]');
+      if (row) {
+        if (isSelected) row.classList.add('selected');
+        else row.classList.remove('selected');
+      }
+      updateBatchToolbar();
+    }
+
+    function toggleSelectAll(isChecked) {
+      selectedApinames.clear();
+      var visibleRows = document.querySelectorAll('.ach-item');
+      visibleRows.forEach(row => {
+        if (row.style.display !== 'none') {
+          var apiname = row.getAttribute('data-apiname');
+          if (isChecked) {
+            selectedApinames.add(apiname);
+            row.classList.add('selected');
+            row.querySelector('.ach-checkbox').checked = true;
+          } else {
+            row.classList.remove('selected');
+            row.querySelector('.ach-checkbox').checked = false;
+          }
+        }
       });
+      updateBatchToolbar();
     }
 
-    async function unlockSingleNow(apiname) {
-      var ach = currentAchList.find(function(x) { return x.apiname === apiname; });
-      if (!ach) return;
-      await reqAction('/api/unlock-achievement-now', {
+    function updateBatchToolbar() {
+      var count = selectedApinames.size;
+      document.getElementById('selectedCountText').innerText = count + ' seleccionados';
+      document.getElementById('selectAllCheckbox').checked = count > 0 && count === currentAchList.length;
+
+      var estText = document.getElementById('estimatedTimeText');
+      if (count > 0) {
+        var minHours = ((count * 45) / 60).toFixed(1);
+        var maxHours = ((count * 85) / 60).toFixed(1);
+        estText.innerText = '⏱️ Cadencia Orgánica: ~' + minHours + 'h a ' + maxHours + 'h';
+      } else {
+        estText.innerText = '';
+      }
+    }
+
+    // ACCIONES EN LOTE (BATCH)
+    async function unlockSelected() {
+      if (!selectedApinames.size) return alert('Selecciona al menos un logro primero marcando las casillas.');
+      var items = currentAchList.filter(x => selectedApinames.has(x.apiname));
+      await reqAction('/api/unlock-batch', {
         appid: currentAchAppId,
         gameName: currentAchGameName,
-        apiname: ach.apiname,
-        name: ach.name,
-        desc: ach.description,
-        icon: ach.iconOpen || ach.iconClosed,
-        percent: ach.percent,
-        tier: ach.tier,
-        color: ach.color
+        items: items
       });
-      ach.unlocked = true;
+      items.forEach(it => { it.unlocked = true; it.inQueue = false; });
+      selectedApinames.clear();
       renderAchModal();
       loadStatus();
     }
 
-    async function queueAllOrganic() {
-      var locked = currentAchList.filter(function(x) { return !x.unlocked && !x.inQueue; });
-      if (!locked.length) return alert('¡Todos los logros de este juego ya están conseguidos o en cola!');
-      await reqAction('/api/queue-achievements', {
+    async function lockSelected() {
+      if (!selectedApinames.size) return alert('Selecciona al menos un logro primero.');
+      if (!confirm('¿Deseas volver a bloquear los ' + selectedApinames.size + ' logros seleccionados en el registro?')) return;
+      var apinames = Array.from(selectedApinames);
+      await reqAction('/api/lock-batch', {
         appid: currentAchAppId,
-        gameName: currentAchGameName,
-        items: locked
+        apinames: apinames
       });
-      alert('⚡ ' + locked.length + ' logros añadidos a la cola orgánica. Se desbloquearán progresivamente cada 45-85 minutos.');
-      closeAchModal();
+      currentAchList.forEach(it => {
+        if (selectedApinames.has(it.apiname)) { it.unlocked = false; it.inQueue = false; }
+      });
+      selectedApinames.clear();
+      renderAchModal();
       loadStatus();
     }
 
-    async function clearAchQueue() {
-      if (!confirm('¿Deseas vaciar toda la cola de logros en espera?')) return;
-      await reqAction('/api/clear-queue');
-      closeAchModal();
+    async function queueSelectedOrganic() {
+      if (!selectedApinames.size) return alert('Selecciona los logros que deseas programar.');
+      var items = currentAchList.filter(x => selectedApinames.has(x.apiname) && !x.unlocked && !x.inQueue);
+      if (!items.length) return alert('Todos los logros seleccionados ya están conseguidos o en cola.');
+      
+      await reqAction('/api/queue-achievements', {
+        appid: currentAchAppId,
+        gameName: currentAchGameName,
+        items: items
+      });
+      alert('⚡ ' + items.length + ' logros programados. El bot los irá desbloqueando en lapsos naturales de 45-85 minutos.');
+      items.forEach(it => it.inQueue = true);
+      selectedApinames.clear();
+      renderAchModal();
       loadStatus();
     }
 
