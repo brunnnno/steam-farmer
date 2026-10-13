@@ -9,7 +9,7 @@ cfg.games = cfg.games || [];
 cfg.gameNames = cfg.gameNames || {};
 cfg.customStatus = cfg.customStatus || '';
 cfg.discordWebhook = cfg.discordWebhook || '';
-cfg.webPin = cfg.webPin || '1234';
+cfg.webPin = String(cfg.webPin || '1234');
 cfg.personaState = cfg.personaState !== undefined ? cfg.personaState : SteamUser.EPersonaState.Invisible;
 
 const client = new SteamUser();
@@ -20,7 +20,7 @@ let isCollisionPaused = false;
 let collisionTimer = null;
 let sessionStartTime = Date.now();
 
-// Presets temáticos predefinidos
+// Listas Temáticas Predefinidas
 const PRESETS = {
   competitivos: {
     name: '🎯 Competitivos',
@@ -33,39 +33,35 @@ const PRESETS = {
     names: { 10: 'Counter-Strike 1.6', 240: 'Counter-Strike: Source', 220: 'Half-Life 2', 550: 'Left 4 Dead 2', 620: 'Portal 2' }
   },
   aaa: {
-    name: '🔥 AAA / Populares',
+    name: '🔥 Populares AAA',
     games: [271590, 1938090, 1091500, 292030, 379720],
     names: { 271590: 'Grand Theft Auto V', 1938090: 'Call of Duty®', 1091500: 'Cyberpunk 2077', 292030: 'The Witcher 3', 379720: 'DOOM' }
   }
 };
 
-// Webhook de Discord
-function sendDiscordWebhook(title, description, color = 0x38bdf8) {
+function sendDiscordWebhook(title, description, color) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.startsWith('https://discord.com/api/webhooks/')) return;
   try {
-    const webhookUrl = new URL(cfg.discordWebhook);
     const payload = JSON.stringify({
       embeds: [{
         title: title,
         description: description,
-        color: color,
+        color: color || 3718648,
         footer: { text: 'Steam Hour Booster Pro' },
         timestamp: new Date().toISOString()
       }]
     });
-    const req = https.request(webhookUrl, {
+    const parsed = new URL(cfg.discordWebhook);
+    const req = https.request(parsed, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
     });
     req.on('error', () => {});
     req.write(payload);
     req.end();
-  } catch (e) {
-    console.error('Error enviando webhook:', e.message);
-  }
+  } catch (err) {}
 }
 
-// Iniciar sesión en Steam
 const logOnDetails = cfg.refreshToken 
   ? { refreshToken: cfg.refreshToken }
   : { accountName: cfg.user, password: cfg.pass };
@@ -77,24 +73,24 @@ client.on('loggedOn', () => {
   client.setPersona(cfg.personaState);
   resolverNombresFaltantes();
   actualizarFarmeo();
-  sendDiscordWebhook('🟢 Bot Conectado', `Iniciando farmeo de ${cfg.games.length} juegos en la nube.`, 0x10b981);
+  sendDiscordWebhook('🟢 Bot Iniciado', 'Farmeando ' + cfg.games.length + ' juegos en la nube.', 1095985);
 });
 
 client.on('error', (e) => console.error('Error Steam:', e.message));
 
-// Anti-Colisión: Si inicias un juego en tu PC real
+// Anti-Colisión: Se pausa cuando inicias un juego en tu PC
 client.on('playingElsewhere', () => {
-  console.log('[⚠️ Anti-Colisión] Detectada sesión activa de juego en PC real. Pausando bot...');
+  console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC real. Pausando bot...');
   isCollisionPaused = true;
   client.gamesPlayed([]);
-  sendDiscordWebhook('🎮 Partida Detectada en PC', 'El bot se pausó automáticamente para no interferir con tu partida. Se reanudará 10 minutos después de que termines.', 0xf59e0b);
+  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Bot pausado automáticamente para no interferir con tu partida. Se reanudará tras terminar.', 16101915);
 
   if (collisionTimer) clearTimeout(collisionTimer);
   collisionTimer = setTimeout(() => {
-    console.log('[Anti-Colisión] Reanudando farmeo en la nube...');
+    console.log('[Anti-Colisión] Reanudando farmeo...');
     isCollisionPaused = false;
     actualizarFarmeo();
-    sendDiscordWebhook('🔄 Farmeo Reanudado', 'El bot volvió a farmear en la nube automáticamente.', 0x10b981);
+    sendDiscordWebhook('🔄 Farmeo Reanudado', 'El bot volvió a farmear en la nube automáticamente.', 1095985);
   }, 10 * 60 * 1000);
 });
 
@@ -112,7 +108,7 @@ function resolverNombresFaltantes() {
 }
 
 function obtenerNombreSteam(appid, cb) {
-  https.get(`https://store.steampowered.com/api/appdetails?appids=${appid}&filters=basic&l=spanish`, (res) => {
+  https.get('https://store.steampowered.com/api/appdetails?appids=' + appid + '&filters=basic&l=spanish', (res) => {
     let data = '';
     res.on('data', c => data += c);
     res.on('end', () => {
@@ -134,7 +130,7 @@ function actualizarFarmeo() {
     client.gamesPlayed(list);
     if (!isFarming) sessionStartTime = Date.now();
     isFarming = true;
-    console.log(`[+] Farmeando ${cfg.games.length} juegos.`);
+    console.log('[+] Farmeando ' + cfg.games.length + ' juegos.');
   } else {
     client.gamesPlayed([]);
     isFarming = false;
@@ -150,7 +146,6 @@ function guardarConfig() {
   }
 }
 
-// Servidor Web
 const PORT = process.env.PORT || 8000;
 
 const server = http.createServer((req, res) => {
@@ -174,7 +169,7 @@ const server = http.createServer((req, res) => {
     const query = parsedUrl.query.term;
     if (!query) return res.end('[]');
 
-    https.get(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=spanish&cc=US`, (sRes) => {
+    https.get('https://store.steampowered.com/api/storesearch/?term=' + encodeURIComponent(query) + '&l=spanish&cc=US', (sRes) => {
       let data = '';
       sRes.on('data', chunk => data += chunk);
       sRes.on('end', () => {
@@ -207,7 +202,7 @@ const server = http.createServer((req, res) => {
     }));
   }
 
-  // API POST protegida por PIN
+  // Acciones POST con validación de PIN
   if (req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -215,13 +210,11 @@ const server = http.createServer((req, res) => {
       try {
         const data = JSON.parse(body || '{}');
 
-        // Verificación del PIN
-        if (cfg.webPin && data.pin !== cfg.webPin) {
+        if (cfg.webPin && String(data.pin) !== String(cfg.webPin)) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'PIN incorrecto' }));
         }
 
-        // Endpoint de verificación inicial
         if (parsedUrl.pathname === '/api/verify-pin') {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true }));
@@ -301,7 +294,7 @@ const server = http.createServer((req, res) => {
           cfg.discordWebhook = (data.webhook || '').trim();
           guardarConfig();
           if (cfg.discordWebhook) {
-            sendDiscordWebhook('🔔 Webhook Configurado', 'Notificaciones vinculadas correctamente con tu bot de Steam.', 0x38bdf8);
+            sendDiscordWebhook('🔔 Webhook Conectado', 'Notificaciones vinculadas correctamente con tu bot.', 3718648);
           }
         }
 
@@ -351,7 +344,6 @@ const server = http.createServer((req, res) => {
     }
     .container { width: 100%; max-width: 980px; }
 
-    /* Modal PIN */
     #lockModal {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(7, 10, 19, 0.94);
@@ -370,9 +362,7 @@ const server = http.createServer((req, res) => {
       border: 1px solid var(--card-border); color: #fff; font-size: 1.3rem;
       text-align: center; letter-spacing: 5px; outline: none; margin-bottom: 18px;
     }
-    .lock-card input:focus { border-color: var(--primary); }
 
-    /* Header */
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
     .brand h1 { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .brand p { font-size: 0.85rem; color: var(--text-muted); }
@@ -386,7 +376,6 @@ const server = http.createServer((req, res) => {
     .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 7px 13px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
 
-    /* Dashboard & Capacity */
     .dashboard-panel { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 18px 22px; margin-bottom: 22px; display: flex; flex-direction: column; gap: 16px; }
     .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
     .stat-item { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.04); padding: 12px 16px; border-radius: 12px; }
@@ -397,7 +386,6 @@ const server = http.createServer((req, res) => {
     .progress-bar-bg { width: 100%; height: 8px; background: rgba(0, 0, 0, 0.4); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.05); }
     .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #818cf8); transition: width 0.4s ease; }
 
-    /* Controls */
     .controls { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 20px; margin-bottom: 26px; display: flex; flex-direction: column; gap: 16px; }
     .input-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .search-box-wrapper { position: relative; flex: 1; min-width: 220px; }
@@ -420,7 +408,6 @@ const server = http.createServer((req, res) => {
     .chip { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border); color: #cbd5e1; padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
     .chip:hover { border-color: var(--primary); color: var(--primary); background: rgba(56, 189, 248, 0.08); }
 
-    /* Dropdown búsqueda */
     .search-results { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: #0f1626; border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 16px 35px rgba(0,0,0,0.6); max-height: 280px; overflow-y: auto; z-index: 100; display: none; }
     .search-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
     .search-item:hover { background: rgba(56, 189, 248, 0.1); }
@@ -428,7 +415,6 @@ const server = http.createServer((req, res) => {
     .search-info { flex: 1; font-size: 0.85rem; font-weight: 600; }
     .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
 
-    /* Grid */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
     .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; backdrop-filter: blur(10px); transition: all 0.25s ease; }
     .card:hover { transform: translateY(-4px); border-color: rgba(56, 189, 248, 0.3); }
@@ -441,7 +427,6 @@ const server = http.createServer((req, res) => {
   </style>
 </head>
 <body>
-  <!-- Modal Lock -->
   <div id="lockModal">
     <div class="lock-card">
       <h2>🔒 Panel Protegido</h2>
@@ -523,10 +508,10 @@ const server = http.createServer((req, res) => {
   </div>
 
   <script>
-    let savedPin = localStorage.getItem('farmer_pin');
-    let sessionStart = null;
-    let activeGamesCount = 0;
-    let namesCache = {};
+    var savedPin = localStorage.getItem('farmer_pin');
+    var sessionStart = null;
+    var activeGamesCount = 0;
+    var namesCache = {};
 
     function checkAuth() {
       if (!savedPin) {
@@ -539,13 +524,13 @@ const server = http.createServer((req, res) => {
     }
 
     async function unlock() {
-      const pin = document.getElementById('pinInput').value.trim();
+      var pin = document.getElementById('pinInput').value.trim();
       if (!pin) return;
       
-      const res = await fetch('/api/verify-pin', {
+      var res = await fetch('/api/verify-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin })
+        body: JSON.stringify({ pin: pin })
       });
 
       if (res.ok) {
@@ -565,21 +550,20 @@ const server = http.createServer((req, res) => {
       document.getElementById('lockModal').style.display = 'flex';
     }
 
-    // Cronómetro en vivo
-    setInterval(() => {
+    setInterval(function() {
       if (!sessionStart || activeGamesCount === 0) return;
-      const s = Math.floor((Date.now() - sessionStart) / 1000);
-      const h = String(Math.floor(s / 3600)).padStart(2, '0');
-      const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-      const sec = String(s % 60).padStart(2, '0');
-      document.getElementById('timerVal').innerText = \`\${h}h \${m}m \${sec}s\`;
+      var s = Math.floor((Date.now() - sessionStart) / 1000);
+      var h = String(Math.floor(s / 3600)).padStart(2, '0');
+      var m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+      var sec = String(s % 60).padStart(2, '0');
+      document.getElementById('timerVal').innerText = h + 'h ' + m + 'm ' + sec + 's';
       document.getElementById('hoursVal').innerText = '+' + ((s / 3600) * activeGamesCount).toFixed(1) + ' hrs';
     }, 1000);
 
     async function loadStatus() {
       try {
-        const res = await fetch('/api/status');
-        const data = await res.json();
+        var res = await fetch('/api/status');
+        var data = await res.json();
 
         document.getElementById('userLabel').innerText = 'Cuenta: ' + data.user;
         activeGamesCount = (data.isPaused || data.isCollisionPaused) ? 0 : data.games.length;
@@ -587,14 +571,14 @@ const server = http.createServer((req, res) => {
         namesCache = data.gameNames || {};
 
         document.getElementById('gamesCountVal').innerText = data.games.length + ' / 32';
-        const percent = Math.round((data.games.length / 32) * 100);
+        var percent = Math.round((data.games.length / 32) * 100);
         document.getElementById('capacityPercent').innerText = percent + '%';
         document.getElementById('capacityFill').style.width = percent + '%';
 
-        const badge = document.getElementById('badgeStatus');
-        const statusText = document.getElementById('statusText');
-        const pauseBtn = document.getElementById('pauseBtn');
-        const personaBtn = document.getElementById('personaBtn');
+        var badge = document.getElementById('badgeStatus');
+        var statusText = document.getElementById('statusText');
+        var pauseBtn = document.getElementById('pauseBtn');
+        var personaBtn = document.getElementById('personaBtn');
 
         if (data.isCollisionPaused) {
           badge.className = 'badge-status collision';
@@ -624,61 +608,164 @@ const server = http.createServer((req, res) => {
     }
 
     function renderPresets(presets) {
-      const container = document.getElementById('presetsContainer');
+      var container = document.getElementById('presetsContainer');
       container.innerHTML = '<span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Cargar Preset:</span>';
-      (presets || []).forEach(p => {
-        const chip = document.createElement('span');
+      (presets || []).forEach(function(p) {
+        var chip = document.createElement('span');
         chip.className = 'chip';
-        chip.innerText = \`\${p.name} (\${p.count})\`;
-        chip.onclick = () => applyPreset(p.key);
+        chip.innerText = p.name + ' (' + p.count + ')';
+        chip.onclick = function() { applyPreset(p.key); };
         container.appendChild(chip);
       });
     }
 
     function renderGames(games) {
-      const grid = document.getElementById('gamesGrid');
+      var grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
       if (!games.length) {
         grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No tienes juegos agregados. Agrega uno o carga un preset arriba.</div>';
         return;
       }
 
-      games.forEach(id => {
-        const title = namesCache[id] || ('Juego #' + id);
-        const card = document.createElement('div');
+      games.forEach(function(id) {
+        var title = namesCache[id] || ('Juego #' + id);
+        var card = document.createElement('div');
         card.className = 'card';
-        card.innerHTML = \`
-          <img class="card-banner" src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/\${id}/header.jpg" onerror="this.src='https://placehold.co/460x215/0c1220/white?text=AppID+\${id}'">
-          <div class="card-content">
-            <div>
-              <div class="card-title" title="\${title}">\${title}</div>
-              <div class="card-appid">AppID: \${id}</div>
-            </div>
-            <button class="btn-remove" onclick="removeGame(\${id})">Quitar</button>
-          </div>
-        \`;
+        card.innerHTML = 
+          '<img class="card-banner" src="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/' + id + '/header.jpg" onerror="this.src=\\'https://placehold.co/460x215/0c1220/white?text=AppID+' + id + '\\'">' +
+          '<div class="card-content">' +
+            '<div>' +
+              '<div class="card-title" title="' + title.replace(/"/g, '&quot;') + '">' + title + '</div>' +
+              '<div class="card-appid">AppID: ' + id + '</div>' +
+            '</div>' +
+            '<button class="btn-remove" onclick="removeGame(' + id + ')">Quitar</button>' +
+          '</div>';
         grid.appendChild(card);
       });
     }
 
-    // Buscador interactivo
-    let debounceTimer = null;
-    const searchInput = document.getElementById('searchInput');
-    const searchResults = document.getElementById('searchResults');
+    var debounceTimer = null;
+    var searchInput = document.getElementById('searchInput');
+    var searchResults = document.getElementById('searchResults');
 
-    searchInput.addEventListener('input', (e) => {
+    searchInput.addEventListener('input', function(e) {
       clearTimeout(debounceTimer);
-      const val = e.target.value.trim();
+      var val = e.target.value.trim();
       if (!val || !isNaN(val)) {
         searchResults.style.display = 'none';
         return;
       }
 
-      debounceTimer = setTimeout(async () => {
+      debounceTimer = setTimeout(async function() {
         try {
-          const res = await fetch('/api/search?term=' + encodeURIComponent(val));
-          const list = await res.json();
+          var res = await fetch('/api/search?term=' + encodeURIComponent(val));
+          var list = await res.json();
           searchResults.innerHTML = '';
-          if (list.length) {
-            list.forEach(it => {
-              const div = document.createElement('
+          if (list && list.length) {
+            list.forEach(function(it) {
+              var div = document.createElement('div');
+              div.className = 'search-item';
+              div.innerHTML = 
+                '<img src="' + it.img + '" onerror="this.style.display=\\'none\\'">' +
+                '<div class="search-info">' + it.name + '<span>AppID: ' + it.id + '</span></div>';
+              div.onclick = function() {
+                addGame(it.id, it.name);
+                searchResults.style.display = 'none';
+                searchInput.value = '';
+              };
+              searchResults.appendChild(div);
+            });
+            searchResults.style.display = 'block';
+          } else {
+            searchResults.style.display = 'none';
+          }
+        } catch (e) { searchResults.style.display = 'none'; }
+      }, 250);
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!searchResults.contains(e.target) && e.target !== searchInput) {
+        searchResults.style.display = 'none';
+      }
+    });
+
+    function addFromInput() {
+      var v = searchInput.value.trim();
+      if (!v) return;
+      if (!isNaN(v)) addGame(Number(v));
+    }
+
+    async function reqAction(endpoint, body) {
+      body = body || {};
+      body.pin = savedPin;
+      var res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      var data = await res.json();
+      if (res.status === 401) {
+        alert('PIN incorrecto o sesión caducada.');
+        lock();
+        return null;
+      }
+      return data;
+    }
+
+    async function addGame(appid, name) {
+      var data = await reqAction('/api/add', { appid: Number(appid), name: name || '' });
+      if (data && data.error) alert(data.error);
+      else {
+        searchInput.value = '';
+        loadStatus();
+      }
+    }
+
+    async function removeGame(appid) {
+      await reqAction('/api/remove', { appid: Number(appid) });
+      loadStatus();
+    }
+
+    async function clearAll() {
+      if (!confirm('¿Seguro que deseas vaciar toda la lista?')) return;
+      await reqAction('/api/clear-all');
+      loadStatus();
+    }
+
+    async function applyPreset(presetKey) {
+      await reqAction('/api/apply-preset', { presetKey: presetKey });
+      loadStatus();
+    }
+
+    async function togglePause() {
+      await reqAction('/api/toggle');
+      loadStatus();
+    }
+
+    async function togglePersona() {
+      await reqAction('/api/persona');
+      loadStatus();
+    }
+
+    async function saveCustomStatus() {
+      var status = document.getElementById('customStatusInput').value;
+      await reqAction('/api/custom-status', { status: status });
+      alert('Texto actualizado en Steam.');
+      loadStatus();
+    }
+
+    async function saveWebhook() {
+      var webhook = document.getElementById('webhookInput').value;
+      await reqAction('/api/set-webhook', { webhook: webhook });
+      alert('Webhook guardado y mensaje de prueba enviado.');
+      loadStatus();
+    }
+
+    checkAuth();
+    setInterval(loadStatus, 15000);
+  </script>
+</body>
+</html>`);
+});
+
+server.listen(PORT, () => console.log('[Web] Servidor listo en puerto ' + PORT));
