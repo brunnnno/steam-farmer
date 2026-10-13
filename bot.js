@@ -15,6 +15,7 @@ cfg.cardFarming = cfg.cardFarming || false;
 cfg.sleepMode = cfg.sleepMode || { enabled: false, start: 3, end: 8 };
 cfg.achievementQueue = cfg.achievementQueue || [];
 cfg.unlockedAchievements = cfg.unlockedAchievements || {};
+cfg.mySteamID = cfg.mySteamID || '';
 
 const client = new SteamUser();
 
@@ -26,6 +27,7 @@ let collisionTimer = null;
 let sessionStartTime = Date.now();
 let webCookies = '';
 let cardDropGames = [];
+let mySteamID = cfg.mySteamID || '';
 
 const PRESETS = {
   competitivos: {
@@ -45,7 +47,50 @@ const PRESETS = {
   }
 };
 
-// Webhook de Discord con soporte para imágenes de trofeos y bypass anti-error 1015
+// Cliente HTTP con soporte nativo de redirecciones 301/302
+function fetchWithRedirects(targetUrl, headers, maxRedirects, cb) {
+  if (typeof headers === 'function') {
+    cb = headers;
+    headers = {};
+    maxRedirects = 4;
+  }
+  if (maxRedirects === undefined) maxRedirects = 4;
+  if (maxRedirects <= 0) return cb(new Error('Demasiadas redirecciones'), null);
+
+  try {
+    const parsed = new URL(targetUrl);
+    const clientLib = parsed.protocol === 'http:' ? http : https;
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+      path: parsed.pathname + parsed.search,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        ...headers
+      }
+    };
+
+    clientLib.get(options, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        let next = res.headers.location;
+        if (!next.startsWith('http')) {
+          next = parsed.protocol + '//' + parsed.hostname + next;
+        }
+        return fetchWithRedirects(next, headers, maxRedirects - 1, cb);
+      }
+
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => cb(null, data, res.statusCode));
+    }).on('error', (err) => cb(err, null));
+  } catch (e) {
+    cb(e, null);
+  }
+}
+
+// Webhook de Discord con soporte para imágenes y bypass anti-1015
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
@@ -106,6 +151,11 @@ client.logOn(logOnDetails);
 
 client.on('loggedOn', () => {
   console.log('[+] Conectado a Steam');
+  if (client.steamID) {
+    mySteamID = client.steamID.getSteamID64();
+    cfg.mySteamID = mySteamID;
+    guardarConfig();
+  }
   client.setPersona(cfg.personaState);
   resolverNombresFaltantes();
   actualizarFarmeo();
@@ -159,7 +209,7 @@ client.on('friendMessage', (steamID, message) => {
   }
 });
 
-// MOTOR DE LOGROS ORGÁNICOS (Revisa la cola cada 30 segundos)
+// Motor de logros orgánicos (Revisa cola cada 30 segundos)
 setInterval(() => {
   if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
   const now = Date.now();
@@ -282,74 +332,133 @@ function guardarConfig() {
   } catch (e) {}
 }
 
-// OBTENER ESQUEMA Y LOGROS CON RAREZA GLOBAL
+function getTag(body, tag) {
+  const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
+  const match = regex.exec(body);
+  if (!match) return '';
+  let content = match[1].trim();
+  if (content.startsWith('<![CDATA[') && content.endsWith(']]>')) {
+    content = content.substring(9, content.length - 3).trim();
+  }
+  return content;
+}
+
+// Fallback HTML en caso de que el perfil XML no tenga el juego iniciado
+function parseAchievementsFromHtml(html, percentMap, unlockedLocally) {
+  const list = [];
+  const parts = html.split('<div class="achieveRow">');
+  for (let i = 1; i < parts.length; i++) {
+    const block = parts[i].split('<div class="achieveRow">')[0];
+    const imgM = /<img\s+src="([^"]+)"/i.exec(block);
+    const h3M = /<h3>([\s\S]*?)<\/h3>/i.exec(block);
+    const h5M = /<h5>([\s\S]*?)<\/h5>/i.exec(block);
+    const pctM = /<div class="achievePercent">\s*([0-9.]+)\s*%\s*<\/div>/i.exec(block);
+
+    if (h3M) {
+      const name = h3M[1].replace(/<[^>]+>/g, '').trim();
+      const desc = h5M ? h5M[1].replace(/<[^>]+>/g, '').trim() : '';
+      const icon = imgM ? imgM[1] : '';
+      const pct = pctM ? parseFloat(pctM[1]) : 50.0;
+      const apiname = 'ACH_' + name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+
+      let tier = '⚪ Común';
+      let colorHex = 0x94a3b8;
+      if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
+      else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
+      else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
+
+      const isUnlocked = unlockedLocally.includes(apiname);
+
+      list.push({
+        apiname: apiname,
+        name: name,
+        description: desc || 'Logro de Steam',
+        iconClosed: icon,
+        iconOpen: icon,
+        percent: pct,
+        tier: tier,
+        color: colorHex,
+        unlocked: isUnlocked,
+        inQueue: false
+      });
+    }
+  }
+  return list;
+}
+
+// Buscador maestro de logros con seguimiento de redirecciones y fallback
 function obtenerLogrosJuego(appid, cb) {
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
-  const urlXml = `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
+  fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
+    let percentMap = {};
+    try {
+      const parsedG = JSON.parse(globalData);
+      if (parsedG.achievementpercentages && parsedG.achievementpercentages.achievements) {
+        parsedG.achievementpercentages.achievements.forEach(a => {
+          percentMap[a.name] = parseFloat(a.percent).toFixed(1);
+        });
+      }
+    } catch (e) {}
 
-  https.get(urlGlobal, (resGlobal) => {
-    let globalData = '';
-    resGlobal.on('data', c => globalData += c);
-    resGlobal.on('end', () => {
-      let percentMap = {};
-      try {
-        const parsedG = JSON.parse(globalData);
-        if (parsedG.achievementpercentages && parsedG.achievementpercentages.achievements) {
-          parsedG.achievementpercentages.achievements.forEach(a => {
-            percentMap[a.name] = parseFloat(a.percent).toFixed(1);
+    const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
+    let targetXmlUrl = userSteamId 
+      ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
+      : `https://steamcommunity.com/my/stats/${appid}/?xml=1`;
+
+    const xmlHeaders = {};
+    if (webCookies) xmlHeaders['Cookie'] = webCookies;
+
+    fetchWithRedirects(targetXmlUrl, xmlHeaders, 4, (errXml, xmlData) => {
+      const unlockedLocally = cfg.unlockedAchievements[appid] || [];
+      const achievements = [];
+
+      if (!errXml && xmlData && xmlData.includes('<achievement')) {
+        const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
+        let match;
+
+        while ((match = achRegex.exec(xmlData)) !== null) {
+          const closedOriginal = match[1] === '1';
+          const body = match[2];
+          const apiname = getTag(body, 'apiname');
+          const pct = parseFloat(percentMap[apiname] || 50.0);
+
+          let tier = '⚪ Común';
+          let colorHex = 0x94a3b8;
+          if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
+          else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
+          else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
+
+          const isUnlocked = closedOriginal || unlockedLocally.includes(apiname);
+          const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === apiname);
+
+          achievements.push({
+            apiname: apiname,
+            name: getTag(body, 'name') || apiname,
+            description: getTag(body, 'description') || 'Logro de Steam',
+            iconClosed: getTag(body, 'iconClosed'),
+            iconOpen: getTag(body, 'iconOpen'),
+            percent: pct,
+            tier: tier,
+            color: colorHex,
+            unlocked: isUnlocked,
+            inQueue: inQueue
           });
         }
-      } catch (e) {}
+      }
 
-      https.get(urlXml, (resXml) => {
-        let xmlData = '';
-        resXml.on('data', c => xmlData += c);
-        resXml.on('end', () => {
-          const achievements = [];
-          const achRegex = /<achievement\s+closed="(\d+)">([\s\S]*?)<\/achievement>/gi;
-          let match;
+      if (achievements.length > 0) return cb(achievements);
 
-          const getTag = (body, tag) => {
-            const m = new RegExp(`<${tag}>(?:<\\!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`, 'i').exec(body);
-            return m ? m[1].trim() : '';
-          };
-
-          const unlockedLocally = cfg.unlockedAchievements[appid] || [];
-
-          while ((match = achRegex.exec(xmlData)) !== null) {
-            const closedOriginal = match[1] === '1';
-            const body = match[2];
-            const apiname = getTag(body, 'apiname');
-            const pct = parseFloat(percentMap[apiname] || 50.0);
-
-            let tier = '⚪ Común';
-            let colorHex = 0x94a3b8;
-            if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
-            else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
-            else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
-
-            const isUnlocked = closedOriginal || unlockedLocally.includes(apiname);
-            const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === apiname);
-
-            achievements.push({
-              apiname: apiname,
-              name: getTag(body, 'name') || apiname,
-              description: getTag(body, 'description') || 'Logro de Steam',
-              iconClosed: getTag(body, 'iconClosed'),
-              iconOpen: getTag(body, 'iconOpen'),
-              percent: pct,
-              tier: tier,
-              color: colorHex,
-              unlocked: isUnlocked,
-              inQueue: inQueue
-            });
-          }
-
-          cb(achievements);
-        });
-      }).on('error', () => cb([]));
+      // Si el XML no devolvió logros, recurre al listado público de la comunidad
+      const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/`;
+      fetchWithRedirects(urlGlobalHtml, {}, 4, (errHtml, htmlData) => {
+        if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
+          const fallbackList = parseAchievementsFromHtml(htmlData, percentMap, unlockedLocally);
+          return cb(fallbackList);
+        }
+        cb([]);
+      });
     });
-  }).on('error', () => cb([]));
+  });
 }
 
 const PORT = process.env.PORT || 8000;
@@ -524,7 +633,7 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // DESBLOQUEAR LOGRO INMEDIATO
+        // Desbloquear logro individual
         if (parsedUrl.pathname === '/api/unlock-achievement-now') {
           const { appid, gameName, apiname, name, desc, icon, percent, tier, color } = data;
           cfg.unlockedAchievements[appid] = cfg.unlockedAchievements[appid] || [];
@@ -535,7 +644,7 @@ const server = http.createServer((req, res) => {
 
           sendDiscordWebhook(
             `🏆 ¡Logro Manual Obtenido! • ${gameName}`,
-            `**${name}**\n*${desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${tier} (${percent}% de jugadores globales)\n⚡ **Modo:** Desbloqueo instantáneo bajo demanda.`,
+            `**${name}**\n*${desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${tier} (${percent}% de jugadores globales)\n⚡ **Modo:** Desbloqueo manual bajo demanda.`,
             color || 3718648,
             icon
           );
@@ -543,10 +652,10 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true }));
         }
 
-        // ENCOLAR PLATINADO ORGÁNICO
+        // Cola de platinado orgánico
         if (parsedUrl.pathname === '/api/queue-achievements') {
           const { appid, gameName, items } = data;
-          let baseDelay = 5; // Primer logro en 5 minutos
+          let baseDelay = 5;
           items.forEach(it => {
             const alreadyQueued = cfg.achievementQueue.some(q => q.appid == appid && q.apiname === it.apiname);
             if (!alreadyQueued) {
@@ -571,7 +680,7 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true, count: items.length }));
         }
 
-        // VACIAR COLA DE LOGROS
+        // Vaciar cola
         if (parsedUrl.pathname === '/api/clear-queue') {
           cfg.achievementQueue = [];
           guardarConfig();
@@ -614,7 +723,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // FRONTEND DE ÚLTIMA GENERACIÓN (GLASSMORPHISM / CYBERPUNK)
+  // Interfaz HTML
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="es">
@@ -652,7 +761,6 @@ const server = http.createServer((req, res) => {
     }
     .container { width: 100%; max-width: 1000px; }
 
-    /* Modales */
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(7, 10, 19, 0.94);
@@ -670,7 +778,6 @@ const server = http.createServer((req, res) => {
       text-align: center; letter-spacing: 5px; outline: none; margin: 16px 0;
     }
 
-    /* Modal de Logros */
     .ach-modal-card {
       background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.2);
       width: 95%; max-width: 850px; max-height: 90vh; border-radius: 20px;
@@ -700,7 +807,6 @@ const server = http.createServer((req, res) => {
     .ach-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
     .ach-badge { font-size: 0.75rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
 
-    /* Barra Superior y Dashboard */
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
     .brand h1 { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .brand p { font-size: 0.85rem; color: var(--text-muted); }
@@ -1037,7 +1143,6 @@ const server = http.createServer((req, res) => {
       });
     }
 
-    // GESTIÓN DEL MODAL DE LOGROS
     async function openAchModal(appid, title) {
       currentAchAppId = appid;
       currentAchGameName = title;
@@ -1051,7 +1156,8 @@ const server = http.createServer((req, res) => {
         currentAchList = await res.json();
         renderAchModal();
       } catch (e) {
-        document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Este juego no posee logros públicos en Steam o hubo un error al consultar.</p>';
+        document.getElementById('achProgressText').innerText = 'Error al cargar';
+        document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Error al consultar logros en Steam.</p>';
       }
     }
 
@@ -1060,12 +1166,13 @@ const server = http.createServer((req, res) => {
     function renderAchModal() {
       var cont = document.getElementById('achListContainer');
       cont.innerHTML = '';
-      if (!currentAchList.length) {
-        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No se encontraron logros disponibles.</p>';
+      if (!currentAchList || !currentAchList.length) {
+        document.getElementById('achProgressText').innerText = '0 logros disponibles';
+        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">Este juego no posee logros públicos en Steam.</p>';
         return;
       }
 
-      var unlocked = currentAchList.filter(x => x.unlocked).length;
+      var unlocked = currentAchList.filter(function(x) { return x.unlocked; }).length;
       var pctTotal = Math.round((unlocked / currentAchList.length) * 100);
       document.getElementById('achProgressText').innerText = 'Progreso: ' + unlocked + ' de ' + currentAchList.length + ' conseguidos (' + pctTotal + '%)';
 
@@ -1104,7 +1211,7 @@ const server = http.createServer((req, res) => {
     }
 
     async function unlockSingleNow(apiname) {
-      var ach = currentAchList.find(x => x.apiname === apiname);
+      var ach = currentAchList.find(function(x) { return x.apiname === apiname; });
       if (!ach) return;
       await reqAction('/api/unlock-achievement-now', {
         appid: currentAchAppId,
@@ -1123,14 +1230,14 @@ const server = http.createServer((req, res) => {
     }
 
     async function queueAllOrganic() {
-      var locked = currentAchList.filter(x => !x.unlocked && !x.inQueue);
+      var locked = currentAchList.filter(function(x) { return !x.unlocked && !x.inQueue; });
       if (!locked.length) return alert('¡Todos los logros de este juego ya están conseguidos o en cola!');
       await reqAction('/api/queue-achievements', {
         appid: currentAchAppId,
         gameName: currentAchGameName,
         items: locked
       });
-      alert('⚡ ' + locked.length + ' logros añadidos a la cola orgánica. Se irán desbloqueando cada 45-85 minutos.');
+      alert('⚡ ' + locked.length + ' logros añadidos a la cola orgánica. Se desbloquearán progresivamente cada 45-85 minutos.');
       closeAchModal();
       loadStatus();
     }
