@@ -11,16 +11,20 @@ cfg.customStatus = cfg.customStatus || '';
 cfg.discordWebhook = cfg.discordWebhook || '';
 cfg.webPin = String(cfg.webPin || '1234');
 cfg.personaState = cfg.personaState !== undefined ? cfg.personaState : SteamUser.EPersonaState.Invisible;
+cfg.cardFarming = cfg.cardFarming || false;
+cfg.sleepMode = cfg.sleepMode || { enabled: false, start: 3, end: 8 };
 
 const client = new SteamUser();
 
 let isFarming = false;
 let isPaused = false;
 let isCollisionPaused = false;
+let isSleepPaused = false;
 let collisionTimer = null;
 let sessionStartTime = Date.now();
+let webCookies = '';
+let cardDropGames = [];
 
-// Listas Temáticas Predefinidas
 const PRESETS = {
   competitivos: {
     name: '🎯 Competitivos',
@@ -76,23 +80,131 @@ client.on('loggedOn', () => {
   sendDiscordWebhook('🟢 Bot Iniciado', 'Farmeando ' + cfg.games.length + ' juegos en la nube.', 1095985);
 });
 
+client.on('webSession', (sessionID, cookies) => {
+  webCookies = cookies.join('; ');
+  console.log('[+] Sesión web de Steam establecida (Lista para cromos).');
+  if (cfg.cardFarming) escanearCromos();
+});
+
 client.on('error', (e) => console.error('Error Steam:', e.message));
 
 // Anti-Colisión: Se pausa cuando inicias un juego en tu PC
 client.on('playingElsewhere', () => {
-  console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC real. Pausando bot...');
+  console.log('[⚠️ Anti-Colisión] Partida detectada en PC real. Pausando bot...');
   isCollisionPaused = true;
   client.gamesPlayed([]);
-  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Bot pausado automáticamente para no interferir con tu partida. Se reanudará tras terminar.', 16101915);
+  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Bot pausado para no interrumpir tu juego. Se reanudará al finalizar.', 16101915);
 
   if (collisionTimer) clearTimeout(collisionTimer);
   collisionTimer = setTimeout(() => {
-    console.log('[Anti-Colisión] Reanudando farmeo...');
+    console.log('[Anti-Colisión] Reanudando farmeo en la nube...');
     isCollisionPaused = false;
     actualizarFarmeo();
     sendDiscordWebhook('🔄 Farmeo Reanudado', 'El bot volvió a farmear en la nube automáticamente.', 1095985);
   }, 10 * 60 * 1000);
 });
+
+// Control Remoto por Chat de Steam
+client.on('friendMessage', (steamID, message) => {
+  const msg = message.trim().toLowerCase();
+  const args = msg.split(' ');
+  const cmd = args[0];
+
+  function reply(text) {
+    try { client.chatMessage(steamID, text); } catch (e) {}
+  }
+
+  if (cmd === '!status' || cmd === '!estado') {
+    const estado = isPaused ? 'Pausado' : (isCollisionPaused ? 'Pausado por juego en PC' : 'Activo');
+    reply(`📊 Estado: ${estado} | Juegos: ${cfg.games.length}/32 | Farmeando: ${cfg.games.join(', ')}`);
+  } else if (cmd === '!pausa' || cmd === '!pause') {
+    isPaused = true;
+    actualizarFarmeo();
+    reply('⏸️ Farmeo pausado.');
+  } else if (cmd === '!reanudar' || cmd === '!resume' || cmd === '!play') {
+    isPaused = false;
+    actualizarFarmeo();
+    reply('▶️ Farmeo reanudado.');
+  } else if (cmd === '!invisible') {
+    cfg.personaState = SteamUser.EPersonaState.Invisible;
+    client.setPersona(cfg.personaState);
+    guardarConfig();
+    reply('👻 Modo cambiado a: Invisible.');
+  } else if (cmd === '!online') {
+    cfg.personaState = SteamUser.EPersonaState.Online;
+    client.setPersona(cfg.personaState);
+    guardarConfig();
+    reply('🟢 Modo cambiado a: En Línea.');
+  } else if (cmd === '!add' && args[1]) {
+    const id = parseInt(args[1], 10);
+    if (id && !cfg.games.includes(id) && cfg.games.length < 32) {
+      cfg.games.push(id);
+      guardarConfig();
+      actualizarFarmeo();
+      reply(`✅ Juego ${id} agregado a la lista.`);
+    }
+  } else if (cmd === '!remove' && args[1]) {
+    const id = parseInt(args[1], 10);
+    cfg.games = cfg.games.filter(x => x !== id);
+    guardarConfig();
+    actualizarFarmeo();
+    reply(`🗑️ Juego ${id} quitado de la lista.`);
+  } else if (cmd === '!help' || cmd === '!ayuda') {
+    reply('🤖 Comandos: !status, !pausa, !reanudar, !add <id>, !remove <id>, !invisible, !online');
+  }
+});
+
+// Escaneo y Auto-Farmeo de Cromos
+function escanearCromos(cb) {
+  if (!webCookies) {
+    if (cb) cb([]);
+    return;
+  }
+  const opts = {
+    hostname: 'steamcommunity.com',
+    path: '/my/badges/',
+    method: 'GET',
+    headers: { 'Cookie': webCookies, 'User-Agent': 'Mozilla/5.0' }
+  };
+  https.get(opts, (res) => {
+    let html = '';
+    res.on('data', c => html += c);
+    res.on('end', () => {
+      const regex = /href="https:\/\/steamcommunity\.com\/my\/gamecards\/(\d+)\/"[\s\S]*?progress_info_bold">(\d+)\s+cromo/gi;
+      const found = [];
+      let match;
+      while ((match = regex.exec(html)) !== null) {
+        found.push({ appid: parseInt(match[1], 10), remaining: parseInt(match[2], 10) });
+      }
+      cardDropGames = found;
+      if (cfg.cardFarming && found.length > 0) {
+        cfg.games = found.slice(0, 32).map(x => x.appid);
+        guardarConfig();
+        actualizarFarmeo();
+      }
+      if (cb) cb(found);
+    });
+  }).on('error', () => { if (cb) cb([]); });
+}
+
+// Cronograma Inteligente (Modo Sueño)
+setInterval(() => {
+  if (!cfg.sleepMode || !cfg.sleepMode.enabled) return;
+  const hour = new Date().getHours();
+  const inSleep = (cfg.sleepMode.start < cfg.sleepMode.end)
+    ? (hour >= cfg.sleepMode.start && hour < cfg.sleepMode.end)
+    : (hour >= cfg.sleepMode.start || hour < cfg.sleepMode.end);
+
+  if (inSleep && !isSleepPaused) {
+    console.log('[💤 Cronograma] Modo sueño activado. Bot en pausa nocturna.');
+    isSleepPaused = true;
+    client.gamesPlayed([]);
+  } else if (!inSleep && isSleepPaused) {
+    console.log('[🌅 Cronograma] Modo sueño finalizado. Reanudando farmeo.');
+    isSleepPaused = false;
+    actualizarFarmeo();
+  }
+}, 60 * 1000);
 
 function resolverNombresFaltantes() {
   cfg.games.forEach(id => {
@@ -122,7 +234,7 @@ function obtenerNombreSteam(appid, cb) {
 }
 
 function actualizarFarmeo() {
-  if (!isPaused && !isCollisionPaused && cfg.games.length > 0) {
+  if (!isPaused && !isCollisionPaused && !isSleepPaused && cfg.games.length > 0) {
     const list = [...cfg.games];
     if (cfg.customStatus && cfg.customStatus.trim() !== '') {
       list.push(cfg.customStatus.trim());
@@ -164,7 +276,6 @@ const server = http.createServer((req, res) => {
     }));
   }
 
-  // Buscador Steam Store
   if (parsedUrl.pathname === '/api/search' && req.method === 'GET') {
     const query = parsedUrl.query.term;
     if (!query) return res.end('[]');
@@ -184,7 +295,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Estado general
   if (parsedUrl.pathname === '/api/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({
@@ -194,6 +304,10 @@ const server = http.createServer((req, res) => {
       isFarming: isFarming,
       isPaused: isPaused,
       isCollisionPaused: isCollisionPaused,
+      isSleepPaused: isSleepPaused,
+      cardFarming: cfg.cardFarming,
+      cardDropCount: cardDropGames.length,
+      sleepMode: cfg.sleepMode,
       customStatus: cfg.customStatus || '',
       discordWebhook: cfg.discordWebhook || '',
       personaState: cfg.personaState,
@@ -202,7 +316,6 @@ const server = http.createServer((req, res) => {
     }));
   }
 
-  // Acciones POST con validación de PIN
   if (req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -294,8 +407,39 @@ const server = http.createServer((req, res) => {
           cfg.discordWebhook = (data.webhook || '').trim();
           guardarConfig();
           if (cfg.discordWebhook) {
-            sendDiscordWebhook('🔔 Webhook Conectado', 'Notificaciones vinculadas correctamente con tu bot.', 3718648);
+            sendDiscordWebhook('🔔 Webhook Conectado', 'Notificaciones activadas.', 3718648);
           }
+        }
+
+        // Mega-Función: Toggle Modo Farmeo de Cromos
+        if (parsedUrl.pathname === '/api/toggle-cards') {
+          cfg.cardFarming = !cfg.cardFarming;
+          guardarConfig();
+          if (cfg.cardFarming) {
+            escanearCromos(() => actualizarFarmeo());
+          } else {
+            actualizarFarmeo();
+          }
+        }
+
+        // Mega-Función: Reclamar Licencias Gratuitas
+        if (parsedUrl.pathname === '/api/claim-free') {
+          const freePackages = [730, 440, 570, 230410, 1172470]; // Paquetes free habituales
+          client.requestFreeLicense(freePackages, (err, grantedApps) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, granted: grantedApps ? grantedApps.length : 0 }));
+          });
+          return;
+        }
+
+        // Mega-Función: Configurar Modo Sueño
+        if (parsedUrl.pathname === '/api/set-sleep') {
+          cfg.sleepMode = {
+            enabled: Boolean(data.enabled),
+            start: parseInt(data.start || 3, 10),
+            end: parseInt(data.end || 8, 10)
+          };
+          guardarConfig();
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -308,14 +452,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Frontend HTML / CSS / JS
+  // Frontend Ultra Completo
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Steam Hour Booster Pro</title>
+  <title>Steam Hour Booster Enterprise</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg">
@@ -330,30 +474,31 @@ const server = http.createServer((req, res) => {
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #f43f5e;
+      --purple: #a855f7;
       --text: #f8fafc;
       --text-muted: #94a3b8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
     body {
-      background: radial-gradient(circle at 50% 0%, #151d30 0%, var(--bg) 70%);
+      background: radial-gradient(circle at 50% 0%, #172033 0%, var(--bg) 75%);
       color: var(--text);
       min-height: 100vh;
       padding: 30px 16px;
       display: flex;
       justify-content: center;
     }
-    .container { width: 100%; max-width: 980px; }
+    .container { width: 100%; max-width: 990px; }
 
     #lockModal {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(7, 10, 19, 0.94);
-      backdrop-filter: blur(18px);
+      background: rgba(7, 10, 19, 0.95);
+      backdrop-filter: blur(20px);
       display: none; align-items: center; justify-content: center; z-index: 1000;
     }
     .lock-card {
       background: #111827; border: 1px solid var(--card-border);
       padding: 36px 30px; border-radius: 20px; text-align: center; max-width: 350px; width: 90%;
-      box-shadow: 0 20px 45px rgba(0,0,0,0.7);
+      box-shadow: 0 20px 45px rgba(0,0,0,0.8);
     }
     .lock-card h2 { font-size: 1.45rem; font-weight: 800; margin-bottom: 8px; color: #fff; }
     .lock-card p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 22px; }
@@ -366,18 +511,19 @@ const server = http.createServer((req, res) => {
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
     .brand h1 { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .brand p { font-size: 0.85rem; color: var(--text-muted); }
-    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
     .badge-status { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.25); }
     .badge-status.paused { background: rgba(244, 63, 94, 0.12); color: var(--danger); border-color: rgba(244, 63, 94, 0.25); }
     .badge-status.collision { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: rgba(245, 158, 11, 0.3); }
+    .badge-status.sleep { background: rgba(168, 85, 247, 0.15); color: var(--purple); border-color: rgba(168, 85, 247, 0.3); }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
     .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 7px 13px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
 
     .dashboard-panel { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 18px 22px; margin-bottom: 22px; display: flex; flex-direction: column; gap: 16px; }
-    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
     .stat-item { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.04); padding: 12px 16px; border-radius: 12px; }
     .stat-item label { display: block; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
     .stat-item value { font-size: 1.15rem; font-weight: 800; color: #fff; }
@@ -389,8 +535,8 @@ const server = http.createServer((req, res) => {
     .controls { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 20px; margin-bottom: 26px; display: flex; flex-direction: column; gap: 16px; }
     .input-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .search-box-wrapper { position: relative; flex: 1; min-width: 220px; }
-    input[type="text"], input[type="password"] { width: 100%; background: rgba(7, 10, 19, 0.6); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; padding: 12px 16px; font-size: 0.95rem; outline: none; }
-    input[type="text"]:focus { border-color: var(--primary); }
+    input[type="text"], input[type="password"], input[type="number"] { width: 100%; background: rgba(7, 10, 19, 0.6); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; padding: 12px 16px; font-size: 0.95rem; outline: none; }
+    input:focus { border-color: var(--primary); }
 
     button { padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; border: none; cursor: pointer; transition: all 0.2s; }
     .btn-main { background: var(--primary); color: #04111d; }
@@ -399,6 +545,8 @@ const server = http.createServer((req, res) => {
     .btn-pause:hover { background: rgba(255, 255, 255, 0.15); }
     .btn-clear { background: rgba(244, 63, 94, 0.1); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.2); }
     .btn-clear:hover { background: var(--danger); color: #fff; }
+    .btn-purple { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .btn-purple:hover { background: var(--purple); color: #fff; }
 
     .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
     .tool-box { background: rgba(0, 0, 0, 0.2); padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.04); display: flex; gap: 10px; align-items: center; }
@@ -429,8 +577,8 @@ const server = http.createServer((req, res) => {
 <body>
   <div id="lockModal">
     <div class="lock-card">
-      <h2>🔒 Panel Protegido</h2>
-      <p>Introduce tu PIN para acceder al bot</p>
+      <h2>🔒 Panel Enterprise</h2>
+      <p>Introduce tu PIN para acceder</p>
       <input type="password" id="pinInput" placeholder="••••" maxlength="8">
       <button class="btn-main" style="width:100%;" onclick="unlock()">Desbloquear</button>
     </div>
@@ -439,10 +587,12 @@ const server = http.createServer((req, res) => {
   <div class="container">
     <header>
       <div class="brand">
-        <h1>Steam Hour Booster Pro</h1>
+        <h1>Steam Hour Booster Enterprise</h1>
         <p id="userLabel">Conectando cuenta...</p>
       </div>
       <div class="header-actions">
+        <button class="btn-purple" id="cardsBtn" onclick="toggleCards()">🃏 Modo Cromos: Off</button>
+        <button class="btn-action-sm" onclick="claimFreeGames()">🎁 Reclamar Free</button>
         <button class="btn-action-sm" id="personaBtn" onclick="togglePersona()">Modo: Invisible</button>
         <button class="btn-action-sm" onclick="lock()">🔒 Bloquear</button>
         <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Activo</span></div>
@@ -462,6 +612,10 @@ const server = http.createServer((req, res) => {
         <div class="stat-item">
           <label>🎯 Juegos en Paralelo</label>
           <value id="gamesCountVal">0 / 32</value>
+        </div>
+        <div class="stat-item">
+          <label>🃏 Juegos con Cromos</label>
+          <value id="cardsCountVal">0 detectados</value>
         </div>
       </div>
       <div>
@@ -500,6 +654,21 @@ const server = http.createServer((req, res) => {
           <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
           <input type="text" id="webhookInput" placeholder="https://discord.com/api/...">
           <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveWebhook()">Probar</button>
+        </div>
+      </div>
+
+      <div class="tools-grid">
+        <div class="tool-box" style="justify-content:space-between;">
+          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">💤 Horario Sueño:</span>
+          <label style="font-size:0.8rem; display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="sleepEnabled"> Activo
+          </label>
+          <input type="number" id="sleepStart" placeholder="Desde (03)" style="width:70px;" min="0" max="23">
+          <input type="number" id="sleepEnd" placeholder="Hasta (08)" style="width:70px;" min="0" max="23">
+          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveSleep()">Fijar</button>
+        </div>
+        <div class="tool-box" style="color:var(--text-muted); font-size:0.8rem;">
+          <span>💬 <strong>Chat Steam Activo:</strong> Escribe <code>!help</code> a este bot en Steam para controlarlo por mensaje.</span>
         </div>
       </div>
     </div>
@@ -566,11 +735,12 @@ const server = http.createServer((req, res) => {
         var data = await res.json();
 
         document.getElementById('userLabel').innerText = 'Cuenta: ' + data.user;
-        activeGamesCount = (data.isPaused || data.isCollisionPaused) ? 0 : data.games.length;
+        activeGamesCount = (data.isPaused || data.isCollisionPaused || data.isSleepPaused) ? 0 : data.games.length;
         sessionStart = data.sessionStartTime;
         namesCache = data.gameNames || {};
 
         document.getElementById('gamesCountVal').innerText = data.games.length + ' / 32';
+        document.getElementById('cardsCountVal').innerText = data.cardDropCount + ' detectados';
         var percent = Math.round((data.games.length / 32) * 100);
         document.getElementById('capacityPercent').innerText = percent + '%';
         document.getElementById('capacityFill').style.width = percent + '%';
@@ -579,10 +749,15 @@ const server = http.createServer((req, res) => {
         var statusText = document.getElementById('statusText');
         var pauseBtn = document.getElementById('pauseBtn');
         var personaBtn = document.getElementById('personaBtn');
+        var cardsBtn = document.getElementById('cardsBtn');
 
         if (data.isCollisionPaused) {
           badge.className = 'badge-status collision';
-          statusText.innerText = 'PC en Juego (Auto-Pausado)';
+          statusText.innerText = 'PC en Juego (Auto-Pausa)';
+          pauseBtn.innerText = 'Pausado';
+        } else if (data.isSleepPaused) {
+          badge.className = 'badge-status sleep';
+          statusText.innerText = 'Modo Sueño (Noche)';
           pauseBtn.innerText = 'Pausado';
         } else if (data.isPaused) {
           badge.className = 'badge-status paused';
@@ -595,11 +770,18 @@ const server = http.createServer((req, res) => {
         }
 
         personaBtn.innerText = (data.personaState === 7) ? '👻 Modo: Invisible' : '🟢 Modo: En Línea';
+        cardsBtn.innerText = data.cardFarming ? '🃏 Modo Cromos: ACTIVO' : '🃏 Modo Cromos: Off';
+
         if (data.customStatus && !document.getElementById('customStatusInput').value) {
           document.getElementById('customStatusInput').value = data.customStatus;
         }
         if (data.discordWebhook && !document.getElementById('webhookInput').value) {
           document.getElementById('webhookInput').value = data.discordWebhook;
+        }
+        if (data.sleepMode) {
+          document.getElementById('sleepEnabled').checked = data.sleepMode.enabled;
+          document.getElementById('sleepStart').value = data.sleepMode.start;
+          document.getElementById('sleepEnd').value = data.sleepMode.end;
         }
 
         renderPresets(data.presets);
@@ -623,7 +805,7 @@ const server = http.createServer((req, res) => {
       var grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
       if (!games.length) {
-        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No tienes juegos agregados. Agrega uno o carga un preset arriba.</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No tienes juegos agregados. Agrega uno arriba o activa el Modo Cromos.</div>';
         return;
       }
 
@@ -747,6 +929,25 @@ const server = http.createServer((req, res) => {
       loadStatus();
     }
 
+    async function toggleCards() {
+      await reqAction('/api/toggle-cards');
+      loadStatus();
+    }
+
+    async function claimFreeGames() {
+      var res = await reqAction('/api/claim-free');
+      if (res) alert('Solicitud enviada a Steam para reclamar licencias gratuitas.');
+    }
+
+    async function saveSleep() {
+      var enabled = document.getElementById('sleepEnabled').checked;
+      var start = document.getElementById('sleepStart').value;
+      var end = document.getElementById('sleepEnd').value;
+      await reqAction('/api/set-sleep', { enabled: enabled, start: start, end: end });
+      alert('Horario de sueño guardado.');
+      loadStatus();
+    }
+
     async function saveCustomStatus() {
       var status = document.getElementById('customStatusInput').value;
       await reqAction('/api/custom-status', { status: status });
@@ -768,4 +969,4 @@ const server = http.createServer((req, res) => {
 </html>`);
 });
 
-server.listen(PORT, () => console.log('[Web] Servidor listo en puerto ' + PORT));
+server.listen(PORT, () => console.log('[Web] Servidor Enterprise listo en puerto ' + PORT));
