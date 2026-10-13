@@ -4,32 +4,61 @@ const http = require('http');
 const https = require('https');
 const url = require('url');
 
+// Configuration Loader & Multi-Account Migration
 let cfg = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-cfg.games = cfg.games || [];
-cfg.gameNames = cfg.gameNames || {};
-cfg.customStatus = cfg.customStatus || '';
-cfg.discordWebhook = cfg.discordWebhook || '';
 cfg.webPin = String(cfg.webPin || '1234');
-cfg.personaState = cfg.personaState !== undefined ? cfg.personaState : SteamUser.EPersonaState.Online;
-cfg.cardFarming = cfg.cardFarming || false;
-cfg.sleepMode = cfg.sleepMode || { enabled: false, start: 3, end: 8 };
-cfg.achievementQueue = cfg.achievementQueue || [];
-cfg.unlockedAchievements = cfg.unlockedAchievements || {};
-cfg.mySteamID = cfg.mySteamID || '';
+cfg.discordWebhook = cfg.discordWebhook || '';
+cfg.accounts = cfg.accounts || [];
 
-const client = new SteamUser();
+// Automatic backward-compatibility migration for legacy single-account configs
+if (cfg.accounts.length === 0 && (cfg.user || cfg.refreshToken)) {
+  cfg.accounts.push({
+    id: 'main',
+    name: (cfg.user ? cfg.user.split('@')[0] : 'Main Account'),
+    user: cfg.user || '',
+    pass: cfg.pass || '',
+    refreshToken: cfg.refreshToken || '',
+    games: cfg.games || [730],
+    gameNames: cfg.gameNames || {},
+    customStatus: cfg.customStatus || '',
+    personaState: cfg.personaState !== undefined ? cfg.personaState : SteamUser.EPersonaState.Online,
+    cardFarming: cfg.cardFarming || false,
+    sleepMode: cfg.sleepMode || { enabled: false, start: 3, end: 8 },
+    achievementQueue: cfg.achievementQueue || [],
+    unlockedAchievements: cfg.unlockedAchievements || {},
+    mySteamID: cfg.mySteamID || ''
+  });
+  cfg.activeAccountId = 'main';
+  fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2));
+}
 
-let isFarming = false;
-let isPaused = false;
-let isCollisionPaused = false;
-let isSleepPaused = false;
-let collisionTimer = null;
-let sessionStartTime = Date.now();
-let webCookies = '';
-let cardDropGames = [];
-let mySteamID = cfg.mySteamID || '';
+cfg.activeAccountId = cfg.activeAccountId || (cfg.accounts[0] ? cfg.accounts[0].id : 'main');
 
+// Multi-Account Runtime Manager
+const clients = {};
+const accountStates = {};
 const achMemoryCache = {};
+
+function saveConfig() {
+  try {
+    fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2));
+  } catch (err) {
+    console.error('Error saving config.json:', err.message);
+  }
+}
+
+// Canonical valve aliases for community lookups
+const VALVE_ALIASES = {
+  550: 'L4D2',
+  440: 'TF2',
+  730: 'CSGO',
+  240: 'CSS',
+  220: 'HL2',
+  620: 'Portal2',
+  500: 'L4D',
+  300: 'DODS',
+  10: 'CS'
+};
 
 const PRESETS = {
   competitive: {
@@ -49,6 +78,7 @@ const PRESETS = {
   }
 };
 
+// HTTP Client with Age-Gate bypass, custom headers & redirect preservation
 function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   if (typeof customHeaders === 'function') {
     cb = customHeaders;
@@ -98,6 +128,7 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   }
 }
 
+// Discord Webhook sender with proxy bypass
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
     if (cb) cb({ success: false, error: 'Invalid Webhook URL.' });
@@ -112,7 +143,7 @@ function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
       title: title,
       description: description,
       color: color || 3718648,
-      footer: { text: 'Steam Hour Booster Pro • Enterprise' },
+      footer: { text: 'Steam Hour Booster Pro • Enterprise Multi-Account' },
       timestamp: new Date().toISOString()
     };
     if (thumbUrl) embed.thumbnail = { url: thumbUrl };
@@ -129,7 +160,7 @@ function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-        'User-Agent': 'SteamBoosterBot/1.0'
+        'User-Agent': 'SteamBoosterBot/2.0'
       }
     }, (res) => {
       let resBody = '';
@@ -150,177 +181,126 @@ function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   }
 }
 
-const logOnDetails = cfg.refreshToken 
-  ? { refreshToken: cfg.refreshToken }
-  : { accountName: cfg.user, password: cfg.pass };
+// Initialize single account runtime
+function initializeAccount(acc) {
+  if (clients[acc.id]) return;
 
-client.logOn(logOnDetails);
+  const client = new SteamUser();
+  clients[acc.id] = client;
 
-client.on('loggedOn', () => {
-  console.log('[+] Connected to Steam successfully');
-  if (client.steamID) {
-    mySteamID = client.steamID.toString();
-    cfg.mySteamID = mySteamID;
-    guardarConfig();
-  }
-  client.setPersona(cfg.personaState);
-  try { client.webLogOn(); } catch (e) {}
-  resolverNombresFaltantes();
-  actualizarFarmeo();
-  sendDiscordWebhook('🟢 Bot Connected', 'Boosting ' + cfg.games.length + ' games in the cloud.', 1095985);
-});
-
-client.on('webSession', (sessionID, cookies) => {
-  webCookies = cookies.join('; ');
-  console.log('[+] Authenticated web session ready.');
-  if (cfg.cardFarming) escanearCromos();
-});
-
-client.on('error', (e) => console.error('Steam Error:', e.message));
-
-// Anti-Collision Detection
-client.on('playingElsewhere', () => {
-  console.log('[⚠️ Anti-Collision] Game launched on PC. Pausing cloud booster...');
-  isCollisionPaused = true;
-  actualizarFarmeo();
-  sendDiscordWebhook('🎮 Game Detected on PC', 'You started playing on your PC. Cloud bot paused automatically.', 16101915);
-
-  if (collisionTimer) clearTimeout(collisionTimer);
-  collisionTimer = setTimeout(() => {
-    console.log('[Anti-Collision] Resuming cloud boosting...');
-    isCollisionPaused = false;
-    actualizarFarmeo();
-    sendDiscordWebhook('🔄 Boosting Resumed', 'PC gaming session ended. Cloud booster resumed.', 1095985);
-  }, 10 * 60 * 1000);
-});
-
-// Steam Chat Commands
-client.on('friendMessage', (steamID, message) => {
-  const msg = message.trim().toLowerCase();
-  const args = msg.split(' ');
-  const cmd = args[0];
-
-  function reply(text) { try { client.chatMessage(steamID, text); } catch (e) {} }
-
-  if (cmd === '!status') {
-    const st = isPaused ? 'Paused' : (isCollisionPaused ? 'Paused (PC Playing)' : 'Active');
-    reply(`📊 Status: ${st} | Games: ${cfg.games.length}/32 | Queued: ${cfg.achievementQueue.length}`);
-  } else if (cmd === '!pause') {
-    isPaused = true;
-    actualizarFarmeo();
-    reply('⏸️ Cloud boosting paused.');
-  } else if (cmd === '!resume' || cmd === '!play') {
-    isPaused = false;
-    isCollisionPaused = false;
-    if (collisionTimer) clearTimeout(collisionTimer);
-    actualizarFarmeo();
-    reply('▶️ Cloud boosting resumed.');
-  } else if (cmd === '!invisible') {
-    cfg.personaState = SteamUser.EPersonaState.Invisible;
-    client.setPersona(cfg.personaState);
-    guardarConfig();
-    reply('👻 Mode set to: Invisible.');
-  } else if (cmd === '!online') {
-    cfg.personaState = SteamUser.EPersonaState.Online;
-    client.setPersona(cfg.personaState);
-    guardarConfig();
-    reply('🟢 Mode set to: Online.');
-  } else if (cmd === '!help') {
-    reply('🤖 Commands: !status, !pause, !resume, !invisible, !online');
-  }
-});
-
-// Achievement Simulation Engine
-setInterval(() => {
-  if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
-  const now = Date.now();
-  const nextItem = cfg.achievementQueue[0];
-
-  if (now >= nextItem.scheduledTime) {
-    const item = cfg.achievementQueue.shift();
-    cfg.unlockedAchievements[item.appid] = cfg.unlockedAchievements[item.appid] || [];
-    if (!cfg.unlockedAchievements[item.appid].includes(item.apiname)) {
-      cfg.unlockedAchievements[item.appid].push(item.apiname);
-    }
-    if (!cfg.unlockedAchievements[item.appid].includes(item.name)) {
-      cfg.unlockedAchievements[item.appid].push(item.name);
-    }
-
-    sendDiscordWebhook(
-      `🏆 Achievement Simulation Unlocked! • ${item.gameName}`,
-      `**${item.name}**\n*${item.desc || 'No description'}*\n\n🌟 **Rarity:** ${item.tier} (${item.percent}% global)\n⏱️ **Simulation:** Realistic organic interval.`,
-      item.color,
-      item.icon
-    );
-
-    if (cfg.achievementQueue.length > 0) {
-      const nextDelayMinutes = Math.floor(Math.random() * (85 - 45 + 1)) + 45;
-      cfg.achievementQueue[0].scheduledTime = Date.now() + (nextDelayMinutes * 60 * 1000);
-    }
-
-    guardarConfig();
-  }
-}, 30 * 1000);
-
-function escanearCromos(cb) {
-  if (!webCookies) { if (cb) cb([]); return; }
-  const opts = {
-    hostname: 'steamcommunity.com',
-    path: '/my/badges/',
-    method: 'GET',
-    headers: { 'Cookie': webCookies, 'User-Agent': 'Mozilla/5.0' }
+  accountStates[acc.id] = {
+    isFarming: false,
+    isPaused: false,
+    isCollisionPaused: false,
+    isSleepPaused: false,
+    collisionTimer: null,
+    sessionStartTime: Date.now(),
+    webCookies: '',
+    cardDropGames: [],
+    steamId64: acc.mySteamID || ''
   };
-  https.get(opts, (res) => {
-    let html = '';
-    res.on('data', c => html += c);
-    res.on('end', () => {
-      const regex = /href="https:\/\/steamcommunity\.com\/my\/gamecards\/(\d+)\/"[\s\S]*?progress_info_bold">(\d+)\s+card/gi;
-      const found = [];
-      let match;
-      while ((match = regex.exec(html)) !== null) {
-        found.push({ appid: parseInt(match[1], 10), remaining: parseInt(match[2], 10) });
-      }
-      cardDropGames = found;
-      if (cfg.cardFarming && found.length > 0) {
-        cfg.games = found.slice(0, 32).map(x => x.appid);
-        guardarConfig();
-        actualizarFarmeo();
-      }
-      if (cb) cb(found);
-    });
-  }).on('error', () => { if (cb) cb([]); });
+
+  const state = accountStates[acc.id];
+  const loginDetails = acc.refreshToken ? { refreshToken: acc.refreshToken } : { accountName: acc.user, password: acc.pass };
+
+  client.logOn(loginDetails);
+
+  client.on('loggedOn', () => {
+    console.log(`[+] Connected to Steam for account: ${acc.name} (${acc.user})`);
+    if (client.steamID) {
+      state.steamId64 = client.steamID.toString();
+      acc.mySteamID = state.steamId64;
+      saveConfig();
+    }
+    client.setPersona(acc.personaState !== undefined ? acc.personaState : SteamUser.EPersonaState.Online);
+    try { client.webLogOn(); } catch (e) {}
+    resolveMissingNames(acc);
+    updateFarming(acc);
+    sendDiscordWebhook(`🟢 ${acc.name} Connected`, `Boosting ${acc.games.length} games on cloud session.`, 1095985);
+  });
+
+  client.on('webSession', (sessionID, cookies) => {
+    state.webCookies = cookies.join('; ');
+    console.log(`[+] Web session authenticated for ${acc.name}.`);
+    if (acc.cardFarming) scanCards(acc);
+  });
+
+  client.on('error', (e) => console.error(`[Steam Error - ${acc.name}]:`, e.message));
+
+  // Anti-Collision Handler
+  client.on('playingElsewhere', () => {
+    console.log(`[⚠️ Anti-Collision] Local game detected for ${acc.name}. Pausing cloud session...`);
+    state.isCollisionPaused = true;
+    updateFarming(acc);
+    sendDiscordWebhook(`🎮 Game Running Locally (${acc.name})`, 'Cloud bot paused automatically to prevent interference with your PC gameplay.', 16101915);
+
+    if (state.collisionTimer) clearTimeout(state.collisionTimer);
+    state.collisionTimer = setTimeout(() => {
+      console.log(`[Anti-Collision] Resuming cloud booster for ${acc.name}...`);
+      state.isCollisionPaused = false;
+      updateFarming(acc);
+      sendDiscordWebhook(`🔄 Cloud Boosting Resumed (${acc.name})`, 'Local PC session finished. Cloud booster resumed.', 1095985);
+    }, 10 * 60 * 1000);
+  });
+
+  // Steam Chat remote control for this specific account
+  client.on('friendMessage', (steamID, message) => {
+    const msg = message.trim().toLowerCase();
+    const args = msg.split(' ');
+    const cmd = args[0];
+
+    function reply(text) { try { client.chatMessage(steamID, text); } catch (e) {} }
+
+    if (cmd === '!status') {
+      const st = state.isPaused ? 'Paused' : (state.isCollisionPaused ? 'Paused (PC Playing)' : 'Active');
+      reply(`📊 [${acc.name}] Status: ${st} | Games: ${acc.games.length}/32 | Queued: ${(acc.achievementQueue || []).length}`);
+    } else if (cmd === '!pause') {
+      state.isPaused = true;
+      updateFarming(acc);
+      reply(`⏸️ [${acc.name}] Cloud boosting paused.`);
+    } else if (cmd === '!resume' || cmd === '!play') {
+      state.isPaused = false;
+      state.isCollisionPaused = false;
+      if (state.collisionTimer) clearTimeout(state.collisionTimer);
+      updateFarming(acc);
+      reply(`▶️ [${acc.name}] Cloud boosting resumed.`);
+    } else if (cmd === '!invisible') {
+      acc.personaState = SteamUser.EPersonaState.Invisible;
+      client.setPersona(acc.personaState);
+      saveConfig();
+      reply(`👻 [${acc.name}] Persona set to Invisible.`);
+    } else if (cmd === '!online') {
+      acc.personaState = SteamUser.EPersonaState.Online;
+      client.setPersona(acc.personaState);
+      saveConfig();
+      reply(`🟢 [${acc.name}] Persona set to Online.`);
+    } else if (cmd === '!help') {
+      reply('🤖 Commands: !status, !pause, !resume, !invisible, !online');
+    }
+  });
 }
 
-setInterval(() => {
-  if (!cfg.sleepMode || !cfg.sleepMode.enabled) return;
-  const hour = new Date().getHours();
-  const inSleep = (cfg.sleepMode.start < cfg.sleepMode.end)
-    ? (hour >= cfg.sleepMode.start && hour < cfg.sleepMode.end)
-    : (hour >= cfg.sleepMode.start || hour < cfg.sleepMode.end);
+// Launch all accounts in parallel
+cfg.accounts.forEach(acc => initializeAccount(acc));
 
-  if (inSleep && !isSleepPaused) {
-    isSleepPaused = true;
-    client.gamesPlayed([]);
-  } else if (!inSleep && isSleepPaused) {
-    isSleepPaused = false;
-    actualizarFarmeo();
-  }
-}, 60 * 1000);
+function getActiveAccount() {
+  return cfg.accounts.find(a => a.id === cfg.activeAccountId) || cfg.accounts[0];
+}
 
-function resolverNombresFaltantes() {
-  cfg.games.forEach(id => {
-    if (!cfg.gameNames[id]) {
-      obtenerNombreSteam(id, (nombre) => {
-        if (nombre) {
-          cfg.gameNames[id] = nombre;
-          guardarConfig();
+function resolveMissingNames(acc) {
+  acc.games.forEach(id => {
+    if (!acc.gameNames[id]) {
+      fetchSteamGameName(id, (name) => {
+        if (name) {
+          acc.gameNames[id] = name;
+          saveConfig();
         }
       });
     }
   });
 }
 
-function obtenerNombreSteam(appid, cb) {
+function fetchSteamGameName(appid, cb) {
   https.get('https://store.steampowered.com/api/appdetails?appids=' + appid + '&filters=basic&l=english', (res) => {
     let data = '';
     res.on('data', c => data += c);
@@ -334,28 +314,116 @@ function obtenerNombreSteam(appid, cb) {
   }).on('error', () => cb(null));
 }
 
-function actualizarFarmeo() {
-  if (!isPaused && !isCollisionPaused && !isSleepPaused && cfg.games.length > 0) {
-    const list = cfg.games.map(Number).filter(n => !isNaN(n) && n > 0);
-    if (cfg.customStatus && cfg.customStatus.trim() !== '') {
-      list.push(cfg.customStatus.trim());
+function updateFarming(acc) {
+  const client = clients[acc.id];
+  const state = accountStates[acc.id];
+  if (!client || !state) return;
+
+  if (!state.isPaused && !state.isCollisionPaused && !state.isSleepPaused && acc.games.length > 0) {
+    const list = acc.games.map(Number).filter(n => !isNaN(n) && n > 0);
+    // Custom non-steam text passed in gamesPlayed
+    if (acc.customStatus && acc.customStatus.trim() !== '') {
+      list.push(acc.customStatus.trim());
     }
     client.gamesPlayed(list);
-    if (!isFarming) sessionStartTime = Date.now();
-    isFarming = true;
-    console.log('[+] Boosting ' + list.length + ' apps in cloud.');
+    if (!state.isFarming) state.sessionStartTime = Date.now();
+    state.isFarming = true;
+    console.log(`[+] [${acc.name}] Boosting ${list.length} apps.`);
   } else {
     client.gamesPlayed([]);
-    isFarming = false;
-    console.log('[-] Cloud boosting paused.');
+    state.isFarming = false;
+    console.log(`[-] [${acc.name}] Boosting paused.`);
   }
 }
 
-function guardarConfig() {
-  try {
-    fs.writeFileSync('config.json', JSON.stringify(cfg, null, 2));
-  } catch (e) {}
+function scanCards(acc, cb) {
+  const state = accountStates[acc.id];
+  if (!state || !state.webCookies) { if (cb) cb([]); return; }
+
+  const opts = {
+    hostname: 'steamcommunity.com',
+    path: '/my/badges/',
+    method: 'GET',
+    headers: { 'Cookie': state.webCookies, 'User-Agent': 'Mozilla/5.0' }
+  };
+  https.get(opts, (res) => {
+    let html = '';
+    res.on('data', c => html += c);
+    res.on('end', () => {
+      const regex = /href="https:\/\/steamcommunity\.com\/my\/gamecards\/(\d+)\/"[\s\S]*?progress_info_bold">(\d+)\s+card/gi;
+      const found = [];
+      let match;
+      while ((match = regex.exec(html)) !== null) {
+        found.push({ appid: parseInt(match[1], 10), remaining: parseInt(match[2], 10) });
+      }
+      state.cardDropGames = found;
+      if (acc.cardFarming && found.length > 0) {
+        acc.games = found.slice(0, 32).map(x => x.appid);
+        saveConfig();
+        updateFarming(acc);
+      }
+      if (cb) cb(found);
+    });
+  }).on('error', () => { if (cb) cb([]); });
 }
+
+// Global 60s ticker for Sleep schedule across all accounts
+setInterval(() => {
+  const hour = new Date().getHours();
+  cfg.accounts.forEach(acc => {
+    const state = accountStates[acc.id];
+    if (!state || !acc.sleepMode || !acc.sleepMode.enabled) return;
+
+    const inSleep = (acc.sleepMode.start < acc.sleepMode.end)
+      ? (hour >= acc.sleepMode.start && hour < acc.sleepMode.end)
+      : (hour >= acc.sleepMode.start || hour < acc.sleepMode.end);
+
+    if (inSleep && !state.isSleepPaused) {
+      state.isSleepPaused = true;
+      updateFarming(acc);
+    } else if (!inSleep && state.isSleepPaused) {
+      state.isSleepPaused = false;
+      updateFarming(acc);
+    }
+  });
+}, 60 * 1000);
+
+// Global 30s ticker for achievement queue across all accounts
+setInterval(() => {
+  const now = Date.now();
+  cfg.accounts.forEach(acc => {
+    if (!acc.achievementQueue || acc.achievementQueue.length === 0) return;
+    const nextItem = acc.achievementQueue[0];
+
+    if (now >= nextItem.scheduledTime) {
+      const item = acc.achievementQueue.shift();
+      acc.unlockedAchievements = acc.unlockedAchievements || {};
+      acc.unlockedAchievements[item.appid] = acc.unlockedAchievements[item.appid] || [];
+
+      if (!acc.unlockedAchievements[item.appid].includes(item.apiname)) {
+        acc.unlockedAchievements[item.appid].push(item.apiname);
+      }
+      if (!acc.unlockedAchievements[item.appid].includes(item.name)) {
+        acc.unlockedAchievements[item.appid].push(item.name);
+      }
+
+      sendDiscordWebhook(
+        `🏆 Achievement Simulation Unlocked! • ${item.gameName} (${acc.name})`,
+        `**${item.name}**\n*${item.desc || 'No description'}*\n\n🌟 **Rarity:** ${item.tier} (${item.percent}% global)\n⏱️ **Simulation:** Human-like pacing interval.`,
+        item.color,
+        item.icon
+      );
+
+      if (acc.achievementQueue.length > 0) {
+        const nextDelayMinutes = Math.floor(Math.random() * (85 - 45 + 1)) + 45;
+        acc.achievementQueue[0].scheduledTime = Date.now() + (nextDelayMinutes * 60 * 1000);
+      }
+
+      delete achMemoryCache[`${acc.id}_${item.appid}`];
+      saveConfig();
+    }
+  });
+}, 30 * 1000);
 
 function getTag(body, tag) {
   const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
@@ -388,7 +456,6 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
     else if (pct < 40.0) { tier = '🔵 Rare'; colorHex = 0x38bdf8; }
 
     const isUnlocked = closedOriginal || unlockedLocally.includes(apiname) || unlockedLocally.includes(name);
-    const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && (q.apiname === apiname || q.name === name));
 
     let unlockDateFormatted = null;
     if (unlockTimestamp > 0) {
@@ -408,7 +475,7 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
       unlocked: isUnlocked,
       unlockDate: unlockDateFormatted,
       unlockTimestamp: unlockTimestamp,
-      inQueue: inQueue
+      inQueue: false
     });
   }
   return achievements;
@@ -416,7 +483,7 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
 
 function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
   const list = [];
-  const regexBlock = /<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["'][^>]*>([\s\S]*?)(?=(?:<div\b[^>]*class=["'][^"']*\bachieveRow\b[^"']*["']|<div\s+id=["']footer["']|$))/gi;
+  const regexBlock = /<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["'][^>]*>([\s\S]*?)(?=(?:<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*["']|<div\s+id=["']footer["']|$))/gi;
   let match;
 
   while ((match = regexBlock.exec(html)) !== null) {
@@ -465,23 +532,23 @@ function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
   return list;
 }
 
-// Robust Multi-tier achievement loader with numeric AppIDs
-function obtenerLogrosJuego(appid, cb) {
-  const unlockedLocally = cfg.unlockedAchievements[appid] || [];
-  const userSteamId = (client.steamID ? client.steamID.toString() : '') || mySteamID || cfg.mySteamID;
-  const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
+// Master Achievement Loader for given Account
+function getAchievementsForAccount(acc, appid, cb) {
+  const cacheKey = `${acc.id}_${appid}`;
+  const unlockedLocally = (acc.unlockedAchievements && acc.unlockedAchievements[appid]) || [];
+  const state = accountStates[acc.id] || {};
+  const userSteamId = state.steamId64 || acc.mySteamID || '';
+  const xmlHeaders = state.webCookies ? { 'Cookie': state.webCookies } : {};
 
-  // Check cache only if personalized
-  if (achMemoryCache[appid] && achMemoryCache[appid].isPersonalized && achMemoryCache[appid].achievements.length > 0) {
-    const cachedList = achMemoryCache[appid].achievements.map(a => ({
+  if (achMemoryCache[cacheKey] && achMemoryCache[cacheKey].isPersonalized && achMemoryCache[cacheKey].achievements.length > 0) {
+    const cachedList = achMemoryCache[cacheKey].achievements.map(a => ({
       ...a,
       unlocked: a.unlocked || unlockedLocally.includes(a.apiname) || unlockedLocally.includes(a.name),
-      inQueue: (cfg.achievementQueue || []).some(q => q.appid == appid && (q.apiname === a.apiname || q.name === a.name))
+      inQueue: (acc.achievementQueue || []).some(q => q.appid == appid && (q.apiname === a.apiname || q.name === a.name))
     }));
-    return cb({ achievements: cachedList, isPrivate: achMemoryCache[appid].isPrivate });
+    return cb({ achievements: cachedList, isPrivate: achMemoryCache[cacheKey].isPrivate });
   }
 
-  // 1. Global percentage dictionary
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -494,7 +561,7 @@ function obtenerLogrosJuego(appid, cb) {
       }
     } catch (e) {}
 
-    // 2. Fetch User Profile XML via Canonical Numeric AppID
+    // Use direct numeric AppID for exact lookup
     const targetXmlUrl = userSteamId
       ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?xml=1`
       : `https://steamcommunity.com/stats/${appid}/achievements/?xml=1`;
@@ -508,12 +575,11 @@ function obtenerLogrosJuego(appid, cb) {
       if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
         const listXml = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
         if (listXml.length > 0) {
-          achMemoryCache[appid] = { achievements: listXml, isPersonalized: true, isPrivate: false };
-          return cb(achMemoryCache[appid]);
+          achMemoryCache[cacheKey] = { achievements: listXml, isPersonalized: true, isPrivate: false };
+          return cb(achMemoryCache[cacheKey]);
         }
       }
 
-      // 3. User HTML Profile Page (contains human-readable unlock timestamps)
       const unlockedSet = new Set(unlockedLocally);
       const targetUserHtml = userSteamId
         ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${appid}/?tab=achievements&l=english`
@@ -527,12 +593,12 @@ function obtenerLogrosJuego(appid, cb) {
         if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow')) {
           const listU = parseAchievementsFromHtml(uHtmlData, unlockedSet, percentMap);
           if (listU.length > 0) {
-            achMemoryCache[appid] = { achievements: listU, isPersonalized: !isProfilePrivate, isPrivate: isProfilePrivate };
-            return cb(achMemoryCache[appid]);
+            achMemoryCache[cacheKey] = { achievements: listU, isPersonalized: !isProfilePrivate, isPrivate: isProfilePrivate };
+            return cb(achMemoryCache[cacheKey]);
           }
         }
 
-        // 4. Fallback: Global Steam Catalog Page
+        // Global Steam Catalog fallback
         const urlGlobalHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=english`;
         fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
           if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
@@ -548,6 +614,7 @@ function obtenerLogrosJuego(appid, cb) {
   });
 }
 
+// HTTP Server
 const PORT = process.env.PORT || 8000;
 
 const server = http.createServer((req, res) => {
@@ -556,7 +623,7 @@ const server = http.createServer((req, res) => {
   if (parsedUrl.pathname === '/manifest.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({
-      name: 'Steam Booster Enterprise',
+      name: 'Steam Booster Enterprise Multi-Account',
       short_name: 'SteamBooster',
       start_url: '/',
       display: 'standalone',
@@ -566,6 +633,7 @@ const server = http.createServer((req, res) => {
     }));
   }
 
+  // Steam Store Game Search
   if (parsedUrl.pathname === '/api/search' && req.method === 'GET') {
     const query = parsedUrl.query.term;
     if (!query) return res.end('[]');
@@ -585,45 +653,71 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Achievement Loader endpoint
   if (parsedUrl.pathname === '/api/achievements' && req.method === 'GET') {
     const appid = parseInt(parsedUrl.query.appid, 10);
-    if (!appid) return res.end(JSON.stringify({ achievements: [], isPrivate: false }));
+    const acc = getActiveAccount();
+    if (!appid || !acc) return res.end(JSON.stringify({ achievements: [], isPrivate: false }));
 
     if (parsedUrl.query.refresh === '1') {
-      delete achMemoryCache[appid];
+      delete achMemoryCache[`${acc.id}_${appid}`];
     }
 
-    obtenerLogrosJuego(appid, (result) => {
+    getAchievementsForAccount(acc, appid, (result) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     });
     return;
   }
 
+  // General Status Endpoint (multi-account summary + active account details)
   if (parsedUrl.pathname === '/api/status' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    const nextItem = (cfg.achievementQueue && cfg.achievementQueue.length > 0) ? cfg.achievementQueue[0] : null;
+    const acc = getActiveAccount();
+    const state = acc ? (accountStates[acc.id] || {}) : {};
+    const nextItem = (acc && acc.achievementQueue && acc.achievementQueue.length > 0) ? acc.achievementQueue[0] : null;
+
+    const accountsSummary = cfg.accounts.map(a => {
+      const st = accountStates[a.id] || {};
+      return {
+        id: a.id,
+        name: a.name,
+        user: a.user,
+        gameCount: a.games.length,
+        isFarming: st.isFarming || false,
+        isPaused: st.isPaused || false,
+        isCollisionPaused: st.isCollisionPaused || false
+      };
+    });
+
     return res.end(JSON.stringify({
-      user: cfg.user,
-      games: cfg.games,
-      gameNames: cfg.gameNames,
-      isFarming: isFarming,
-      isPaused: isPaused,
-      isCollisionPaused: isCollisionPaused,
-      isSleepPaused: isSleepPaused,
-      cardFarming: cfg.cardFarming,
-      cardDropCount: cardDropGames.length,
-      queueCount: cfg.achievementQueue.length,
-      nextAchievementIn: nextItem ? Math.max(0, Math.round((nextItem.scheduledTime - Date.now()) / 60000)) : null,
-      sleepMode: cfg.sleepMode,
-      customStatus: cfg.customStatus || '',
+      activeAccountId: cfg.activeAccountId,
+      accounts: accountsSummary,
+      activeAccount: acc ? {
+        id: acc.id,
+        name: acc.name,
+        user: acc.user,
+        games: acc.games,
+        gameNames: acc.gameNames || {},
+        isFarming: state.isFarming || false,
+        isPaused: state.isPaused || false,
+        isCollisionPaused: state.isCollisionPaused || false,
+        isSleepPaused: state.isSleepPaused || false,
+        cardFarming: acc.cardFarming || false,
+        cardDropCount: (state.cardDropGames || []).length,
+        queueCount: (acc.achievementQueue || []).length,
+        nextAchievementIn: nextItem ? Math.max(0, Math.round((nextItem.scheduledTime - Date.now()) / 60000)) : null,
+        sleepMode: acc.sleepMode || { enabled: false, start: 3, end: 8 },
+        customStatus: acc.customStatus || '',
+        personaState: acc.personaState !== undefined ? acc.personaState : SteamUser.EPersonaState.Online,
+        sessionStartTime: state.isFarming ? state.sessionStartTime : null
+      } : null,
       discordWebhook: cfg.discordWebhook || '',
-      personaState: cfg.personaState,
-      sessionStartTime: isFarming ? sessionStartTime : null,
       presets: Object.keys(PRESETS).map(k => ({ key: k, name: PRESETS[k].name, count: PRESETS[k].games.length }))
     }));
   }
 
+  // Protected Actions API
   if (req.method === 'POST') {
     let body = '';
     req.on('data', c => body += c);
@@ -631,6 +725,7 @@ const server = http.createServer((req, res) => {
       try {
         const data = JSON.parse(body || '{}');
 
+        // PIN validation
         if (cfg.webPin && String(data.pin) !== String(cfg.webPin)) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ error: 'Incorrect PIN' }));
@@ -641,28 +736,95 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ success: true }));
         }
 
+        // Account Switching
+        if (parsedUrl.pathname === '/api/account/switch') {
+          const target = cfg.accounts.find(a => a.id === data.accountId);
+          if (target) {
+            cfg.activeAccountId = target.id;
+            saveConfig();
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true, activeAccountId: cfg.activeAccountId }));
+        }
+
+        // Add New Account
+        if (parsedUrl.pathname === '/api/account/add') {
+          const newId = 'acc_' + Date.now();
+          const newAcc = {
+            id: newId,
+            name: (data.name || 'Account ' + (cfg.accounts.length + 1)).trim(),
+            user: (data.user || '').trim(),
+            pass: data.pass || '',
+            refreshToken: (data.refreshToken || '').trim(),
+            games: [730],
+            gameNames: { 730: 'Counter-Strike 2' },
+            customStatus: '',
+            personaState: SteamUser.EPersonaState.Online,
+            cardFarming: false,
+            sleepMode: { enabled: false, start: 3, end: 8 },
+            achievementQueue: [],
+            unlockedAchievements: {}
+          };
+
+          cfg.accounts.push(newAcc);
+          cfg.activeAccountId = newId;
+          saveConfig();
+          initializeAccount(newAcc);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true, accountId: newId }));
+        }
+
+        // Remove Account
+        if (parsedUrl.pathname === '/api/account/remove') {
+          if (cfg.accounts.length <= 1) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'You must maintain at least one account.' }));
+          }
+
+          const removeId = data.accountId;
+          if (clients[removeId]) {
+            try { clients[removeId].logOff(); } catch (e) {}
+            delete clients[removeId];
+            delete accountStates[removeId];
+          }
+
+          cfg.accounts = cfg.accounts.filter(a => a.id !== removeId);
+          if (cfg.activeAccountId === removeId) {
+            cfg.activeAccountId = cfg.accounts[0].id;
+          }
+          saveConfig();
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true, activeAccountId: cfg.activeAccountId }));
+        }
+
+        // Below actions apply to the Active Account
+        const acc = getActiveAccount();
+        const state = acc ? (accountStates[acc.id] || {}) : {};
+
         if (parsedUrl.pathname === '/api/add') {
           const appid = parseInt(data.appid, 10);
-          if (appid && !cfg.games.includes(appid)) {
-            if (cfg.games.length >= 32) {
+          if (appid && !acc.games.includes(appid)) {
+            if (acc.games.length >= 32) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
-              return res.end(JSON.stringify({ error: 'Limit of 32 games reached' }));
+              return res.end(JSON.stringify({ error: 'Limit of 32 games reached for this account.' }));
             }
-            cfg.games.push(appid);
-            // Force reset collision locks when user adds a game
-            isPaused = false;
-            isCollisionPaused = false;
-            if (collisionTimer) clearTimeout(collisionTimer);
+            acc.games.push(appid);
+            // Instant unlock collision
+            state.isPaused = false;
+            state.isCollisionPaused = false;
+            if (state.collisionTimer) clearTimeout(state.collisionTimer);
 
             if (data.name) {
-              cfg.gameNames[appid] = data.name;
-              guardarConfig();
-              actualizarFarmeo();
+              acc.gameNames[appid] = data.name;
+              saveConfig();
+              updateFarming(acc);
             } else {
-              obtenerNombreSteam(appid, (nombre) => {
-                if (nombre) cfg.gameNames[appid] = nombre;
-                guardarConfig();
-                actualizarFarmeo();
+              fetchSteamGameName(appid, (name) => {
+                if (name) acc.gameNames[appid] = name;
+                saveConfig();
+                updateFarming(acc);
               });
             }
           }
@@ -670,69 +832,69 @@ const server = http.createServer((req, res) => {
 
         if (parsedUrl.pathname === '/api/remove') {
           const appid = parseInt(data.appid, 10);
-          cfg.games = cfg.games.filter(id => id !== appid);
-          delete cfg.gameNames[appid];
-          delete achMemoryCache[appid];
-          guardarConfig();
-          actualizarFarmeo();
+          acc.games = acc.games.filter(id => id !== appid);
+          delete acc.gameNames[appid];
+          delete achMemoryCache[`${acc.id}_${appid}`];
+          saveConfig();
+          updateFarming(acc);
         }
 
         if (parsedUrl.pathname === '/api/clear-all') {
-          cfg.games = [];
-          cfg.gameNames = {};
-          guardarConfig();
-          actualizarFarmeo();
+          acc.games = [];
+          acc.gameNames = {};
+          saveConfig();
+          updateFarming(acc);
         }
 
         if (parsedUrl.pathname === '/api/apply-preset') {
           const preset = PRESETS[data.presetKey];
           if (preset) {
             preset.games.forEach(gid => {
-              if (!cfg.games.includes(gid) && cfg.games.length < 32) {
-                cfg.games.push(gid);
-                cfg.gameNames[gid] = preset.names[gid] || ('Game #' + gid);
+              if (!acc.games.includes(gid) && acc.games.length < 32) {
+                acc.games.push(gid);
+                acc.gameNames[gid] = preset.names[gid] || ('Game #' + gid);
               }
             });
-            isPaused = false;
-            isCollisionPaused = false;
-            if (collisionTimer) clearTimeout(collisionTimer);
-            guardarConfig();
-            actualizarFarmeo();
+            state.isPaused = false;
+            state.isCollisionPaused = false;
+            if (state.collisionTimer) clearTimeout(state.collisionTimer);
+            saveConfig();
+            updateFarming(acc);
           }
         }
 
-        // Toggle / Play button with instant collision unlock
+        // Toggle / Resume button with immediate collision lock release
         if (parsedUrl.pathname === '/api/toggle') {
-          isPaused = !isPaused;
-          if (!isPaused) {
-            isCollisionPaused = false;
-            isSleepPaused = false;
-            if (collisionTimer) {
-              clearTimeout(collisionTimer);
-              collisionTimer = null;
+          state.isPaused = !state.isPaused;
+          if (!state.isPaused) {
+            state.isCollisionPaused = false;
+            state.isSleepPaused = false;
+            if (state.collisionTimer) {
+              clearTimeout(state.collisionTimer);
+              state.collisionTimer = null;
             }
           }
-          actualizarFarmeo();
+          updateFarming(acc);
         }
 
         if (parsedUrl.pathname === '/api/persona') {
-          cfg.personaState = (cfg.personaState === SteamUser.EPersonaState.Invisible) 
+          acc.personaState = (acc.personaState === SteamUser.EPersonaState.Invisible) 
             ? SteamUser.EPersonaState.Online 
             : SteamUser.EPersonaState.Invisible;
-          client.setPersona(cfg.personaState);
-          guardarConfig();
+          if (clients[acc.id]) clients[acc.id].setPersona(acc.personaState);
+          saveConfig();
         }
 
         if (parsedUrl.pathname === '/api/custom-status') {
-          cfg.customStatus = (data.status || '').trim();
-          guardarConfig();
-          actualizarFarmeo();
+          acc.customStatus = (data.status || '').trim();
+          saveConfig();
+          updateFarming(acc);
         }
 
         if (parsedUrl.pathname === '/api/set-webhook') {
           cfg.discordWebhook = (data.webhook || '').trim();
-          guardarConfig();
-          sendDiscordWebhook('🔔 Webhook Connected', 'Discord channel linked successfully!', 3718648, null, (result) => {
+          saveConfig();
+          sendDiscordWebhook('🔔 Webhook Connected', 'Discord channel linked successfully with Steam Booster Enterprise!', 3718648, null, (result) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
           });
@@ -741,34 +903,25 @@ const server = http.createServer((req, res) => {
 
         if (parsedUrl.pathname === '/api/unlock-batch') {
           const { appid, gameName, items } = data;
-          cfg.unlockedAchievements[appid] = cfg.unlockedAchievements[appid] || [];
-          
+          acc.unlockedAchievements = acc.unlockedAchievements || {};
+          acc.unlockedAchievements[appid] = acc.unlockedAchievements[appid] || [];
+
           items.forEach(it => {
-            if (!cfg.unlockedAchievements[appid].includes(it.apiname)) {
-              cfg.unlockedAchievements[appid].push(it.apiname);
+            if (!acc.unlockedAchievements[appid].includes(it.apiname)) {
+              acc.unlockedAchievements[appid].push(it.apiname);
             }
-            if (!cfg.unlockedAchievements[appid].includes(it.name)) {
-              cfg.unlockedAchievements[appid].push(it.name);
+            if (!acc.unlockedAchievements[appid].includes(it.name)) {
+              acc.unlockedAchievements[appid].push(it.name);
             }
           });
-          delete achMemoryCache[appid];
-          guardarConfig();
+          delete achMemoryCache[`${acc.id}_${appid}`];
+          saveConfig();
 
-          if (items.length === 1) {
-            const it = items[0];
-            sendDiscordWebhook(
-              `🏆 Achievement Unlocked! • ${gameName}`,
-              `**${it.name}**\n*${it.desc || 'No description'}*\n\n🌟 **Rarity:** ${it.tier} (${it.percent}% global)`,
-              it.color || 3718648,
-              it.icon
-            );
-          } else {
-            sendDiscordWebhook(
-              `🏆 Batch Unlocked • ${gameName}`,
-              `Marked **${items.length} achievements** on dashboard.`,
-              3718648
-            );
-          }
+          sendDiscordWebhook(
+            `🏆 Achievements Recorded • ${gameName} (${acc.name})`,
+            `Marked **${items.length} achievements** in the cloud dashboard.`,
+            3718648
+          );
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true }));
@@ -776,12 +929,12 @@ const server = http.createServer((req, res) => {
 
         if (parsedUrl.pathname === '/api/lock-batch') {
           const { appid, apinames } = data;
-          if (cfg.unlockedAchievements[appid]) {
-            cfg.unlockedAchievements[appid] = cfg.unlockedAchievements[appid].filter(id => !apinames.includes(id));
+          if (acc.unlockedAchievements && acc.unlockedAchievements[appid]) {
+            acc.unlockedAchievements[appid] = acc.unlockedAchievements[appid].filter(id => !apinames.includes(id));
           }
-          cfg.achievementQueue = cfg.achievementQueue.filter(q => !(q.appid == appid && apinames.includes(q.apiname)));
-          delete achMemoryCache[appid];
-          guardarConfig();
+          acc.achievementQueue = (acc.achievementQueue || []).filter(q => !(q.appid == appid && apinames.includes(q.apiname)));
+          delete achMemoryCache[`${acc.id}_${appid}`];
+          saveConfig();
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true }));
@@ -790,11 +943,13 @@ const server = http.createServer((req, res) => {
         if (parsedUrl.pathname === '/api/queue-achievements') {
           const { appid, gameName, items } = data;
           let baseDelay = 5;
+          acc.achievementQueue = acc.achievementQueue || [];
+
           items.forEach(it => {
-            const alreadyQueued = cfg.achievementQueue.some(q => q.appid == appid && (q.apiname === it.apiname || q.name === it.name));
+            const alreadyQueued = acc.achievementQueue.some(q => q.appid == appid && (q.apiname === it.apiname || q.name === it.name));
             if (!alreadyQueued) {
               const delayMin = baseDelay;
-              cfg.achievementQueue.push({
+              acc.achievementQueue.push({
                 appid: appid,
                 gameName: gameName,
                 apiname: it.apiname,
@@ -809,45 +964,47 @@ const server = http.createServer((req, res) => {
               baseDelay += Math.floor(Math.random() * (85 - 45 + 1)) + 45;
             }
           });
-          guardarConfig();
+          saveConfig();
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true, count: items.length }));
         }
 
         if (parsedUrl.pathname === '/api/clear-queue') {
-          cfg.achievementQueue = [];
-          guardarConfig();
+          acc.achievementQueue = [];
+          saveConfig();
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true }));
         }
 
         if (parsedUrl.pathname === '/api/toggle-cards') {
-          cfg.cardFarming = !cfg.cardFarming;
-          guardarConfig();
-          if (cfg.cardFarming) escanearCromos(() => actualizarFarmeo());
-          else actualizarFarmeo();
+          acc.cardFarming = !acc.cardFarming;
+          saveConfig();
+          if (acc.cardFarming) scanCards(acc, () => updateFarming(acc));
+          else updateFarming(acc);
         }
 
         if (parsedUrl.pathname === '/api/claim-free') {
           const freePackages = [730, 440, 570, 230410, 1172470];
-          client.requestFreeLicense(freePackages, (err, grantedApps) => {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, granted: grantedApps ? grantedApps.length : 0 }));
-          });
-          return;
+          if (clients[acc.id]) {
+            clients[acc.id].requestFreeLicense(freePackages, (err, grantedApps) => {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, granted: grantedApps ? grantedApps.length : 0 }));
+            });
+            return;
+          }
         }
 
         if (parsedUrl.pathname === '/api/set-sleep') {
-          cfg.sleepMode = {
+          acc.sleepMode = {
             enabled: Boolean(data.enabled),
             start: parseInt(data.start || 3, 10),
             end: parseInt(data.end || 8, 10)
           };
-          guardarConfig();
+          saveConfig();
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, games: cfg.games, isPaused }));
+        res.end(JSON.stringify({ success: true, games: acc.games }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
@@ -856,14 +1013,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 100% English Web App
+  // Modern Spacious English Frontend HTML/CSS/JS
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Steam Hour Booster Pro</title>
+  <title>Steam Hour Booster Pro • Enterprise</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
@@ -871,7 +1028,7 @@ const server = http.createServer((req, res) => {
   <style>
     :root {
       --bg: #070a13;
-      --card-bg: rgba(18, 24, 38, 0.75);
+      --card-bg: rgba(18, 24, 38, 0.7);
       --card-border: rgba(255, 255, 255, 0.08);
       --primary: #38bdf8;
       --primary-hover: #0ea5e9;
@@ -885,73 +1042,180 @@ const server = http.createServer((req, res) => {
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
     body {
-      background: radial-gradient(circle at 50% 0%, #172033 0%, var(--bg) 75%);
+      background: radial-gradient(circle at 50% 0%, #152033 0%, var(--bg) 70%);
       color: var(--text);
       min-height: 100vh;
-      padding: 30px 16px;
+      padding: 40px 24px;
       display: flex;
       justify-content: center;
     }
-    .container { width: 100%; max-width: 1020px; }
+    .container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 32px; }
 
+    /* Modals */
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(7, 10, 19, 0.95);
+      background: rgba(7, 10, 19, 0.94);
       backdrop-filter: blur(20px);
       display: none; align-items: center; justify-content: center; z-index: 1000;
     }
-    .lock-card {
+    .modal-box {
       background: #111827; border: 1px solid var(--card-border);
-      padding: 36px 30px; border-radius: 20px; text-align: center; max-width: 350px; width: 90%;
-      box-shadow: 0 20px 45px rgba(0,0,0,0.8);
+      padding: 36px 32px; border-radius: 24px; max-width: 440px; width: 90%;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 18px;
     }
-    .lock-card input {
-      width: 100%; padding: 13px; border-radius: 12px; background: #0b0f19;
-      border: 1px solid var(--card-border); color: #fff; font-size: 1.3rem;
-      text-align: center; letter-spacing: 5px; outline: none; margin: 16px 0;
+    .modal-box h2 { font-size: 1.4rem; font-weight: 800; color: #fff; }
+    .modal-box p { font-size: 0.85rem; color: var(--text-muted); }
+    .modal-box input {
+      width: 100%; padding: 13px 16px; border-radius: 12px; background: #0b0f19;
+      border: 1px solid var(--card-border); color: #fff; font-size: 1rem; outline: none;
     }
 
+    /* Multi-Account Bar */
+    .accounts-bar {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+      padding: 12px 18px; background: rgba(18, 24, 38, 0.5); border: 1px solid var(--card-border);
+      border-radius: 18px; backdrop-filter: blur(12px);
+    }
+    .accounts-list { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .acc-pill {
+      background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border);
+      padding: 8px 18px; border-radius: 999px; font-size: 0.85rem; font-weight: 700;
+      color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+    }
+    .acc-pill:hover { border-color: var(--primary); color: #fff; }
+    .acc-pill.active {
+      background: rgba(56, 189, 248, 0.12); border-color: var(--primary); color: #fff;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+    .acc-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+    .acc-pill.active .dot { background: var(--success); }
+
+    /* Header */
+    header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+    .brand h1 { font-size: 1.85rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .brand p { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; }
+    .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    .badge-status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.25); }
+    .badge-status.paused { background: rgba(244, 63, 94, 0.12); color: var(--danger); border-color: rgba(244, 63, 94, 0.25); }
+    .badge-status.collision { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: rgba(245, 158, 11, 0.3); }
+    .badge-status.sleep { background: rgba(168, 85, 247, 0.15); color: var(--purple); border-color: rgba(168, 85, 247, 0.3); }
+
+    .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
+
+    /* Spacious Dashboard Panel */
+    .dashboard-panel {
+      background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px);
+      border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; }
+    .stat-item { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); padding: 18px 20px; border-radius: 16px; }
+    .stat-item label { display: block; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; }
+    .stat-item value { font-size: 1.35rem; font-weight: 800; color: #fff; }
+
+    .capacity-header { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 9px; }
+    .progress-bar-bg { width: 100%; height: 10px; background: rgba(0, 0, 0, 0.5); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
+    .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #818cf8); transition: width 0.4s ease; }
+
+    /* Controls Panel */
+    .controls {
+      background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(16px);
+      border-radius: 22px; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .input-row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .search-box-wrapper { position: relative; flex: 1; min-width: 260px; }
+    input[type="text"], input[type="password"], input[type="number"], select {
+      width: 100%; background: rgba(7, 10, 19, 0.7); border: 1px solid var(--card-border);
+      border-radius: 12px; color: #fff; padding: 14px 18px; font-size: 0.95rem; outline: none; transition: 0.2s;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+
+    button { padding: 14px 24px; border-radius: 12px; font-weight: 700; font-size: 0.9rem; border: none; cursor: pointer; transition: all 0.2s; }
+    .btn-main { background: var(--primary); color: #04111d; }
+    .btn-main:hover { background: var(--primary-hover); }
+    .btn-clear { background: rgba(244, 63, 94, 0.12); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.25); }
+    .btn-clear:hover { background: var(--danger); color: #fff; }
+    .btn-purple { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .btn-purple:hover { background: var(--purple); color: #fff; }
+    .btn-gold { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .btn-gold:hover { background: var(--gold); color: #000; }
+
+    .presets-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .chip { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border); color: #cbd5e1; padding: 8px 16px; border-radius: 10px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
+    .chip:hover { border-color: var(--primary); color: var(--primary); background: rgba(56, 189, 248, 0.08); }
+
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .tool-box { background: rgba(0, 0, 0, 0.25); padding: 14px 20px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; gap: 12px; align-items: center; }
+    .tool-box input { padding: 10px 14px; font-size: 0.85rem; }
+
+    .search-results {
+      position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: #0f1626;
+      border: 1px solid var(--card-border); border-radius: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+      max-height: 280px; overflow-y: auto; z-index: 100; display: none;
+    }
+    .search-item { display: flex; align-items: center; gap: 14px; padding: 12px 18px; cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+    .search-item:hover { background: rgba(56, 189, 248, 0.1); }
+    .search-item img { width: 56px; height: 26px; object-fit: cover; border-radius: 4px; }
+    .search-info { flex: 1; font-size: 0.9rem; font-weight: 600; }
+    .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+
+    /* Spacious Game Cards Grid */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
+    .card {
+      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px;
+      overflow: hidden; display: flex; flex-direction: column; backdrop-filter: blur(14px);
+      transition: all 0.25s ease; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .card:hover { transform: translateY(-5px); border-color: rgba(56, 189, 248, 0.35); }
+    .card-banner { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: #0c1220; }
+    .card-content { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .card-title { font-size: 0.95rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+    .card-appid { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
+    .card-btn-row { display: flex; gap: 8px; }
+    .btn-card { padding: 8px 14px; font-size: 0.8rem; border-radius: 9px; font-weight: 700; }
+    .btn-remove { background: rgba(244, 63, 94, 0.12); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.25); }
+    .btn-remove:hover { background: var(--danger); color: #fff; }
+    .btn-ach { background: rgba(56, 189, 248, 0.12); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.25); }
+    .btn-ach:hover { background: var(--primary); color: #04111d; }
+
+    /* Spacious Achievement Modal */
     .ach-modal-card {
       background: #0d1322; border: 1px solid rgba(56, 189, 248, 0.25);
-      width: 96%; max-width: 940px; max-height: 92vh; border-radius: 22px;
-      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 65px rgba(0,0,0,0.95);
+      width: 96%; max-width: 960px; max-height: 92vh; border-radius: 24px;
+      display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 70px rgba(0,0,0,0.95);
     }
     .ach-header {
-      padding: 18px 24px; background: #131b2e; border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+      padding: 22px 30px; background: #131b2e; border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;
     }
-    .ach-header-left h2 { font-size: 1.35rem; font-weight: 800; color: #fff; }
-    .ach-progress-bar-wrap { width: 220px; height: 8px; background: rgba(0,0,0,0.4); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); margin-top: 6px; }
-    .ach-progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width 0.3s ease; }
-    
+    .ach-header-left h2 { font-size: 1.45rem; font-weight: 800; color: #fff; }
     .privacy-banner {
       background: rgba(245, 158, 11, 0.12); border-bottom: 1px solid rgba(245, 158, 11, 0.3);
-      padding: 12px 24px; display: none; color: #fde68a; font-size: 0.85rem; line-height: 1.4;
+      padding: 14px 30px; display: none; color: #fde68a; font-size: 0.85rem; line-height: 1.4;
     }
-    .privacy-banner strong { color: #fff; }
-
     .ach-toolbar {
-      padding: 12px 24px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+      padding: 16px 30px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;
     }
-    .ach-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .ach-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .filter-btn {
       background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border);
-      color: var(--text-muted); padding: 5px 12px; border-radius: 8px; font-size: 0.75rem;
+      color: var(--text-muted); padding: 6px 14px; border-radius: 8px; font-size: 0.8rem;
       font-weight: 700; cursor: pointer; transition: 0.15s;
     }
     .filter-btn.active, .filter-btn:hover { background: rgba(56, 189, 248, 0.15); border-color: var(--primary); color: #fff; }
 
     .ach-batch-actions {
-      padding: 10px 24px; background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid var(--card-border);
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 0.85rem;
+      padding: 12px 30px; background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 0.9rem;
     }
-    .ach-batch-btns { display: flex; gap: 8px; flex-wrap: wrap; }
-
-    .ach-list { padding: 16px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .ach-list { padding: 20px 30px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
     .ach-item {
       background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border);
-      border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 14px;
+      border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 16px;
       transition: all 0.2s; user-select: none;
     }
     .ach-item.unlocked-item { background: rgba(16, 185, 129, 0.04); border-color: rgba(16, 185, 129, 0.25); }
@@ -960,115 +1224,62 @@ const server = http.createServer((req, res) => {
     .ach-item.purple { border-left: 4px solid var(--purple); }
     .ach-item.blue { border-left: 4px solid var(--primary); }
     .ach-item.gray { border-left: 4px solid #64748b; }
-
     .ach-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
-    .ach-item img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #000; flex-shrink: 0; }
+    .ach-item img { width: 50px; height: 50px; border-radius: 10px; object-fit: cover; background: #000; flex-shrink: 0; }
     .ach-item.locked-item img { filter: grayscale(100%) brightness(0.65); }
     .ach-info { flex: 1; overflow: hidden; }
     .ach-title { font-weight: 700; font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 8px; }
-    .ach-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
-    .ach-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
-
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
-    .brand h1 { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg, #fff 40%, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .brand p { font-size: 0.85rem; color: var(--text-muted); }
-    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-    .badge-status { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.25); }
-    .badge-status.paused { background: rgba(244, 63, 94, 0.12); color: var(--danger); border-color: rgba(244, 63, 94, 0.25); }
-    .badge-status.collision { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: rgba(245, 158, 11, 0.3); }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-
-    .btn-action-sm { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #cbd5e1; padding: 7px 13px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
-    .btn-action-sm:hover { border-color: var(--primary); color: #fff; }
-
-    .dashboard-panel { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 18px 22px; margin-bottom: 22px; display: flex; flex-direction: column; gap: 16px; }
-    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-    .stat-item { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.04); padding: 12px 16px; border-radius: 12px; }
-    .stat-item label { display: block; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
-    .stat-item value { font-size: 1.15rem; font-weight: 800; color: #fff; }
-
-    .capacity-header { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 7px; }
-    .progress-bar-bg { width: 100%; height: 8px; background: rgba(0, 0, 0, 0.4); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.05); }
-    .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #818cf8); transition: width 0.4s ease; }
-
-    .controls { background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(14px); border-radius: 16px; padding: 20px; margin-bottom: 26px; display: flex; flex-direction: column; gap: 16px; }
-    .input-row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .search-box-wrapper { position: relative; flex: 1; min-width: 220px; }
-    input[type="text"], input[type="password"], input[type="number"], select { width: 100%; background: rgba(7, 10, 19, 0.6); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; padding: 12px 16px; font-size: 0.95rem; outline: none; }
-    input:focus, select:focus { border-color: var(--primary); }
-
-    button { padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; border: none; cursor: pointer; transition: all 0.2s; }
-    .btn-main { background: var(--primary); color: #04111d; }
-    .btn-main:hover { background: var(--primary-hover); }
-    .btn-pause { background: rgba(255, 255, 255, 0.08); color: #fff; }
-    .btn-clear { background: rgba(244, 63, 94, 0.1); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.2); }
-    .btn-clear:hover { background: var(--danger); color: #fff; }
-    .btn-purple { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
-    .btn-purple:hover { background: var(--purple); color: #fff; }
-    .btn-gold { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .btn-gold:hover { background: var(--gold); color: #000; }
-
-    .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-    .tool-box { background: rgba(0, 0, 0, 0.2); padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.04); display: flex; gap: 10px; align-items: center; }
-    .tool-box input { padding: 8px 12px; font-size: 0.85rem; }
-
-    .presets-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .chip { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--card-border); color: #cbd5e1; padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
-    .chip:hover { border-color: var(--primary); color: var(--primary); background: rgba(56, 189, 248, 0.08); }
-
-    .search-results { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: #0f1626; border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 16px 35px rgba(0,0,0,0.6); max-height: 280px; overflow-y: auto; z-index: 100; display: none; }
-    .search-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
-    .search-item:hover { background: rgba(56, 189, 248, 0.1); }
-    .search-item img { width: 52px; height: 24px; object-fit: cover; border-radius: 4px; }
-    .search-info { flex: 1; font-size: 0.85rem; font-weight: 600; }
-    .search-info span { display: block; font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
-
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; backdrop-filter: blur(10px); transition: all 0.25s ease; }
-    .card:hover { transform: translateY(-4px); border-color: rgba(56, 189, 248, 0.3); }
-    .card-banner { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: #0c1220; }
-    .card-content { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .card-title { font-size: 0.9rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-    .card-appid { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-    .card-btn-row { display: flex; gap: 6px; }
-    .btn-card { padding: 6px 11px; font-size: 0.75rem; border-radius: 7px; font-weight: 700; }
-    .btn-remove { background: rgba(244, 63, 94, 0.12); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.25); }
-    .btn-remove:hover { background: var(--danger); color: #fff; }
-    .btn-ach { background: rgba(56, 189, 248, 0.12); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.25); }
-    .btn-ach:hover { background: var(--primary); color: #04111d; }
+    .ach-desc { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+    .ach-badge { font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
   </style>
 </head>
 <body>
+  <!-- PIN Lock Modal -->
   <div id="lockModal" class="modal-overlay">
-    <div class="lock-card">
+    <div class="modal-box" style="text-align:center;">
       <h2>🔒 Enterprise Panel</h2>
-      <p>Enter your PIN to access the dashboard</p>
-      <input type="password" id="pinInput" placeholder="••••" maxlength="8">
-      <button class="btn-main" style="width:100%;" onclick="unlock()">Unlock</button>
+      <p>Enter your PIN code to access the multi-account manager</p>
+      <input type="password" id="pinInput" placeholder="••••" maxlength="8" style="text-align:center; letter-spacing:5px; font-size:1.3rem;">
+      <button class="btn-main" style="width:100%;" onclick="unlock()">Unlock Dashboard</button>
     </div>
   </div>
 
+  <!-- Add Account Modal -->
+  <div id="addAccModal" class="modal-overlay">
+    <div class="modal-box">
+      <h2>+ Add Steam Account</h2>
+      <p>Configure a secondary account to boost hours and achievements simultaneously.</p>
+      <input type="text" id="newAccName" placeholder="Account Label (e.g. Smurf 1, Farm 2)">
+      <input type="text" id="newAccUser" placeholder="Steam Username / Email">
+      <input type="password" id="newAccToken" placeholder="Steam Refresh Token (or Password)">
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn-main" style="flex:1;" onclick="submitAddAccount()">Connect Account</button>
+        <button class="btn-clear" style="padding:14px;" onclick="closeAddAccModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Achievements Modal -->
   <div id="achModal" class="modal-overlay">
     <div class="ach-modal-card">
       <div class="ach-header">
         <div class="ach-header-left">
           <h2 id="achGameTitle">Steam Achievements</h2>
-          <div style="display:flex; align-items:center; gap:12px; margin-top:4px;">
-            <span id="achProgressText" style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">Loading trophies...</span>
-            <div class="ach-progress-bar-wrap">
-              <div class="ach-progress-bar-fill" id="achProgressFill"></div>
+          <div style="display:flex; align-items:center; gap:14px; margin-top:6px;">
+            <span id="achProgressText" style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">Syncing achievements...</span>
+            <div style="width:220px; height:8px; background:rgba(0,0,0,0.5); border-radius:999px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
+              <div id="achProgressFill" style="height:100%; width:0%; background:linear-gradient(90deg, var(--primary), var(--success)); transition:width 0.3s ease;"></div>
             </div>
           </div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
+        <div style="display:flex; gap:10px; align-items:center;">
           <button class="btn-action-sm" onclick="forceRefreshAchievements()">🔄 Refresh</button>
           <button class="btn-action-sm" onclick="closeAchModal()">✕ Close</button>
         </div>
       </div>
 
       <div class="privacy-banner" id="achPrivacyWarning">
-        ⚠️ <strong>Privacy Alert:</strong> Your <em>"Game details"</em> are currently set to <strong>Private</strong> or <em>Friends Only</em> on Steam. The dashboard displays the global catalog, but Steam restricts reading your personal unlocked trophies until you switch Game Details to <strong>Public</strong> in your Steam Profile Privacy Settings.
+        ⚠️ <strong>Privacy Alert:</strong> Your <em>"Game details"</em> are currently set to <strong>Private</strong> on Steam. The dashboard shows the catalog, but Steam restricts reading which achievements you own until you switch Game Details to <strong>Public</strong> in your Steam Privacy Settings.
       </div>
 
       <div class="ach-toolbar">
@@ -1083,8 +1294,8 @@ const server = http.createServer((req, res) => {
           <button class="filter-btn" data-filter="rarity" data-val="rare" onclick="setFilter('rarity', 'rare')">🔵 Rare (15-40%)</button>
         </div>
         
-        <div style="display:flex; gap:8px; align-items:center;">
-          <select id="achSortSelect" onchange="setSort(this.value)" style="padding:6px 10px; font-size:0.8rem; border-radius:8px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+        <div style="display:flex; gap:10px; align-items:center;">
+          <select id="achSortSelect" onchange="setSort(this.value)" style="padding:8px 12px; font-size:0.85rem; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
             <option value="default">Sort: Default</option>
             <option value="unlocked_first">Unlocked first</option>
             <option value="locked_first">Locked first</option>
@@ -1092,20 +1303,20 @@ const server = http.createServer((req, res) => {
             <option value="rarity_common">Most common first</option>
             <option value="alpha">Alphabetical (A-Z)</option>
           </select>
-          <input type="text" id="achSearchInput" placeholder="Search achievement..." style="max-width:180px; padding:6px 12px; font-size:0.8rem;" oninput="onSearchInput(this.value)">
+          <input type="text" id="achSearchInput" placeholder="Search achievement..." style="max-width:200px; padding:8px 14px; font-size:0.85rem;" oninput="onSearchInput(this.value)">
         </div>
       </div>
 
       <div class="ach-batch-actions">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="width:16px; height:16px; accent-color:var(--primary);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="width:18px; height:18px; accent-color:var(--primary);">
           <span id="selectedCountText" style="font-weight:700;">0 selected</span>
-          <span id="estimatedTimeText" style="color:var(--gold); font-size:0.8rem; margin-left:8px;"></span>
+          <span id="estimatedTimeText" style="color:var(--gold); font-size:0.85rem; margin-left:8px;"></span>
         </div>
-        <div class="ach-batch-btns">
-          <button class="btn-main" style="padding:6px 12px; font-size:0.75rem;" onclick="unlockSelected()">⚡ Unlock</button>
-          <button class="btn-gold" style="padding:6px 12px; font-size:0.75rem;" onclick="queueSelectedOrganic()">⏳ Queue Organic</button>
-          <button class="btn-clear" style="padding:6px 12px; font-size:0.75rem;" onclick="lockSelected()">🔒 Lock</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-main" style="padding:8px 16px; font-size:0.8rem;" onclick="unlockSelected()">⚡ Unlock</button>
+          <button class="btn-gold" style="padding:8px 16px; font-size:0.8rem;" onclick="queueSelectedOrganic()">⏳ Queue Organic</button>
+          <button class="btn-clear" style="padding:8px 16px; font-size:0.8rem;" onclick="lockSelected()">🔒 Lock</button>
         </div>
       </div>
 
@@ -1114,13 +1325,25 @@ const server = http.createServer((req, res) => {
   </div>
 
   <div class="container">
+    <!-- Multi-Account Navigation Bar -->
+    <div class="accounts-bar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:0.8rem; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Active Profile:</span>
+        <div class="accounts-list" id="accountsTabsContainer"></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="acc-pill" onclick="openAddAccModal()">+ Add Account</button>
+        <button class="acc-pill" style="color:var(--danger);" onclick="deleteCurrentAccount()">Delete Profile</button>
+      </div>
+    </div>
+
     <header>
       <div class="brand">
         <h1>Steam Hour Booster Pro</h1>
         <p id="userLabel">Connecting account...</p>
       </div>
       <div class="header-actions">
-        <button class="btn-purple" id="cardsBtn" onclick="toggleCards()">🃏 Card Farming: OFF</button>
+        <button class="btn-purple" id="cardsBtn" onclick="toggleCards()">🃏 Cards: OFF</button>
         <button class="btn-action-sm" onclick="claimFreeGames()">🎁 Claim Free</button>
         <button class="btn-action-sm" id="personaBtn" onclick="togglePersona()">Mode: Online</button>
         <button class="btn-action-sm" onclick="lock()">🔒 Lock</button>
@@ -1143,13 +1366,13 @@ const server = http.createServer((req, res) => {
           <value id="gamesCountVal">0 / 32</value>
         </div>
         <div class="stat-item">
-          <label>🏆 Achievement Queue</label>
+          <label>🏆 Queued Achievements</label>
           <value id="achQueueVal">0 queued</value>
         </div>
       </div>
       <div>
         <div class="capacity-header">
-          <span>Boosting Capacity (Maximum 32 games)</span>
+          <span>Profile Boosting Capacity (Maximum 32 games)</span>
           <span id="capacityPercent">0%</span>
         </div>
         <div class="progress-bar-bg">
@@ -1161,41 +1384,41 @@ const server = http.createServer((req, res) => {
     <div class="controls">
       <div class="input-row">
         <div class="search-box-wrapper">
-          <input type="text" id="searchInput" placeholder="Enter game title or AppID..." autocomplete="off">
+          <input type="text" id="searchInput" placeholder="Search game title or enter AppID..." autocomplete="off">
           <div class="search-results" id="searchResults"></div>
         </div>
-        <button class="btn-main" id="playBtn" onclick="togglePause()">Resume / Play</button>
-        <button class="btn-clear" onclick="clearAll()">Clear All</button>
+        <button class="btn-main" id="playBtn" onclick="togglePause()">Resume / Play Now</button>
+        <button class="btn-clear" onclick="clearAll()">Clear All Games</button>
       </div>
 
       <div class="presets-row" id="presetsContainer">
-        <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Load Preset:</span>
+        <span style="font-size:0.8rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">Quick Presets:</span>
       </div>
 
       <div class="tools-grid">
         <div class="tool-box">
-          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Custom Status:</span>
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Custom Status:</span>
           <input type="text" id="customStatusInput" placeholder="e.g. AFK 24/7">
-          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveCustomStatus()">Save</button>
+          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" onclick="saveCustomStatus()">Save</button>
         </div>
         <div class="tool-box">
-          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
           <input type="text" id="webhookInput" placeholder="https://discord.com/api/webhooks/...">
-          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveWebhook()">Test</button>
+          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" onclick="saveWebhook()">Test</button>
         </div>
       </div>
 
       <div class="tools-grid">
         <div class="tool-box" style="justify-content:space-between;">
-          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">💤 Sleep Schedule:</span>
-          <label style="font-size:0.8rem; display:flex; align-items:center; gap:6px;">
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted);">💤 Sleep Schedule:</span>
+          <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
             <input type="checkbox" id="sleepEnabled"> Active
           </label>
-          <input type="number" id="sleepStart" placeholder="From (03)" style="width:75px;" min="0" max="23">
-          <input type="number" id="sleepEnd" placeholder="To (08)" style="width:75px;" min="0" max="23">
-          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveSleep()">Set</button>
+          <input type="number" id="sleepStart" placeholder="From (03)" style="width:85px;" min="0" max="23">
+          <input type="number" id="sleepEnd" placeholder="To (08)" style="width:85px;" min="0" max="23">
+          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" onclick="saveSleep()">Set</button>
         </div>
-        <div class="tool-box" style="color:var(--text-muted); font-size:0.8rem;">
+        <div class="tool-box" style="color:var(--text-muted); font-size:0.85rem;">
           <span>💬 <strong>Steam Chat Active:</strong> Send <code>!status</code> to this bot from another account to control it via chat.</span>
         </div>
       </div>
@@ -1262,14 +1485,19 @@ const server = http.createServer((req, res) => {
         var res = await fetch('/api/status');
         var data = await res.json();
 
-        document.getElementById('userLabel').innerText = 'Account: ' + data.user;
-        activeGamesCount = (data.isPaused || data.isCollisionPaused || data.isSleepPaused) ? 0 : data.games.length;
-        sessionStart = data.sessionStartTime;
-        namesCache = data.gameNames || {};
+        renderAccountsTabs(data.accounts, data.activeAccountId);
 
-        document.getElementById('gamesCountVal').innerText = data.games.length + ' / 32';
-        document.getElementById('achQueueVal').innerText = data.queueCount + (data.nextAchievementIn !== null ? ' (~' + data.nextAchievementIn + 'm remaining)' : ' queued');
-        var percent = Math.round((data.games.length / 32) * 100);
+        if (!data.activeAccount) return;
+        var acc = data.activeAccount;
+
+        document.getElementById('userLabel').innerText = acc.name + ' (' + acc.user + ')';
+        activeGamesCount = (acc.isPaused || acc.isCollisionPaused || acc.isSleepPaused) ? 0 : acc.games.length;
+        sessionStart = acc.sessionStartTime;
+        namesCache = acc.gameNames || {};
+
+        document.getElementById('gamesCountVal').innerText = acc.games.length + ' / 32';
+        document.getElementById('achQueueVal').innerText = acc.queueCount + (acc.nextAchievementIn !== null ? ' (~' + acc.nextAchievementIn + 'm remaining)' : ' queued');
+        var percent = Math.round((acc.games.length / 32) * 100);
         document.getElementById('capacityPercent').innerText = percent + '%';
         document.getElementById('capacityFill').style.width = percent + '%';
 
@@ -1279,15 +1507,15 @@ const server = http.createServer((req, res) => {
         var personaBtn = document.getElementById('personaBtn');
         var cardsBtn = document.getElementById('cardsBtn');
 
-        if (data.isCollisionPaused) {
+        if (acc.isCollisionPaused) {
           badge.className = 'badge-status collision';
           statusText.innerText = 'Game Running on PC';
           playBtn.innerText = 'Resume / Play Now';
-        } else if (data.isSleepPaused) {
+        } else if (acc.isSleepPaused) {
           badge.className = 'badge-status sleep';
           statusText.innerText = 'Sleep Mode (Night)';
           playBtn.innerText = 'Resume / Play Now';
-        } else if (data.isPaused) {
+        } else if (acc.isPaused) {
           badge.className = 'badge-status paused';
           statusText.innerText = 'Paused';
           playBtn.innerText = 'Resume / Play Now';
@@ -1297,25 +1525,65 @@ const server = http.createServer((req, res) => {
           playBtn.innerText = 'Pause Boosting';
         }
 
-        personaBtn.innerText = (data.personaState === 7) ? '👻 Mode: Invisible' : '🟢 Mode: Online';
-        cardsBtn.innerText = data.cardFarming ? '🃏 Card Farming: ACTIVE' : '🃏 Card Farming: OFF';
+        personaBtn.innerText = (acc.personaState === 7) ? '👻 Mode: Invisible' : '🟢 Mode: Online';
+        cardsBtn.innerText = acc.cardFarming ? '🃏 Cards: ACTIVE' : '🃏 Cards: OFF';
 
-        if (data.customStatus && !document.getElementById('customStatusInput').value) document.getElementById('customStatusInput').value = data.customStatus;
+        if (acc.customStatus && !document.getElementById('customStatusInput').value) document.getElementById('customStatusInput').value = acc.customStatus;
         if (data.discordWebhook && !document.getElementById('webhookInput').value) document.getElementById('webhookInput').value = data.discordWebhook;
-        if (data.sleepMode) {
-          document.getElementById('sleepEnabled').checked = data.sleepMode.enabled;
-          document.getElementById('sleepStart').value = data.sleepMode.start;
-          document.getElementById('sleepEnd').value = data.sleepMode.end;
+        if (acc.sleepMode) {
+          document.getElementById('sleepEnabled').checked = acc.sleepMode.enabled;
+          document.getElementById('sleepStart').value = acc.sleepMode.start;
+          document.getElementById('sleepEnd').value = acc.sleepMode.end;
         }
 
         renderPresets(data.presets);
-        renderGames(data.games);
+        renderGames(acc.games);
       } catch (e) { console.error(e); }
+    }
+
+    function renderAccountsTabs(accounts, activeId) {
+      var cont = document.getElementById('accountsTabsContainer');
+      cont.innerHTML = '';
+      (accounts || []).forEach(a => {
+        var pill = document.createElement('div');
+        pill.className = 'acc-pill ' + (a.id === activeId ? 'active' : '');
+        pill.innerHTML = '<span class="dot"></span> ' + a.name + ' (' + a.gameCount + ')';
+        pill.onclick = () => switchAccount(a.id);
+        cont.appendChild(pill);
+      });
+    }
+
+    async function switchAccount(accountId) {
+      await reqAction('/api/account/switch', { accountId });
+      loadStatus();
+    }
+
+    function openAddAccModal() { document.getElementById('addAccModal').style.display = 'flex'; }
+    function closeAddAccModal() { document.getElementById('addAccModal').style.display = 'none'; }
+
+    async function submitAddAccount() {
+      var name = document.getElementById('newAccName').value.trim();
+      var user = document.getElementById('newAccUser').value.trim();
+      var token = document.getElementById('newAccToken').value.trim();
+      if (!user) return alert('Username or email is required.');
+
+      var res = await reqAction('/api/account/add', { name, user, refreshToken: token });
+      if (res && res.success) {
+        closeAddAccModal();
+        loadStatus();
+      }
+    }
+
+    async function deleteCurrentAccount() {
+      if (!confirm('Are you sure you want to remove this account profile from the booster?')) return;
+      var res = await reqAction('/api/account/remove', {});
+      if (res && res.error) alert(res.error);
+      else loadStatus();
     }
 
     function renderPresets(presets) {
       var container = document.getElementById('presetsContainer');
-      container.innerHTML = '<span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Load Preset:</span>';
+      container.innerHTML = '<span style="font-size:0.8rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">Quick Presets:</span>';
       (presets || []).forEach(function(p) {
         var chip = document.createElement('span');
         chip.className = 'chip';
@@ -1329,7 +1597,7 @@ const server = http.createServer((req, res) => {
       var grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
       if (!games.length) {
-        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No games added yet. Add a game above or load a preset.</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No games added yet. Add a game above or load a quick preset.</div>';
         return;
       }
 
@@ -1365,10 +1633,10 @@ const server = http.createServer((req, res) => {
       document.getElementById('achSortSelect').value = 'default';
       document.getElementById('achSearchInput').value = '';
       document.getElementById('achGameTitle').innerText = title;
-      document.getElementById('achProgressText').innerText = 'Loading achievements and syncing profile...';
+      document.getElementById('achProgressText').innerText = 'Syncing achievements directly with Steam...';
       document.getElementById('achProgressFill').style.width = '0%';
       document.getElementById('achPrivacyWarning').style.display = 'none';
-      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Syncing achievements directly with Steam...</p>';
+      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Loading full trophies catalog...</p>';
       document.getElementById('achModal').style.display = 'flex';
       
       updateFilterButtonsUI();
@@ -1667,7 +1935,7 @@ const server = http.createServer((req, res) => {
     }
 
     async function removeGame(appid) { await reqAction('/api/remove', { appid: Number(appid) }); loadStatus(); }
-    async function clearAll() { if (confirm('Are you sure you want to clear the entire list?')) { await reqAction('/api/clear-all'); loadStatus(); } }
+    async function clearAll() { if (confirm('Are you sure you want to clear the entire list for this profile?')) { await reqAction('/api/clear-all'); loadStatus(); } }
     async function applyPreset(presetKey) { await reqAction('/api/apply-preset', { presetKey: presetKey }); loadStatus(); }
     async function togglePause() { await reqAction('/api/toggle'); loadStatus(); }
     async function togglePersona() { await reqAction('/api/persona'); loadStatus(); }
@@ -1705,4 +1973,4 @@ const server = http.createServer((req, res) => {
 </html>`);
 });
 
-server.listen(PORT, () => console.log('[Web] Enterprise Server running on port ' + PORT));
+server.listen(PORT, () => console.log('[Web] Enterprise Multi-Account Server running on port ' + PORT));
