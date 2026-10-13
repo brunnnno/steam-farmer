@@ -113,7 +113,7 @@ function createApp(options = {}) {
     client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
-      st.connected = true; st.error = ''; st.retryCount = 0; st.steamId64 = client.steamID.toString();
+      st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.steamId64 = client.steamID.toString();
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
       acc.mySteamID = st.steamId64; save();
@@ -125,7 +125,7 @@ function createApp(options = {}) {
     client.on('accountInfo', name => { if (isCurrent()) st.profileName = name || ''; });
     client.on('webSession', (_, cookies) => { if (isCurrent()) { st.webCookies = cookies.map(c => c.split(';')[0]).join('; '); st.webSessionVersion++; console.log(`[Steam] ${acc.id}: authenticated web session ready`);
       const checkApp = acc.games.includes(550) ? 550 : acc.games[0];
-      if (checkApp && !st.linkCheckStarted) { st.linkCheckStarted = true;
+      if (checkApp && st.connected && client.steamID && !st.linkCheckStarted) { st.linkCheckStarted = true;
         if (typeof client._send === 'function') protocolRead(client, checkApp).then(result => { if (isCurrent()) console.log(`[Steam protocol check] app=${checkApp} verified=${result.verified} count=${result.achievements.length} unlocked=${result.achievements.filter(a=>a.unlocked===true).length} serverControlled=${result.diagnostics.serverControlled}`); }).catch(err => { if (isCurrent()) console.warn(`[Steam protocol check] app=${checkApp}: ${err.status ? err.message : 'unavailable'}`); });
         steamRead(acc, st, checkApp, process.env.STEAM_API_KEY || '').then(result => { if (isCurrent()) console.log(`[Steam link check] account=${acc.id} app=${checkApp} source=${result.source || 'none'} personalVerified=${Boolean(result.verified)} count=${result.achievements?.length || 0} unlocked=${(result.achievements || []).filter(a=>a.unlocked===true).length} diagnostics=${JSON.stringify(result.diagnostics?.personal || {})}`); }).catch(() => { if (isCurrent()) console.warn(`[Steam link check] account=${acc.id}: achievement retrieval unavailable`); }); }
       if (acc.cardFarming) scan(acc).catch(() => {}); } });
