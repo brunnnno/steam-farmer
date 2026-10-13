@@ -4,10 +4,39 @@ function ui(t, responder) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-availability.js'),'utf8'));
   w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('compatibility filter includes bit and progress attempts but excludes protected, shared and unknown',async t=>{
+  const calls=[],rows=[
+    {name:'Normal',apiname:'BIT',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}},
+    {name:'Progress',apiname:'INT',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canComplete:true}},
+    {name:'Protected',unlocked:false,serverControlled:true,compatibility:{status:'restricted',code:'server_controlled'}},
+    {name:'Shared',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewShared:true}},
+    {name:'Unknown',unlocked:null,compatibility:{status:'insufficient_data'}},
+    {name:'Recorded',unlocked:true,lastWriteOutcome:'confirmed',compatibility:{validatedOnAccount:true}},
+    {name:'Existing',unlocked:true,compatibility:{canUnlock:false}}];
+  const w=ui(t,url=>{calls.push(url);return response(rows);});w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
+  const select=w.document.getElementById('achCompatibilityFilter'),names=()=>[...w.document.querySelectorAll('.ach-title')].map(el=>el.textContent),filter=value=>{select.value=value;select.dispatchEvent(new w.Event('change'));};
+  filter('attemptable');assert.deepEqual(names(),['Normal','Progress']);
+  filter('protected');assert.deepEqual(names(),['Protected']);
+  filter('unsupported');assert.deepEqual(names(),['Shared']);
+  filter('confirmed');assert.deepEqual(names(),['Recorded']);
+  filter('unknown');assert.deepEqual(names(),['Unknown']);
+  assert.match(w.document.getElementById('achCompatibilitySummary').textContent,/2 eligible to attempt/);
+  assert.equal(calls.filter(url=>/unlock|complete-progress/.test(url)).length,0);
+  await w.testUI.open(240,'Other game',false,'protocol');assert.equal(select.value,'all');
+});
+test('standard reading does not claim activation compatibility and show-all resets combined filters',async t=>{
+  const w=ui(t,()=>response([{name:'Only',unlocked:false,compatibility:{canUnlock:true}}]));w.testUI.activate({tokenSource:'environment'});await w.testUI.open(550,'Game');
+  assert.match(w.document.querySelector('.ach-availability').textContent,/unknown/i);
+  const select=w.document.getElementById('achCompatibilityFilter');select.value='attemptable';select.dispatchEvent(new w.Event('change'));
+  assert.equal(w.document.querySelectorAll('.ach-title').length,0);
+  [...w.document.querySelectorAll('#achListContainer button')].find(b=>b.textContent==='Show all').click();
+  assert.equal(select.value,'all');assert.equal(w.document.querySelectorAll('.ach-title').length,1);
+});
 test('account options hide unsupported main-account actions and restore them for additional profiles',async t=>{
   const accounts=[{id:'a',name:'Main',tokenSource:'environment',games:[],cardDropGames:[],sleepMode:{}},{id:'b',name:'Other',tokenSource:'local',games:[],cardDropGames:[],sleepMode:{}}];
   const w=ui(t,()=>({accounts,presets:[],timezone:'UTC'}));w.testUI.authenticate();await w.testUI.load();
@@ -94,7 +123,7 @@ test('individual activation requires direct reading, eligible schema and the mai
   const target={name:'Any achievement',description:'A description',apiname:'REAL',unlocked:false,compatibility:{status:'provisional',canUnlock:true,reason:'Provisional'}};
   const w=ui(t,()=>response([target]));w.testUI.activate({tokenSource:'environment'});
   await w.testUI.open(550,'A game');assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);
-  await w.testUI.open(550,'A game',true,'protocol');assert.match(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);assert.match(w.document.getElementById('achListContainer').textContent,/Provisional compatibility/);
+  await w.testUI.open(550,'A game',true,'protocol');assert.match(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);assert.match(w.document.getElementById('achListContainer').textContent,/Eligible to attempt/);
   w.testUI.activate({tokenSource:'local'});await w.testUI.refresh();assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Unlock achievement/);
   w.testUI.activate({tokenSource:'environment'});target.compatibility={status:'dependency',canUnlock:false,reason:'Progress stat'};await w.testUI.refresh();assert.equal(w.document.querySelector('.ach-info button'),null);assert.match(w.document.getElementById('achListContainer').textContent,/Progress stat/);
 });

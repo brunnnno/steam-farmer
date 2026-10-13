@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node --max-old-space-size=192 --max-semi-space-size=8 bot.js",
     "test": "node --test",
-"check": "node --check bot.js && node --check public/app.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js && node --check lib/achievement-experiment.js && node --check lib/achievement-writer.js && node --check lib/achievement-compatibility.js && node --check lib/game-requirements.js && node --check lib/achievement-candidates.js && node --check lib/achievement-progress.js && node --check lib/achievement-probes.js && node --check lib/achievement-journal.js && node --check lib/app-state.js && node --check lib/resources.js && node --check lib/steam-percentages.js && node --check scripts/memory-smoke.js"
+"check": "node --check bot.js && node --check public/app.js && node --check public/achievement-availability.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js && node --check lib/achievement-experiment.js && node --check lib/achievement-writer.js && node --check lib/achievement-compatibility.js && node --check lib/game-requirements.js && node --check lib/achievement-candidates.js && node --check lib/achievement-progress.js && node --check lib/achievement-probes.js && node --check lib/achievement-journal.js && node --check lib/app-state.js && node --check lib/resources.js && node --check lib/steam-percentages.js && node --check scripts/memory-smoke.js"
   },
   "dependencies": {
     "binarykvparser": "^2.3.0",

@@ -371,6 +371,12 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 .card .control-menu-content { position:static;width:auto;max-width:160px;margin-top:6px;box-shadow:none;padding:8px; }
 .quick-presets { margin:12px 0; }.quick-presets > summary { width:fit-content; }
 #achReadMode { max-width:100%;padding:10px 12px;border:1px solid var(--card-border);border-radius:12px;background:#131b2e;color:var(--text-main,#fff);font:inherit;font-size:12px; }
+#achCompatibilityFilter { max-width:100%;padding:10px 12px;border:1px solid var(--card-border);border-radius:12px;background:#131b2e;color:#fff;font:inherit;font-size:12px; }
+.ach-availability-summary { margin:0;padding:12px 24px;color:var(--text-muted);font-size:11px;line-height:1.6;border-bottom:1px solid var(--card-border);flex-shrink:0; }
+.ach-availability { width:fit-content;margin:8px 0;padding:4px 8px;border:1px solid var(--card-border);border-radius:6px;font-size:11px;color:var(--text-muted); }
+.ach-availability.eligible,.ach-availability.progress,.ach-availability.confirmed { color:var(--primary);border-color:#397b60; }
+.ach-availability.protected,.ach-availability.rejected { color:#f1bc80;border-color:#806039; }
 .ach-header > div:last-child { flex-wrap:wrap; }
+.ach-toolbar > div:last-child { flex-wrap:wrap;min-width:0; }
 [hidden] { display:none !important; }
 @media(max-width:600px) { .ach-impact-effect { grid-template-columns:minmax(0,1fr); } }

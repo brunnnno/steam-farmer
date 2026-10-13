@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=12">
+  <link rel="stylesheet" href="/style.css?v=13">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -69,6 +69,7 @@
         </div>
         
         <div style="display:flex; gap:10px; align-items:center;">
+          <select id="achCompatibilityFilter" aria-label="Achievement compatibility filter"><option value="all">Compatibility: All</option><option value="attemptable">Eligible to attempt</option><option value="progress">Progress preview supported</option><option value="protected">Protected</option><option value="unsupported">Not supported yet</option><option value="unknown">Unknown / missing data</option><option value="review">Rejected / needs review</option><option value="confirmed">Confirmed on this account</option></select>
           <select id="achSortSelect" data-event-12="" style="padding:8px 12px; font-size:0.85rem; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
             <option value="default">Sort: Default</option>
             <option value="unlocked_first">Unlocked first</option>
@@ -85,6 +86,7 @@
         <strong>Read from Steam</strong>
         <span id="achievementSource"></span>
       </div>
+      <p id="achCompatibilitySummary" class="ach-availability-summary" aria-live="polite"></p>
 
       <details id="gameRequirements" class="game-requirements" hidden>
         <summary>Game integration &amp; activation limits</summary>
@@ -210,6 +212,7 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager</span></footer>
   </div>
 
-  <script src="/app.js?v=12" defer></script>
+  <script src="/achievement-availability.js?v=13" defer></script>
+  <script src="/app.js?v=13" defer></script>
 </body>
 </html>

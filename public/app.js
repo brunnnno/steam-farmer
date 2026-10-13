@@ -4,6 +4,7 @@ let csrf = '', activeAccountId = sessionStorage.getItem('sf_account') || '', acc
 let currentAchList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '', currentAchMethod = 'web';
 let experimentBusy = false;
 let filterStatus = 'all', filterRarity = 'all', currentSort = 'default', searchQuery = '';
+let filterCompatibility='all';
 let loginAttempt = null, loginTimer = null, loginTarget = null, loginSerial = 0, noticeTimer, statusBusy = false, searchSerial = 0, achSerial = 0;
 function notice(message) { $('notice').textContent = message; $('notice').hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').hidden = true, 10000); }
 async function api(endpoint, body) {
@@ -140,15 +141,16 @@ async function logoutSteam() { if (active && confirm('Sign out of Steam and remo
 async function editChatAdmins() { if (!active) return; const value = prompt('Allowed SteamID64s, separated by commas. Leave empty to disable chat commands.', (active.chatAdmins||[]).join(',')); if(value !== null) await action('/api/chat-admins',{steamids:value.split(',').map(v=>v.trim()).filter(Boolean)},'Chat permissions updated.'); }
 async function openAchModal(id,title,forceRefresh=false,method='web') {
   $('sharedProgressReview').hidden=true;
-  if (currentAchAppId !== id || achAccountId !== activeAccountId || currentAchMethod !== method) {
-    filterStatus='all'; filterRarity='all'; currentSort='default'; searchQuery='';
+  if (currentAchAppId !== id || achAccountId !== activeAccountId || $('achReadMode').value !== method) {
+    filterStatus='all'; filterRarity='all'; filterCompatibility='all';currentSort='default'; searchQuery='';
+    $('achCompatibilityFilter').value='all';
     $('achSortSelect').value='default'; $('achSearchInput').value='';
   }
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
   currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
   $('achReadMode').value=method;
-  $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';
+  $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';
   const serial = ++achSerial, account = achAccountId,readStarted=performance.now();
   $('gameRequirements').hidden=true;$('gameRequirements').open=false;loadGameRequirements(id,serial,account);
   try {
@@ -175,7 +177,7 @@ async function loadGameRequirements(id,serial,account) {
     $('gameRequirements').hidden=false;$('gameRequirements').open=Boolean(data.externalAccountOrSoftware);
   } catch {if(serial===achSerial){$('gameRequirementsContent').replaceChildren(element('p','Game integration requirements could not be retrieved. This does not establish a launcher restriction.'));$('gameRequirements').hidden=false;}}
 }
-function closeAchModal() { document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentAchAppId=null;achAccountId=null;$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren(); }
+function closeAchModal() { document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren(); }
 function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true,$('achReadMode').value); }
 function setFilter(type,val) { if(type==='status') filterStatus=val; else filterRarity=filterRarity===val?'all':val; renderAchModal(); }
 let percentageRequest=null;
@@ -198,9 +200,13 @@ function renderAchModal(page=0) {
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
   $('achProgressText').textContent=unknown===currentAchList.length && unknown>0 ? `${unknown} achievements · Personal state not verified` : `${confirmed}/${currentAchList.length-unknown} verified achievements unlocked${unknown ? ` · ${unknown} not verified` : ''}`;
   $('achProgressFill').style.width=(currentAchList.length?confirmed/currentAchList.length*100:0)+'%';
+  const availability=new Map(currentAchList.map(a=>[a,AchievementAvailability.classify(a,{method:currentAchMethod,allowActivation:active?.tokenSource==='environment'&&active?.connected!==false})]));
+  const remaining=[...availability.values()].filter((v,i)=>currentAchList[i].unlocked!==true),count=status=>remaining.filter(v=>v.status===status).length;
+  $('achCompatibilitySummary').textContent=currentAchList.length?`Pending: ${remaining.filter(v=>v.canAttempt).length} eligible to attempt · ${count('protected')} protected · ${count('unsupported')} unsupported · ${count('unknown')} unknown · ${count('rejected')+count('review')} need review. Eligibility is provisional; only a fresh Steam read can confirm a write.`:'';
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
   let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<15||filterRarity==='rare'&&a.percent>=15&&a.percent<40)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
+  list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='review'&&['review','rejected'].includes(v.status)||v.status===filterCompatibility;});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
   if(currentSort==='locked_first'||currentSort==='unlocked_first') list.sort((a,b)=>Number(a.unlocked===true)-Number(b.unlocked===true));
   if(currentSort==='unlocked_first') list.reverse();
@@ -215,21 +221,20 @@ function renderAchModal(page=0) {
     if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}${a.progressDetails.statName?' ('+a.progressDetails.statName+')':''}`));
     if(a.serverControlled) info.append(element('small',' · Server-controlled'));
     if(a.hasProgressDependency) info.append(element('small',' · Linked progress statistic'));
+    const available=availability.get(a),classification=element('div',available.label,'ach-availability '+available.status);classification.title=available.reason;info.append(classification);
+    if(a.unlocked!==true){info.append(element('small',available.reason,'ach-write-reason'));if(available.action&&active?.tokenSource!=='environment')info.append(element('small','Activation from this panel is available only on the server-managed main account.','ach-write-reason'));if(available.provisional)info.append(element('small','Not guaranteed: Steam must accept the update and a fresh read must confirm it.','ach-write-reason'));}
     if(currentAchMethod==='protocol' && a.compatibility) {
-      const labels={provisional:'Provisional compatibility',restricted:'Restricted',dependency:'Progress dependent',insufficient_data:'Insufficient data',steam_rejected:'Steam rejected the write',pending_verification:'Verification pending',attempted:'Previously attempted'};
-      const label=element('div',a.compatibility.validatedOnAccount?'Verified on this account':labels[a.compatibility.status]||'Insufficient data','ach-compatibility');
-      label.title=a.compatibility.reason;info.append(label);
       if(a.unlocked===false && active?.tokenSource==='environment') {
-        if(a.compatibility.canUnlock){const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));unlock.disabled=experimentBusy;unlock.title=a.compatibility.reason;info.append(unlock);}
-        if(a.hasProgressDependency){if(a.progressSupport?.canComplete){const progress=button(experimentBusy?'Checking Steam…':'Preview progress completion',()=>completeAchievementProgress(a));progress.disabled=experimentBusy;progress.title=a.progressSupport.reason;info.append(progress);}else info.append(element('small',a.progressSupport?.reason||'The linked counter has not been checked.','ach-write-reason'));}
+        if(available.canAttempt&&available.action==='unlock'){const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));unlock.disabled=experimentBusy;unlock.title=a.compatibility.reason;info.append(unlock);}
+        if(a.hasProgressDependency){if(available.canAttempt&&available.action==='progress'){const progress=button(experimentBusy?'Checking Steam…':'Preview progress completion',()=>completeAchievementProgress(a));progress.disabled=experimentBusy;progress.title=a.progressSupport.reason;info.append(progress);}}
         if(a.progressSupport?.canPreviewShared)info.append(button('Review shared counter',()=>reviewSharedProgress(a)));
       }
-      if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.reason,'ach-write-reason'),element('small',a.compatibility.action||'','ach-write-reason'));
+      if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.action||'','ach-write-reason'));
     } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
     row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
   }
   if(pages>1){const nav=element('div',undefined,'ach-pagination');if(page>0)nav.append(button('Previous',()=>{renderAchModal(page-1);cont.scrollTop=0;}));nav.append(element('span',`Page ${page+1} of ${pages} · ${list.length} matching achievements`));if(page+1<pages)nav.append(button('Next',()=>{renderAchModal(page+1);cont.scrollTop=0;}));cont.append(nav);}
-  if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+  if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
 }
 async function refreshWriteHistory(){
   if(!activeAccountId)return;
@@ -302,6 +307,7 @@ document.querySelector('[data-event-1]').addEventListener('click', function(even
 document.querySelector('[data-event-2]').addEventListener('click', function(event) { submitAddAccount(); });
 document.querySelector('[data-event-3]').addEventListener('click', function(event) { closeAddAccModal(); });
 $('achReadMode').addEventListener('change',()=>{if(currentAchAppId)openAchModal(currentAchAppId,currentAchGameName,true,$('achReadMode').value);});
+$('achCompatibilityFilter').addEventListener('change',()=>{filterCompatibility=$('achCompatibilityFilter').value;renderAchModal();});
 document.querySelector('[data-event-4]').addEventListener('click', function(event) { forceRefreshAchievements(); });
 document.querySelector('[data-event-5]').addEventListener('click', function(event) { closeAchModal(); });
 document.querySelector('[data-event-6]').addEventListener('click', function(event) { setFilter('status', 'all'); });

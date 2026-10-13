@@ -83,7 +83,7 @@ function createApp(options = {}) {
   const startupDiagnostics=options.startupDiagnostics??(process.env.STEAM_STARTUP_DIAGNOSTICS==='1');
   const namePending=new Map();
   const percentageCache=new ResultCache({maxBytes:256*1024,maxEntries:16,ttl:3600000}),percentagePending=new Map();
-  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
+  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
   }));
@@ -334,7 +334,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       // Public GET pages may be reached from bookmarks, search engines or external links.
       // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
-      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/manifest.json', '/style.css'].includes(url.pathname));
+      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-availability.js', '/manifest.json', '/style.css'].includes(url.pathname));
       if (!['GET', 'POST'].includes(req.method)) throw fail('Method not allowed.', 405);
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') throw fail('Route not found.', 404);
