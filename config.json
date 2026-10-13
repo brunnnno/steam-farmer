@@ -1,19 +1,41 @@
 {
-  "user": "creep_no.1@web.de",
   "webPin": "4947",
-  "games": [
-    240,
-    550,
-    271590,
-    1938090,
-    1118310,
-    379720,
-    323470,
-    883710,
-    202970,
-    220240,
-    1888930,
-    730
-  ],
-  "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5Nzk2MTg1MDMxOSIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MTAxMDA5NTYsICJuYmYiOiAxNzgzMjA1OTk4LCAiaWF0IjogMTc5MTg0NTk5OCwgImp0aSI6ICIwMDE2XzI4RUYxOUI0XzQ4QUFFIiwgIm9hdCI6IDE3OTE4NDU5OTgsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODYuNDguMTYwLjgyIiwgImlwX2NvbmZpcm1lciI6ICIxODYuNDguMTYwLjgyIiB9.WxrW-_TvJTCAbP_AVz7qwyEob8O8yrUINV3vvdSzTvkhWCxy1z4OX-sAvx3-xdzLjFBLTBIRxy2Q6-JK0kUZCQ"
+  "steamApiKey": "8EF79E35969D36183B9AED9071C60DE4",
+  "discordWebhook": "",
+  "activeAccountId": "main",
+  "accounts": [
+    {
+      "id": "main",
+      "name": "Main Account",
+      "user": "creep_no.1@web.de",
+      "refreshToken": "eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInN0ZWFtIiwgInN1YiI6ICI3NjU2MTE5Nzk2MTg1MDMxOSIsICJhdWQiOiBbICJjbGllbnQiLCAid2ViIiwgInJlbmV3IiwgImRlcml2ZSIgXSwgImV4cCI6IDE4MTAxMDA5NTYsICJuYmYiOiAxNzgzMjA1OTk4LCAiaWF0IjogMTc5MTg0NTk5OCwgImp0aSI6ICIwMDE2XzI4RUYxOUI0XzQ4QUFFIiwgIm9hdCI6IDE3OTE4NDU5OTgsICJwZXIiOiAxLCAiaXBfc3ViamVjdCI6ICIxODYuNDguMTYwLjgyIiwgImlwX2NvbmZpcm1lciI6ICIxODYuNDguMTYwLjgyIiB9.WxrW-_TvJTCAbP_AVz7qwyEob8O8yrUINV3vvdSzTvkhWCxy1z4OX-sAvx3-xdzLjFBLTBIRxy2Q6-JK0kUZCQ",
+      "games": [
+        240,
+        550,
+        271590,
+        1938090,
+        1118310,
+        379720,
+        323470,
+        883710,
+        202970,
+        220240,
+        1888930,
+        730
+      ],
+      "gameNames": {
+        "240": "Counter-Strike: Source",
+        "550": "Left 4 Dead 2",
+        "730": "Counter-Strike 2"
+      },
+      "customStatus": "",
+      "personaState": 1,
+      "cardFarming": false,
+      "sleepMode": {
+        "enabled": false,
+        "start": 3,
+        "end": 8
+      }
+    }
+  ]
 }
