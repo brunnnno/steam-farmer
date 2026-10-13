@@ -43,6 +43,8 @@ async function loadStatus() {
     $('webhookInput').placeholder = data.webhookConfigured ? 'Webhook configured. Paste a new one to replace it.' : 'https://discord.com/api/webhooks/...';
     if (document.activeElement !== $('timezoneInput')) $('timezoneInput').value = data.timezone;
     $('achQueueVal').textContent = 'Actual Steam state';
+    const storage=data.achievementHistoryStorage;
+    $('historyStorage').textContent=storage?.persistent?(storage.available?'Persistent write history connected.':'Persistent history unavailable. Achievement activation is blocked until it recovers.'):'Local history only. Records can be lost when the host restarts or redeploys; persistent storage has not been connected.';
     if (!active) { $('connectionDetails').textContent=''; $('userLabel').textContent = 'Add your Steam account to get started'; $('statusText').textContent = 'No account'; $('badgeStatus').className = 'badge-status paused'; $('gamesGrid').replaceChildren(); gamesSnapshot=''; $('timerVal').textContent = '00h 00m 00s'; $('hoursVal').textContent = '0.0 estimated hrs'; $('gamesCountVal').textContent = '0 / 32'; $('capacityPercent').textContent = '0%'; $('capacityFill').style.width = '0%'; return; }
     $('userLabel').textContent = [active.name,active.profileName || active.user].filter(Boolean).join(' · ');
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${active.linkedSteamId?' · Steam ID: '+active.linkedSteamId:''}`;
@@ -108,6 +110,7 @@ async function deleteCurrentAccount() { if (!active || !confirm('Delete this pro
 async function logoutSteam() { if (active && confirm('Sign out of Steam and remove the saved session?')) await action('/api/steam/logout',{},'Steam session removed.'); }
 async function editChatAdmins() { if (!active) return; const value = prompt('Allowed SteamID64s, separated by commas. Leave empty to disable chat commands.', (active.chatAdmins||[]).join(',')); if(value !== null) await action('/api/chat-admins',{steamids:value.split(',').map(v=>v.trim()).filter(Boolean)},'Chat permissions updated.'); }
 async function openAchModal(id,title,forceRefresh=false,method='web') {
+  $('sharedProgressReview').hidden=true;
   if (currentAchAppId !== id || achAccountId !== activeAccountId || currentAchMethod !== method) {
     filterStatus='all'; filterRarity='all'; currentSort='default'; searchQuery='';
     $('achSortSelect').value='default'; $('achSearchInput').value='';
@@ -174,6 +177,7 @@ function renderAchModal() {
         const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>unlockIndividualAchievement(a));
         unlock.disabled=experimentBusy || !a.compatibility.canUnlock;unlock.title=a.compatibility.reason;info.append(unlock);
         if(a.hasProgressDependency){const progress=button(experimentBusy?'Checking Steam…':'Preview progress completion',()=>completeAchievementProgress(a));progress.disabled=experimentBusy||!a.progressSupport?.canComplete;progress.title=a.progressSupport?.reason||'Progress completion is unavailable.';info.append(progress);if(!a.progressSupport?.canComplete)info.append(element('small',a.progressSupport?.reason||'The linked counter has not been checked.','ach-write-reason'));}
+        if(a.progressSupport?.canPreviewShared)info.append(button('Review shared counter',()=>reviewSharedProgress(a)));
       }
       if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.reason,'ach-write-reason'),element('small',a.compatibility.action||'','ach-write-reason'));
     } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Use Verify directly to check activation compatibility.','ach-write-reason'));
@@ -181,6 +185,26 @@ function renderAchModal() {
   }
   if(!list.length) { const message=element('p',currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{filterStatus='all';filterRarity='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
 }
+async function refreshWriteHistory(){
+  if(!activeAccountId)return;
+  const account=activeAccountId;
+  try{const result=await api('/api/achievement/history?accountId='+encodeURIComponent(account));if(account!==activeAccountId)return;const list=$('historyList');list.replaceChildren();
+    for(const receipt of result.entries){const item=element('div',undefined,'ach-impact-effect');item.append(element('strong',receipt.name||receipt.apiname||'Recorded attempt'),element('span',receipt.outcome||'Unknown result'));if(receipt.checkedAt)item.append(element('small',new Date(receipt.checkedAt).toLocaleString('en-US')));if(receipt.progressChanges?.length)item.append(element('small',receipt.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join(' · ')));list.append(item);}
+    if(!result.entries.length)list.append(element('p','No recorded attempts are available for this account. This does not mean no achievements were activated before history was connected.'));
+  }catch(e){notice(e.message);}
+}
+async function reviewSharedProgress(row){
+  if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canPreviewShared)return;
+  const id=currentAchAppId,account=activeAccountId;
+  try{const result=await api('/api/achievement/shared-progress-preview?accountId='+encodeURIComponent(account)+'&appid='+id+'&apiname='+encodeURIComponent(row.apiname));if(account!==activeAccountId||id!==currentAchAppId)return;
+    $('sharedProgressSummary').textContent=`${result.counter.statName}: ${result.counter.before} → ${result.counter.after}. ${result.effects.length} related achievements.`;
+    const list=$('sharedProgressEffects');list.replaceChildren();const labels={would_unlock:'Would unlock',already_unlocked:'Already unlocked',progress_only:'Progress would change',unknown:'Impact unknown',restricted:'Restricted'};
+    for(const effect of result.effects){const item=element('div',undefined,'ach-impact-effect');item.append(element('strong',effect.name),element('span',labels[effect.effect]||'Impact unknown'),element('small',`Goal: ${effect.goal??'unknown'}${effect.hidden?' · Hidden achievement':''}`));list.append(item);}
+    $('sharedProgressMessage').textContent=result.message+' No changes have been sent to Steam.';$('sharedProgressReview').hidden=false;
+  }catch(e){notice(e.message);}
+}
+$('historyRefresh').addEventListener('click',refreshWriteHistory);
+$('closeSharedReview').addEventListener('click',()=>{$('sharedProgressReview').hidden=true;});
 async function completeAchievementProgress(row){
   if(experimentBusy||currentAchMethod!=='protocol'||!row.progressSupport?.canComplete||!currentAchAppId)return;
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;experimentBusy=true;renderAchModal();

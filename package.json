@@ -9,12 +9,13 @@
   "scripts": {
     "start": "node bot.js",
     "test": "node --test",
-    "check": "node --check bot.js && node --check public/app.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js && node --check lib/achievement-experiment.js && node --check lib/achievement-writer.js && node --check lib/achievement-compatibility.js && node --check lib/game-requirements.js && node --check lib/achievement-candidates.js && node --check lib/achievement-progress.js && node --check lib/achievement-probes.js"
+    "check": "node --check bot.js && node --check public/app.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js && node --check lib/achievement-experiment.js && node --check lib/achievement-writer.js && node --check lib/achievement-compatibility.js && node --check lib/game-requirements.js && node --check lib/achievement-candidates.js && node --check lib/achievement-progress.js && node --check lib/achievement-probes.js && node --check lib/achievement-journal.js"
   },
   "dependencies": {
     "binarykvparser": "^2.3.0",
     "cheerio": "^1.1.0",
     "fast-xml-parser": "^5.0.0",
+    "pg": "^8.16.3",
     "steam-session": "^1.9.0",
     "steam-user": "^5.0.0"
   },

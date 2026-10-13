@@ -340,3 +340,8 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 .game-requirements p { margin:8px 0; }
 .game-requirements a { color:var(--primary); }
 @media(max-width:600px) { .game-requirements { padding:12px 14px; } }
+.ach-impact-review { margin:14px; padding:16px; border:1px solid var(--card-border); border-radius:16px; background:#101b2c; max-height:300px; overflow:auto; flex-shrink:0; overflow-wrap:anywhere; }
+.ach-impact-review h3 { margin:0 0 12px; }
+.ach-impact-effect { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 12px; padding:12px 0; border-bottom:1px solid var(--card-border); font-size:12px; }
+.ach-impact-effect small { grid-column:1 / -1; color:var(--text-muted); }
+@media(max-width:600px) { .ach-impact-effect { grid-template-columns:minmax(0,1fr); } }

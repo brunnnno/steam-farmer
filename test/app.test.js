@@ -179,7 +179,7 @@ test('direct verification requires a connected account and stays separate from w
 test('single achievement experiment requires auth, CSRF, exact target and the verified main account',async t=>{
   const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();
   let calls=0;
-  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{experimentWriter:async(_,options)=>{calls++;options.beforeSend({appid:3764200,apiname:'MODEL_API',name:'Model Mania',before:false});return {outcome:'confirmed',appid:3764200,apiname:'MODEL_API',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{experimentWriter:async(_,options)=>{calls++;await options.beforeSend({appid:3764200,apiname:'MODEL_API',name:'Model Mania',before:false});return {outcome:'confirmed',appid:3764200,apiname:'MODEL_API',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   const body={accountId:'main',appid:3764200,name:'Model Mania',apiname:'MODEL_API'};
   assert.equal((await f.request('/api/achievement-experiment',body,{auth:false})).response.status,401);
   await f.login();assert.equal((await f.request('/api/achievement-experiment',body,{csrf:false})).response.status,403);
@@ -192,7 +192,7 @@ test('single achievement experiment requires auth, CSRF, exact target and the ve
 test('individual unlock API preserves authentication, one-target validation, journal and cooldown',async t=>{
   const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let calls=0;
   let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{individualWriter:async(_,id,apiname,options)=>{
-    calls++;options.beforeSend({appid:id,apiname,name:'Chosen',before:false});return {appid:id,apiname,outcome:'confirmed',after:true};
+    calls++;await options.beforeSend({appid:id,apiname,name:'Chosen',before:false});return {appid:id,apiname,outcome:'confirmed',after:true};
   },protocolReader:async()=>({achievements:[{apiname:'FIRST',unlocked:true,compatibility:{status:'provisional',canUnlock:false}}],verified:true})});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   const body={accountId:'main',appid:550,apiname:'FIRST'};
   assert.equal((await f.request('/api/achievement/unlock',body,{auth:false})).response.status,401);await f.login();
@@ -209,7 +209,7 @@ test('progress preview is authenticated and read-only; activation requires its r
   function kv(obj){const p=[];for(const[k,v]of Object.entries(obj))p.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));p.push(Buffer.from([8]));return Buffer.concat(p);}
   const snapshot={eresult:1,game_id:'550',crc_stats:12,schema:kv({'550':{stats:{'7':{type:'4',bits:{'0':{name:'TARGET',progress:{max_val:'1',value:{operation:'statvalue',operand1:'COUNT'}}}}},'9':{type:'INT',name:'COUNT'}}}}),stats:[{stat_id:7,stat_value:0},{stat_id:9,stat_value:0}]};
   const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let writes=0,received;
-  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{progressSnapshotReader:async()=>snapshot,individualWriter:async(_,id,apiname,options)=>{writes++;received=options;options.beforeSend({appid:id,apiname,progressChanges:[{statName:'COUNT',before:0,after:1}]});return {outcome:'confirmed',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{progressSnapshotReader:async()=>snapshot,individualWriter:async(_,id,apiname,options)=>{writes++;received=options;await options.beforeSend({appid:id,apiname,progressChanges:[{statName:'COUNT',before:0,after:1}]});return {outcome:'confirmed',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   const route='/api/achievement/progress-preview?accountId=main&appid=550&apiname=TARGET';assert.equal((await f.request(route)).response.status,401);await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
   const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.progressChanges[0].after,1);assert.equal(writes,0);const body={accountId:'main',appid:550,apiname:'TARGET',mode:'progress'};
   assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);assert.equal(writes,0);
@@ -227,4 +227,16 @@ test('game requirements are authenticated, cached, and protocol errors preserve 
   assert.equal((await f.request('/api/game-requirements?appid=123')).data.externalAccountOrSoftware,true);await f.request('/api/game-requirements?appid=123');assert.equal(calls,1);
   await f.request('/api/status');f.app.states.get('a').connected=true;
   const result=await f.request('/api/achievements?accountId=a&appid=123&method=protocol');assert.equal(result.response.status,502);assert.equal(result.data.diagnostic.code,'schema_unavailable');assert.equal(result.data.diagnostic.action,'Try the standard reading');
+});
+test('history is authenticated, scoped to the selected account and reports local storage honestly',async t=>{
+  const owner='76561198000000001',other='76561198000000002';const f=await fixture(t,{accounts:[{id:'a',name:'Main',mySteamID:owner,games:[]}],achievementWrites:{[owner+':550:ONE']:{apiname:'ONE',name:'Owned receipt',outcome:'requested'},[other+':550:PRIVATE']:{apiname:'PRIVATE',name:'Other receipt',outcome:'requested'}}});
+  assert.equal((await f.request('/api/achievement/history?accountId=a')).response.status,401);await f.login();const result=await f.request('/api/achievement/history?accountId=a&steamid='+other);assert.equal(result.data.storage.persistent,false);assert.equal(result.data.entries.length,1);assert.equal(result.data.entries[0].apiname,'ONE');assert.equal((await f.request('/api/achievement/history?accountId=a&before=bad')).response.status,400);
+});
+test('unavailable persistent history does not hide real Steam states and blocks writes before transport',async t=>{
+  const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let writes=0;
+  const unavailable=()=>{throw Object.assign(new Error('Persistent history unavailable'),{status:503});};
+  const journal={ready:async()=>{},status:()=>({persistent:true,available:false}),get:async()=>unavailable(),forGame:async()=>unavailable(),reserve:async()=>unavailable(),finish:async()=>{},close:async()=>{}};
+  let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{achievementJournal:journal,protocolReader:async()=>({achievements:[{apiname:'ONE',unlocked:false,compatibility:{status:'provisional',canUnlock:true}}],verified:true}),individualWriter:async(_,id,name,options)=>{await options.beforeSend({appid:id,apiname:name});writes++;return {outcome:'confirmed'};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
+  await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
+  const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.response.status,200);assert.equal(view.data.achievements[0].unlocked,false);assert.equal(view.data.achievements[0].compatibility.canUnlock,false);assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'ONE'})).response.status,503);assert.equal(writes,0);
 });

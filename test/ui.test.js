@@ -4,7 +4,7 @@ function ui(t, responder) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
-  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress};`);
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
@@ -90,4 +90,11 @@ test('confirmed progress completion submits the selected target and reviewed rev
   const w=ui(t,()=>response([target]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});w.confirm=()=>true;await w.testUI.open(550,'Game',true,'protocol');let submitted;
   w.fetch=async(url,options)=>({ok:true,json:async()=>url.startsWith('/api/achievement/progress-preview')?{name:'Progress',revision:'b'.repeat(64),progressChanges:[{statName:'COUNT',before:3,after:10}],message:'Changes Steam stats.'}:url==='/api/achievement/unlock'?(submitted=JSON.parse(options.body),{message:'Verified'}):response([target])});
   await w.testUI.completeProgress(target);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'TARGET',mode:'progress',revision:'b'.repeat(64)});
+});
+test('shared impact review displays all effect types as text and never submits an activation',async t=>{
+  const urls=[];const row={name:'Shared',apiname:'TARGET',unlocked:false,hasProgressDependency:true,compatibility:{canUnlock:false},progressSupport:{canPreviewShared:true,canComplete:false}};
+  const w=ui(t,url=>{urls.push(url);return url.startsWith('/api/achievement/shared-progress-preview')?{counter:{statName:'COUNT',before:5,after:100},effects:[{name:'<img src=x>',goal:10,effect:'would_unlock'},{name:'Later',goal:1000,effect:'progress_only'},{name:'Complex',effect:'unknown'}],message:'Read-only review.'}:response([row]);});w.testUI.activate({tokenSource:'environment'});await w.testUI.open(550,'Game',true,'protocol');await w.testUI.reviewShared(row);const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Would unlock/);assert.match(panel.textContent,/Impact unknown/);assert.equal(panel.querySelector('img'),null);assert.ok(!urls.includes('/api/achievement/unlock'));
+});
+test('write history renders receipts as text and does not infer unrecorded historical attempts',async t=>{
+  const w=ui(t,()=>({entries:[{name:'<script>secret</script>',outcome:'requested',progressChanges:[{statName:'COUNT',before:0,after:1}]}]}));await w.testUI.history();const list=w.document.getElementById('historyList');assert.match(list.textContent,/COUNT: 0 → 1/);assert.equal(list.querySelector('script'),null);
 });

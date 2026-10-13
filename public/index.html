@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=5">
+  <link rel="stylesheet" href="/style.css?v=6">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -52,6 +52,7 @@
         </div>
       </div>
 
+      <section id="sharedProgressReview" class="ach-impact-review" hidden aria-live="polite"><h3>Shared counter impact</h3><p id="sharedProgressSummary"></p><div id="sharedProgressEffects"></div><p id="sharedProgressMessage"></p><button id="closeSharedReview" class="btn-action-sm">Hide review</button></section>
       <div class="privacy-banner" id="achPrivacyWarning">
         <span id="achReadMessage"></span></div>
 
@@ -166,6 +167,7 @@
       </div>
 
       <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
+        <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
       <div class="tools-grid">
         <div class="tool-box">
           <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Custom Status:</span>
@@ -200,6 +202,6 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager</span></footer>
   </div>
 
-  <script src="/app.js?v=5" defer></script>
+  <script src="/app.js?v=6" defer></script>
 </body>
 </html>
