@@ -29,7 +29,7 @@ let webCookies = '';
 let cardDropGames = [];
 let mySteamID = cfg.mySteamID || '';
 
-// Memoria caché para evitar saturación de Steam y garantizar carga instantánea
+// In-memory cache for user achievements
 const achMemoryCache = {};
 
 const VALVE_ALIASES = {
@@ -45,24 +45,24 @@ const VALVE_ALIASES = {
 };
 
 const PRESETS = {
-  competitivos: {
-    name: '🎯 Competitivos',
+  competitive: {
+    name: '🎯 Competitive',
     games: [730, 440, 570, 252490, 1172470, 578080],
     names: { 730: 'Counter-Strike 2', 440: 'Team Fortress 2', 570: 'Dota 2', 252490: 'Rust', 1172470: 'Apex Legends', 578080: 'PUBG' }
   },
   valve: {
-    name: '🏆 Clásicos Valve',
+    name: '🏆 Valve Classics',
     games: [10, 240, 220, 550, 620],
     names: { 10: 'Counter-Strike 1.6', 240: 'Counter-Strike: Source', 220: 'Half-Life 2', 550: 'Left 4 Dead 2', 620: 'Portal 2' }
   },
   aaa: {
-    name: '🔥 Populares AAA',
+    name: '🔥 AAA Hits',
     games: [271590, 1938090, 1091500, 292030, 379720],
     names: { 271590: 'Grand Theft Auto V', 1938090: 'Call of Duty®', 1091500: 'Cyberpunk 2077', 292030: 'The Witcher 3', 379720: 'DOOM' }
   }
 };
 
-// Cliente HTTP con soporte nativo de redirecciones 301/302 y cookies Age Gate
+// HTTP Client preserving redirect params, Age-Gate, and auth cookies
 function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   if (typeof customHeaders === 'function') {
     cb = customHeaders;
@@ -70,7 +70,7 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
     maxRedirects = 5;
   }
   if (maxRedirects === undefined) maxRedirects = 5;
-  if (maxRedirects <= 0) return cb(new Error('Demasiadas redirecciones'), null);
+  if (maxRedirects <= 0) return cb(new Error('Too many redirects'), null);
 
   try {
     const parsed = new URL(targetUrl);
@@ -83,9 +83,9 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
       port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
       path: parsed.pathname + parsed.search,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
         ...customHeaders,
         'Cookie': combinedCookies
       }
@@ -112,10 +112,10 @@ function fetchWithRedirects(targetUrl, customHeaders, maxRedirects, cb) {
   }
 }
 
-// Webhook de Discord con proxy anti-1015
+// Discord Webhook integration with proxy bypass
 function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
   if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
-    if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
+    if (cb) cb({ success: false, error: 'Invalid Webhook URL.' });
     return;
   }
   try {
@@ -127,7 +127,7 @@ function sendDiscordWebhook(title, description, color, thumbUrl, cb) {
       title: title,
       description: description,
       color: color || 3718648,
-      footer: { text: 'Steam Hour Booster Pro • Achievement Engine' },
+      footer: { text: 'Steam Hour Booster Pro • Enterprise Edition' },
       timestamp: new Date().toISOString()
     };
     if (thumbUrl) embed.thumbnail = { url: thumbUrl };
@@ -172,7 +172,7 @@ const logOnDetails = cfg.refreshToken
 client.logOn(logOnDetails);
 
 client.on('loggedOn', () => {
-  console.log('[+] Conectado a Steam');
+  console.log('[+] Connected to Steam');
   if (client.steamID) {
     mySteamID = client.steamID.getSteamID64();
     cfg.mySteamID = mySteamID;
@@ -182,33 +182,34 @@ client.on('loggedOn', () => {
   try { client.webLogOn(); } catch (e) {}
   resolverNombresFaltantes();
   actualizarFarmeo();
-  sendDiscordWebhook('🟢 Bot Conectado', 'Farmeando ' + cfg.games.length + ' juegos con motor de logros activo.', 1095985);
+  sendDiscordWebhook('🟢 Bot Connected', 'Boosting ' + cfg.games.length + ' games in the cloud.', 1095985);
 });
 
 client.on('webSession', (sessionID, cookies) => {
   webCookies = cookies.join('; ');
+  console.log('[+] Authenticated Steam web session established.');
   if (cfg.cardFarming) escanearCromos();
 });
 
-client.on('error', (e) => console.error('Error Steam:', e.message));
+client.on('error', (e) => console.error('Steam Error:', e.message));
 
-// Anti-Colisión Instantáneo
+// Anti-Collision Engine
 client.on('playingElsewhere', () => {
-  console.log('[⚠️ Anti-Colisión] Detectada sesión de juego en PC. Pausando bot...');
+  console.log('[⚠️ Anti-Collision] Game detected on local PC. Pausing cloud bot...');
   isCollisionPaused = true;
   actualizarFarmeo();
-  sendDiscordWebhook('🎮 Partida Detectada en PC', 'Has iniciado un juego en tu PC. Bot pausado automáticamente.', 16101915);
+  sendDiscordWebhook('🎮 Game Launched on PC', 'You started playing on your PC. Cloud bot has paused automatically to prevent interference.', 16101915);
 
   if (collisionTimer) clearTimeout(collisionTimer);
   collisionTimer = setTimeout(() => {
-    console.log('[Anti-Colisión] Reanudando farmeo...');
+    console.log('[Anti-Collision] Resuming cloud boosting...');
     isCollisionPaused = false;
     actualizarFarmeo();
-    sendDiscordWebhook('🔄 Farmeo Reanudado', 'Sesión en PC finalizada. Bot activo nuevamente en la nube.', 1095985);
+    sendDiscordWebhook('🔄 Boosting Resumed', 'PC gaming session ended. Cloud bot resumed automatically.', 1095985);
   }, 10 * 60 * 1000);
 });
 
-// Comandos por Chat de Steam
+// Steam Chat Remote Control
 client.on('friendMessage', (steamID, message) => {
   const msg = message.trim().toLowerCase();
   const args = msg.split(' ');
@@ -216,23 +217,33 @@ client.on('friendMessage', (steamID, message) => {
 
   function reply(text) { try { client.chatMessage(steamID, text); } catch (e) {} }
 
-  if (cmd === '!status' || cmd === '!estado') {
-    const estado = isPaused ? 'Pausado' : (isCollisionPaused ? 'Pausado por juego en PC' : 'Activo');
-    reply(`📊 Estado: ${estado} | Juegos: ${cfg.games.length}/32 | Logros en cola: ${cfg.achievementQueue.length}`);
-  } else if (cmd === '!pausa' || cmd === '!pause') {
+  if (cmd === '!status') {
+    const st = isPaused ? 'Paused' : (isCollisionPaused ? 'Paused (PC Playing)' : 'Active');
+    reply(`📊 Status: ${st} | Games: ${cfg.games.length}/32 | Queued Achievements: ${cfg.achievementQueue.length}`);
+  } else if (cmd === '!pause') {
     isPaused = true;
     actualizarFarmeo();
-    reply('⏸️ Farmeo pausado.');
-  } else if (cmd === '!reanudar' || cmd === '!resume' || cmd === '!play') {
+    reply('⏸️ Cloud boosting paused.');
+  } else if (cmd === '!resume' || cmd === '!play') {
     isPaused = false;
     actualizarFarmeo();
-    reply('▶️ Farmeo reanudado.');
-  } else if (cmd === '!help' || cmd === '!ayuda') {
-    reply('🤖 Comandos: !status, !pausa, !reanudar, !invisible, !online');
+    reply('▶️ Cloud boosting resumed.');
+  } else if (cmd === '!invisible') {
+    cfg.personaState = SteamUser.EPersonaState.Invisible;
+    client.setPersona(cfg.personaState);
+    guardarConfig();
+    reply('👻 Mode set to: Invisible.');
+  } else if (cmd === '!online') {
+    cfg.personaState = SteamUser.EPersonaState.Online;
+    client.setPersona(cfg.personaState);
+    guardarConfig();
+    reply('🟢 Mode set to: Online.');
+  } else if (cmd === '!help') {
+    reply('🤖 Commands: !status, !pause, !resume, !invisible, !online');
   }
 });
 
-// Motor de logros orgánicos
+// Organic achievement queue processor
 setInterval(() => {
   if (!cfg.achievementQueue || cfg.achievementQueue.length === 0) return;
   const now = Date.now();
@@ -244,10 +255,13 @@ setInterval(() => {
     if (!cfg.unlockedAchievements[item.appid].includes(item.apiname)) {
       cfg.unlockedAchievements[item.appid].push(item.apiname);
     }
+    if (!cfg.unlockedAchievements[item.appid].includes(item.name)) {
+      cfg.unlockedAchievements[item.appid].push(item.name);
+    }
 
     sendDiscordWebhook(
-      `🏆 ¡Logro Registrado! • ${item.gameName}`,
-      `**${item.name}**\n*${item.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${item.tier} (${item.percent}% global)`,
+      `🏆 Achievement Unlocked! • ${item.gameName}`,
+      `**${item.name}**\n*${item.desc || 'No description'}*\n\n🌟 **Rarity:** ${item.tier} (${item.percent}% global)\n⏱️ **Simulation:** Realistic organic interval.`,
       item.color,
       item.icon
     );
@@ -273,7 +287,7 @@ function escanearCromos(cb) {
     let html = '';
     res.on('data', c => html += c);
     res.on('end', () => {
-      const regex = /href="https:\/\/steamcommunity\.com\/my\/gamecards\/(\d+)\/"[\s\S]*?progress_info_bold">(\d+)\s+cromo/gi;
+      const regex = /href="https:\/\/steamcommunity\.com\/my\/gamecards\/(\d+)\/"[\s\S]*?progress_info_bold">(\d+)\s+card/gi;
       const found = [];
       let match;
       while ((match = regex.exec(html)) !== null) {
@@ -320,7 +334,7 @@ function resolverNombresFaltantes() {
 }
 
 function obtenerNombreSteam(appid, cb) {
-  https.get('https://store.steampowered.com/api/appdetails?appids=' + appid + '&filters=basic&l=spanish', (res) => {
+  https.get('https://store.steampowered.com/api/appdetails?appids=' + appid + '&filters=basic&l=english', (res) => {
     let data = '';
     res.on('data', c => data += c);
     res.on('end', () => {
@@ -365,7 +379,7 @@ function getTag(body, tag) {
   return content;
 }
 
-// Extractor XML de perfil
+// Parse achievements from user profile XML
 function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   const achievements = [];
   const achRegex = /<achievement\b[^>]*\bclosed="(\d+)"[^>]*>([\s\S]*?)<\/achievement>/gi;
@@ -375,28 +389,29 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
     const closedOriginal = match[1] === '1';
     const body = match[2];
     const apiname = getTag(body, 'apiname');
+    const name = getTag(body, 'name') || apiname;
     const pct = parseFloat(percentMap[apiname] || 50.0);
     const unlockTimestamp = parseInt(getTag(body, 'unlockTimestamp') || '0', 10);
 
-    let tier = '⚪ Común';
+    let tier = '⚪ Common';
     let colorHex = 0x94a3b8;
-    if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
-    else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
-    else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
+    if (pct < 5.0) { tier = '🟡 Mythic'; colorHex = 0xf59e0b; }
+    else if (pct < 15.0) { tier = '🟣 Epic'; colorHex = 0xa855f7; }
+    else if (pct < 40.0) { tier = '🔵 Rare'; colorHex = 0x38bdf8; }
 
-    const isUnlocked = closedOriginal || unlockedLocally.includes(apiname);
-    const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && q.apiname === apiname);
+    const isUnlocked = closedOriginal || unlockedLocally.includes(apiname) || unlockedLocally.includes(name);
+    const inQueue = (cfg.achievementQueue || []).some(q => q.appid == appid && (q.apiname === apiname || q.name === name));
 
     let unlockDateFormatted = null;
     if (unlockTimestamp > 0) {
       const d = new Date(unlockTimestamp * 1000);
-      unlockDateFormatted = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+      unlockDateFormatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
     achievements.push({
       apiname: apiname,
-      name: getTag(body, 'name') || apiname,
-      description: getTag(body, 'description') || 'Logro de Steam',
+      name: name,
+      description: getTag(body, 'description') || 'Steam Achievement',
       iconClosed: getTag(body, 'iconClosed'),
       iconOpen: getTag(body, 'iconOpen'),
       percent: pct,
@@ -411,10 +426,10 @@ function parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally) {
   return achievements;
 }
 
-// Extractor HTML con expresiones regulares tolerantes a espacios y clases dinámicas
-function parseAchievementsFromHtml(html, unlockedSet) {
+// Resilient HTML block parser for user profile achievement page
+function parseAchievementsFromHtml(html, unlockedSet, percentMap) {
   const list = [];
-  const regexBlock = /<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["'][^>]*>([\s\S]*?)(?=(?:<div\b[^>]*class=["'][^"']*\bachieveRow\b[^"']*["']|<div\s+id=["']footer["']|$))/gi;
+  const regexBlock = /<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["'][^>]*>([\s\S]*?)(?=(?:<div\b[^>]*class=["']([^"']*\bachieveRow\b[^"']*)["']|<div\s+id=["']footer["']|$))/gi;
   let match;
 
   while ((match = regexBlock.exec(html)) !== null) {
@@ -431,22 +446,23 @@ function parseAchievementsFromHtml(html, unlockedSet) {
       const name = h3M[1].replace(/<[^>]+>/g, '').trim();
       const desc = h5M ? h5M[1].replace(/<[^>]+>/g, '').trim() : '';
       const icon = imgM ? imgM[1] : '';
-      const pct = pctM ? parseFloat(pctM[1]) : 50.0;
       const apiname = 'ACH_' + name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
 
-      let tier = '⚪ Común';
-      let colorHex = 0x94a3b8;
-      if (pct < 5.0) { tier = '🟡 Mítico'; colorHex = 0xf59e0b; }
-      else if (pct < 15.0) { tier = '🟣 Épico'; colorHex = 0xa855f7; }
-      else if (pct < 40.0) { tier = '🔵 Raro'; colorHex = 0x38bdf8; }
+      let pct = pctM ? parseFloat(pctM[1]) : (parseFloat(percentMap[apiname] || percentMap[name]) || 50.0);
 
-      const rawDate = dateM ? dateM[1].replace(/<[^>]+>/g, '').replace(/Desbloqueado el\s*/i, '').trim() : null;
+      let tier = '⚪ Common';
+      let colorHex = 0x94a3b8;
+      if (pct < 5.0) { tier = '🟡 Mythic'; colorHex = 0xf59e0b; }
+      else if (pct < 15.0) { tier = '🟣 Epic'; colorHex = 0xa855f7; }
+      else if (pct < 40.0) { tier = '🔵 Rare'; colorHex = 0x38bdf8; }
+
+      const rawDate = dateM ? dateM[1].replace(/<[^>]+>/g, '').replace(/Unlocked\s*/i, '').replace(/Desbloqueado el\s*/i, '').trim() : null;
       const isUnlocked = classAttr.includes('unlocked') || Boolean(rawDate) || unlockedSet.has(name) || unlockedSet.has(apiname);
 
       list.push({
         apiname: apiname,
         name: name,
-        description: desc || 'Logro de Steam',
+        description: desc || 'Steam Achievement',
         iconClosed: icon,
         iconOpen: icon,
         percent: pct,
@@ -462,14 +478,14 @@ function parseAchievementsFromHtml(html, unlockedSet) {
   return list;
 }
 
-// Motor de obtención de logros con fallback en cascada y caché
+// Master achievement retriever: Checks user XML, user HTML, and falls back cleanly
 function obtenerLogrosJuego(appid, cb) {
   const unlockedLocally = cfg.unlockedAchievements[appid] || [];
-  const userSteamId = mySteamID || (client.steamID ? client.steamID.getSteamID64() : '');
+  const userSteamId = (client.steamID && client.steamID.getSteamID64) ? client.steamID.getSteamID64() : (mySteamID || cfg.mySteamID);
   const xmlHeaders = webCookies ? { 'Cookie': webCookies } : {};
 
-  // 1. Verificación en caché de memoria
-  if (achMemoryCache[appid] && achMemoryCache[appid].achievements && achMemoryCache[appid].achievements.length > 0) {
+  // Check cache (only if personalized)
+  if (achMemoryCache[appid] && achMemoryCache[appid].isPersonalized && achMemoryCache[appid].achievements.length > 0) {
     const cachedList = achMemoryCache[appid].achievements.map(a => ({
       ...a,
       unlocked: a.unlocked || unlockedLocally.includes(a.apiname) || unlockedLocally.includes(a.name),
@@ -478,7 +494,7 @@ function obtenerLogrosJuego(appid, cb) {
     return cb({ achievements: cachedList, isPrivate: achMemoryCache[appid].isPrivate });
   }
 
-  // 2. Porcentajes globales oficiales
+  // 1. Global percentage stats
   const urlGlobal = `https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v0002/?gameid=${appid}`;
   fetchWithRedirects(urlGlobal, {}, 3, (errG, globalData) => {
     let percentMap = {};
@@ -491,55 +507,53 @@ function obtenerLogrosJuego(appid, cb) {
       }
     } catch (e) {}
 
-    // 3. Consulta de perfil por XML
     const aliasOrId = VALVE_ALIASES[appid] || appid;
+
+    // 2. Fetch User Profile XML
     const targetXmlUrl = userSteamId
       ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${aliasOrId}/?xml=1`
       : `https://steamcommunity.com/stats/${aliasOrId}/achievements/?xml=1`;
 
     fetchWithRedirects(targetXmlUrl, xmlHeaders, 5, (errXml, xmlData) => {
-      let isProfilePrivate = false;
-      if (xmlData && (xmlData.includes('profile is private') || xmlData.includes('Specified profile could not be found') || xmlData.includes('<error>'))) {
-        isProfilePrivate = true;
-      }
-
-      if (!errXml && xmlData && xmlData.includes('<achievement') && !isProfilePrivate) {
-        const list = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
-        if (list.length > 0) {
-          achMemoryCache[appid] = { achievements: list, isPrivate: false };
+      if (!errXml && xmlData && xmlData.includes('<achievement')) {
+        const listXml = parseAchievementsFromXml(xmlData, percentMap, appid, unlockedLocally);
+        if (listXml.length > 0) {
+          achMemoryCache[appid] = { achievements: listXml, isPersonalized: true, isPrivate: false };
           return cb(achMemoryCache[appid]);
         }
       }
 
-      // 4. Consulta directa de la página HTML pública (contiene los 101 logros y porcentajes reales)
+      // 3. Fetch User Profile HTML (contains unlock dates and true user state)
       const unlockedSet = new Set(unlockedLocally);
-      const urlGlobalHtml = `https://steamcommunity.com/stats/${aliasOrId}/achievements/?l=spanish`;
+      const targetUserHtml = userSteamId
+        ? `https://steamcommunity.com/profiles/${userSteamId}/stats/${aliasOrId}/?tab=achievements&l=english`
+        : `https://steamcommunity.com/stats/${aliasOrId}/achievements/?l=english`;
 
-      fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
-        if (!errHtml && htmlData && (htmlData.includes('achieveRow') || htmlData.includes('achieveTxtHolder'))) {
-          const listG = parseAchievementsFromHtml(htmlData, unlockedSet);
-          if (listG.length > 0) {
-            achMemoryCache[appid] = { achievements: listG, isPrivate: isProfilePrivate };
+      fetchWithRedirects(targetUserHtml, xmlHeaders, 5, (errUHtml, uHtmlData) => {
+        let isProfilePrivate = false;
+        if (uHtmlData && (uHtmlData.includes('profile_private') || uHtmlData.includes('This profile is private') || uHtmlData.includes('Este perfil es privado'))) {
+          isProfilePrivate = true;
+        }
+
+        if (!errUHtml && uHtmlData && uHtmlData.includes('achieveRow')) {
+          const listU = parseAchievementsFromHtml(uHtmlData, unlockedSet, percentMap);
+          if (listU.length > 0) {
+            achMemoryCache[appid] = { achievements: listU, isPersonalized: !isProfilePrivate, isPrivate: isProfilePrivate };
             return cb(achMemoryCache[appid]);
           }
         }
 
-        // Intento secundario por ID numérico si se utilizó un alias
-        if (aliasOrId !== appid) {
-          const urlNumHtml = `https://steamcommunity.com/stats/${appid}/achievements/?l=spanish`;
-          fetchWithRedirects(urlNumHtml, {}, 5, (errNum, numHtml) => {
-            if (!errNum && numHtml && numHtml.includes('achieveRow')) {
-              const listNum = parseAchievementsFromHtml(numHtml, unlockedSet);
-              if (listNum.length > 0) {
-                achMemoryCache[appid] = { achievements: listNum, isPrivate: isProfilePrivate };
-                return cb(achMemoryCache[appid]);
-              }
+        // 4. Fallback to public global community catalog
+        const urlGlobalHtml = `https://steamcommunity.com/stats/${aliasOrId}/achievements/?l=english`;
+        fetchWithRedirects(urlGlobalHtml, {}, 5, (errHtml, htmlData) => {
+          if (!errHtml && htmlData && htmlData.includes('achieveRow')) {
+            const listG = parseAchievementsFromHtml(htmlData, unlockedSet, percentMap);
+            if (listG.length > 0) {
+              return cb({ achievements: listG, isPersonalized: false, isPrivate: isProfilePrivate });
             }
-            cb({ achievements: [], isPrivate: isProfilePrivate });
-          });
-        } else {
-          cb({ achievements: [], isPrivate: isProfilePrivate });
-        }
+          }
+          cb({ achievements: [], isPersonalized: false, isPrivate: isProfilePrivate });
+        });
       });
     });
   });
@@ -567,7 +581,7 @@ const server = http.createServer((req, res) => {
     const query = parsedUrl.query.term;
     if (!query) return res.end('[]');
 
-    https.get('https://store.steampowered.com/api/storesearch/?term=' + encodeURIComponent(query) + '&l=spanish&cc=US', (sRes) => {
+    https.get('https://store.steampowered.com/api/storesearch/?term=' + encodeURIComponent(query) + '&l=english&cc=US', (sRes) => {
       let data = '';
       sRes.on('data', chunk => data += chunk);
       sRes.on('end', () => {
@@ -585,6 +599,11 @@ const server = http.createServer((req, res) => {
   if (parsedUrl.pathname === '/api/achievements' && req.method === 'GET') {
     const appid = parseInt(parsedUrl.query.appid, 10);
     if (!appid) return res.end(JSON.stringify({ achievements: [], isPrivate: false }));
+
+    // Support force-refresh query
+    if (parsedUrl.query.refresh === '1') {
+      delete achMemoryCache[appid];
+    }
 
     obtenerLogrosJuego(appid, (result) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -626,7 +645,7 @@ const server = http.createServer((req, res) => {
 
         if (cfg.webPin && String(data.pin) !== String(cfg.webPin)) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ error: 'PIN incorrecto' }));
+          return res.end(JSON.stringify({ error: 'Incorrect PIN' }));
         }
 
         if (parsedUrl.pathname === '/api/verify-pin') {
@@ -639,7 +658,7 @@ const server = http.createServer((req, res) => {
           if (appid && !cfg.games.includes(appid)) {
             if (cfg.games.length >= 32) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
-              return res.end(JSON.stringify({ error: 'Límite de 32 juegos alcanzado' }));
+              return res.end(JSON.stringify({ error: 'Limit of 32 games reached' }));
             }
             cfg.games.push(appid);
             if (data.name) {
@@ -660,6 +679,7 @@ const server = http.createServer((req, res) => {
           const appid = parseInt(data.appid, 10);
           cfg.games = cfg.games.filter(id => id !== appid);
           delete cfg.gameNames[appid];
+          delete achMemoryCache[appid];
           guardarConfig();
           actualizarFarmeo();
         }
@@ -677,7 +697,7 @@ const server = http.createServer((req, res) => {
             preset.games.forEach(gid => {
               if (!cfg.games.includes(gid) && cfg.games.length < 32) {
                 cfg.games.push(gid);
-                cfg.gameNames[gid] = preset.names[gid] || ('Juego #' + gid);
+                cfg.gameNames[gid] = preset.names[gid] || ('Game #' + gid);
               }
             });
             guardarConfig();
@@ -707,7 +727,7 @@ const server = http.createServer((req, res) => {
         if (parsedUrl.pathname === '/api/set-webhook') {
           cfg.discordWebhook = (data.webhook || '').trim();
           guardarConfig();
-          sendDiscordWebhook('🔔 Webhook Vinculado', '¡Canal de Discord conectado con éxito!', 3718648, null, (result) => {
+          sendDiscordWebhook('🔔 Webhook Connected', 'Discord channel connected successfully!', 3718648, null, (result) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
           });
@@ -731,15 +751,15 @@ const server = http.createServer((req, res) => {
           if (items.length === 1) {
             const it = items[0];
             sendDiscordWebhook(
-              `🏆 ¡Logro Registrado! • ${gameName}`,
-              `**${it.name}**\n*${it.desc || 'Sin descripción'}*\n\n🌟 **Rareza:** ${it.tier} (${it.percent}% global)`,
+              `🏆 Achievement Unlocked! • ${gameName}`,
+              `**${it.name}**\n*${it.desc || 'No description'}*\n\n🌟 **Rarity:** ${it.tier} (${it.percent}% global)`,
               it.color || 3718648,
               it.icon
             );
           } else {
             sendDiscordWebhook(
-              `🏆 Registro de Logros • ${gameName}`,
-              `Se han marcado **${items.length} logros** en el panel.`,
+              `🏆 Batch Unlocked • ${gameName}`,
+              `Marked **${items.length} achievements** on the dashboard.`,
               3718648
             );
           }
@@ -829,9 +849,10 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 100% English Frontend HTML
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -1012,69 +1033,74 @@ const server = http.createServer((req, res) => {
   </style>
 </head>
 <body>
+  <!-- PIN Lock Modal -->
   <div id="lockModal" class="modal-overlay">
     <div class="lock-card">
-      <h2>🔒 Panel Enterprise</h2>
-      <p>Introduce tu PIN para acceder al bot</p>
+      <h2>🔒 Enterprise Panel</h2>
+      <p>Enter your PIN to access the dashboard</p>
       <input type="password" id="pinInput" placeholder="••••" maxlength="8">
-      <button class="btn-main" style="width:100%;" onclick="unlock()">Desbloquear</button>
+      <button class="btn-main" style="width:100%;" onclick="unlock()">Unlock</button>
     </div>
   </div>
 
+  <!-- Achievements Modal -->
   <div id="achModal" class="modal-overlay">
     <div class="ach-modal-card">
       <div class="ach-header">
         <div class="ach-header-left">
-          <h2 id="achGameTitle">Logros de Steam</h2>
+          <h2 id="achGameTitle">Steam Achievements</h2>
           <div style="display:flex; align-items:center; gap:12px; margin-top:4px;">
-            <span id="achProgressText" style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">Cargando...</span>
+            <span id="achProgressText" style="font-size:0.85rem; font-weight:600; color:var(--text-muted);">Loading trophies...</span>
             <div class="ach-progress-bar-wrap">
               <div class="ach-progress-bar-fill" id="achProgressFill"></div>
             </div>
           </div>
         </div>
-        <button class="btn-action-sm" onclick="closeAchModal()">✕ Cerrar</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-action-sm" onclick="forceRefreshAchievements()">🔄 Refresh</button>
+          <button class="btn-action-sm" onclick="closeAchModal()">✕ Close</button>
+        </div>
       </div>
 
       <div class="privacy-banner" id="achPrivacyWarning">
-        ⚠️ <strong>Aviso de Privacidad:</strong> Tus <em>«Detalles de los juegos»</em> están en <strong>Privado</strong> o <em>Solo amigos</em> en Steam. El bot muestra el catálogo público pero no puede leer tu progreso hasta que cambies esa opción a <strong>Público</strong> en tu perfil de Steam.
+        ⚠️ <strong>Privacy Alert:</strong> Your <em>"Game details"</em> are currently set to <strong>Private</strong> or <em>Friends Only</em> on Steam. The dashboard displays the global catalog, but Steam restricts reading your personal unlocked trophies until you switch Game Details to <strong>Public</strong> in your Steam Profile Privacy Settings.
       </div>
 
       <div class="ach-toolbar">
         <div class="ach-filters">
-          <button class="filter-btn active" data-filter="status" data-val="all" onclick="setFilter('status', 'all')">Todos</button>
-          <button class="filter-btn" data-filter="status" data-val="unlocked" onclick="setFilter('status', 'unlocked')">✓ Conseguidos</button>
-          <button class="filter-btn" data-filter="status" data-val="locked" onclick="setFilter('status', 'locked')">🔒 Bloqueados</button>
-          <button class="filter-btn" data-filter="status" data-val="queue" onclick="setFilter('status', 'queue')">⏳ En Cola</button>
+          <button class="filter-btn active" data-filter="status" data-val="all" onclick="setFilter('status', 'all')">All</button>
+          <button class="filter-btn" data-filter="status" data-val="unlocked" onclick="setFilter('status', 'unlocked')">✓ Unlocked</button>
+          <button class="filter-btn" data-filter="status" data-val="locked" onclick="setFilter('status', 'locked')">🔒 Locked</button>
+          <button class="filter-btn" data-filter="status" data-val="queue" onclick="setFilter('status', 'queue')">⏳ Queued</button>
           <span style="color:rgba(255,255,255,0.2);">|</span>
-          <button class="filter-btn" data-filter="rarity" data-val="mythic" onclick="setFilter('rarity', 'mythic')">🟡 Míticos (&lt;5%)</button>
-          <button class="filter-btn" data-filter="rarity" data-val="epic" onclick="setFilter('rarity', 'epic')">🟣 Épicos (5-15%)</button>
-          <button class="filter-btn" data-filter="rarity" data-val="rare" onclick="setFilter('rarity', 'rare')">🔵 Raros (15-40%)</button>
+          <button class="filter-btn" data-filter="rarity" data-val="mythic" onclick="setFilter('rarity', 'mythic')">🟡 Mythic (&lt;5%)</button>
+          <button class="filter-btn" data-filter="rarity" data-val="epic" onclick="setFilter('rarity', 'epic')">🟣 Epic (5-15%)</button>
+          <button class="filter-btn" data-filter="rarity" data-val="rare" onclick="setFilter('rarity', 'rare')">🔵 Rare (15-40%)</button>
         </div>
         
         <div style="display:flex; gap:8px; align-items:center;">
           <select id="achSortSelect" onchange="setSort(this.value)" style="padding:6px 10px; font-size:0.8rem; border-radius:8px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-            <option value="default">Orden: Predeterminado</option>
-            <option value="locked_first">Bloqueados primero</option>
-            <option value="unlocked_first">Conseguidos primero</option>
-            <option value="rarity_rare">Más raros primero</option>
-            <option value="rarity_common">Más comunes primero</option>
-            <option value="alpha">Alfabético (A-Z)</option>
+            <option value="default">Sort: Default</option>
+            <option value="unlocked_first">Unlocked first</option>
+            <option value="locked_first">Locked first</option>
+            <option value="rarity_rare">Rarest first</option>
+            <option value="rarity_common">Most common first</option>
+            <option value="alpha">Alphabetical (A-Z)</option>
           </select>
-          <input type="text" id="achSearchInput" placeholder="Buscar logro..." style="max-width:180px; padding:6px 12px; font-size:0.8rem;" oninput="onSearchInput(this.value)">
+          <input type="text" id="achSearchInput" placeholder="Search achievement..." style="max-width:180px; padding:6px 12px; font-size:0.8rem;" oninput="onSearchInput(this.value)">
         </div>
       </div>
 
       <div class="ach-batch-actions">
         <div style="display:flex; align-items:center; gap:8px;">
           <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="width:16px; height:16px; accent-color:var(--primary);">
-          <span id="selectedCountText" style="font-weight:700;">0 seleccionados</span>
+          <span id="selectedCountText" style="font-weight:700;">0 selected</span>
           <span id="estimatedTimeText" style="color:var(--gold); font-size:0.8rem; margin-left:8px;"></span>
         </div>
         <div class="ach-batch-btns">
-          <button class="btn-main" style="padding:6px 12px; font-size:0.75rem;" onclick="unlockSelected()">⚡ Desbloquear</button>
-          <button class="btn-gold" style="padding:6px 12px; font-size:0.75rem;" onclick="queueSelectedOrganic()">⏳ Encolar Orgánico</button>
-          <button class="btn-clear" style="padding:6px 12px; font-size:0.75rem;" onclick="lockSelected()">🔒 Bloquear</button>
+          <button class="btn-main" style="padding:6px 12px; font-size:0.75rem;" onclick="unlockSelected()">⚡ Unlock</button>
+          <button class="btn-gold" style="padding:6px 12px; font-size:0.75rem;" onclick="queueSelectedOrganic()">⏳ Queue Organic</button>
+          <button class="btn-clear" style="padding:6px 12px; font-size:0.75rem;" onclick="lockSelected()">🔒 Lock</button>
         </div>
       </div>
 
@@ -1086,39 +1112,39 @@ const server = http.createServer((req, res) => {
     <header>
       <div class="brand">
         <h1>Steam Hour Booster Pro</h1>
-        <p id="userLabel">Conectando cuenta...</p>
+        <p id="userLabel">Connecting account...</p>
       </div>
       <div class="header-actions">
-        <button class="btn-purple" id="cardsBtn" onclick="toggleCards()">🃏 Modo Cromos: Off</button>
-        <button class="btn-action-sm" onclick="claimFreeGames()">🎁 Reclamar Free</button>
-        <button class="btn-action-sm" id="personaBtn" onclick="togglePersona()">Modo: Invisible</button>
-        <button class="btn-action-sm" onclick="lock()">🔒 Bloquear</button>
-        <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Activo</span></div>
+        <button class="btn-purple" id="cardsBtn" onclick="toggleCards()">🃏 Card Farming: OFF</button>
+        <button class="btn-action-sm" onclick="claimFreeGames()">🎁 Claim Free</button>
+        <button class="btn-action-sm" id="personaBtn" onclick="togglePersona()">Mode: Invisible</button>
+        <button class="btn-action-sm" onclick="lock()">🔒 Lock</button>
+        <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Active</span></div>
       </div>
     </header>
 
     <div class="dashboard-panel">
       <div class="stats-row">
         <div class="stat-item">
-          <label>⏱️ Tiempo en Sesión</label>
+          <label>⏱️ Session Time</label>
           <value id="timerVal">00h 00m 00s</value>
         </div>
         <div class="stat-item">
-          <label>⚡ Horas Totales Sumadas</label>
+          <label>⚡ Total Hours Boosted</label>
           <value id="hoursVal">+0.0 hrs</value>
         </div>
         <div class="stat-item">
-          <label>🎯 Juegos en Paralelo</label>
+          <label>🎯 Parallel Games</label>
           <value id="gamesCountVal">0 / 32</value>
         </div>
         <div class="stat-item">
-          <label>🏆 Cola de Logros</label>
-          <value id="achQueueVal">0 en espera</value>
+          <label>🏆 Achievement Queue</label>
+          <value id="achQueueVal">0 queued</value>
         </div>
       </div>
       <div>
         <div class="capacity-header">
-          <span>Capacidad de Farmeo (Máximo 32 juegos)</span>
+          <span>Boosting Capacity (Maximum 32 games)</span>
           <span id="capacityPercent">0%</span>
         </div>
         <div class="progress-bar-bg">
@@ -1130,43 +1156,43 @@ const server = http.createServer((req, res) => {
     <div class="controls">
       <div class="input-row">
         <div class="search-box-wrapper">
-          <input type="text" id="searchInput" placeholder="Escribe el nombre del juego o AppID..." autocomplete="off">
+          <input type="text" id="searchInput" placeholder="Enter game title or AppID..." autocomplete="off">
           <div class="search-results" id="searchResults"></div>
         </div>
-        <button class="btn-main" onclick="addFromInput()">+ Agregar</button>
-        <button class="btn-pause" id="pauseBtn" onclick="togglePause()">Pausar</button>
-        <button class="btn-clear" onclick="clearAll()">Vaciar Todo</button>
+        <button class="btn-main" onclick="addFromInput()">+ Add</button>
+        <button class="btn-pause" id="pauseBtn" onclick="togglePause()">Pause</button>
+        <button class="btn-clear" onclick="clearAll()">Clear All</button>
       </div>
 
       <div class="presets-row" id="presetsContainer">
-        <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Cargar Preset:</span>
+        <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Load Preset:</span>
       </div>
 
       <div class="tools-grid">
         <div class="tool-box">
-          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Texto en Perfil:</span>
-          <input type="text" id="customStatusInput" placeholder="Ej: AFK 24/7">
-          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveCustomStatus()">Guardar</button>
+          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Custom Status:</span>
+          <input type="text" id="customStatusInput" placeholder="e.g. AFK 24/7">
+          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveCustomStatus()">Save</button>
         </div>
         <div class="tool-box">
           <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
           <input type="text" id="webhookInput" placeholder="https://discord.com/api/webhooks/...">
-          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveWebhook()">Probar</button>
+          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveWebhook()">Test</button>
         </div>
       </div>
 
       <div class="tools-grid">
         <div class="tool-box" style="justify-content:space-between;">
-          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">💤 Horario Sueño:</span>
+          <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">💤 Sleep Schedule:</span>
           <label style="font-size:0.8rem; display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" id="sleepEnabled"> Activo
+            <input type="checkbox" id="sleepEnabled"> Active
           </label>
-          <input type="number" id="sleepStart" placeholder="Desde (03)" style="width:70px;" min="0" max="23">
-          <input type="number" id="sleepEnd" placeholder="Hasta (08)" style="width:70px;" min="0" max="23">
-          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveSleep()">Fijar</button>
+          <input type="number" id="sleepStart" placeholder="From (03)" style="width:75px;" min="0" max="23">
+          <input type="number" id="sleepEnd" placeholder="To (08)" style="width:75px;" min="0" max="23">
+          <button class="btn-main" style="padding:8px 14px; font-size:0.8rem;" onclick="saveSleep()">Set</button>
         </div>
         <div class="tool-box" style="color:var(--text-muted); font-size:0.8rem;">
-          <span>💬 <strong>Chat Steam Activo:</strong> Escribe <code>!status</code> desde otra cuenta para control por mensaje.</span>
+          <span>💬 <strong>Steam Chat Active:</strong> Send <code>!status</code> to this bot from another account to control it via chat.</span>
         </div>
       </div>
     </div>
@@ -1207,7 +1233,7 @@ const server = http.createServer((req, res) => {
         localStorage.setItem('farmer_pin', pin);
         document.getElementById('lockModal').style.display = 'none';
         loadStatus();
-      } else { alert('PIN incorrecto.'); }
+      } else { alert('Incorrect PIN.'); }
     }
 
     function lock() {
@@ -1232,13 +1258,13 @@ const server = http.createServer((req, res) => {
         var res = await fetch('/api/status');
         var data = await res.json();
 
-        document.getElementById('userLabel').innerText = 'Cuenta: ' + data.user;
+        document.getElementById('userLabel').innerText = 'Account: ' + data.user;
         activeGamesCount = (data.isPaused || data.isCollisionPaused || data.isSleepPaused) ? 0 : data.games.length;
         sessionStart = data.sessionStartTime;
         namesCache = data.gameNames || {};
 
         document.getElementById('gamesCountVal').innerText = data.games.length + ' / 32';
-        document.getElementById('achQueueVal').innerText = data.queueCount + (data.nextAchievementIn !== null ? ' (~' + data.nextAchievementIn + 'm)' : ' en cola');
+        document.getElementById('achQueueVal').innerText = data.queueCount + (data.nextAchievementIn !== null ? ' (~' + data.nextAchievementIn + 'm remaining)' : ' queued');
         var percent = Math.round((data.games.length / 32) * 100);
         document.getElementById('capacityPercent').innerText = percent + '%';
         document.getElementById('capacityFill').style.width = percent + '%';
@@ -1251,24 +1277,24 @@ const server = http.createServer((req, res) => {
 
         if (data.isCollisionPaused) {
           badge.className = 'badge-status collision';
-          statusText.innerText = 'PC en Juego (Auto-Pausa)';
-          pauseBtn.innerText = 'Pausado';
+          statusText.innerText = 'Game Running on PC';
+          pauseBtn.innerText = 'Paused';
         } else if (data.isSleepPaused) {
           badge.className = 'badge-status sleep';
-          statusText.innerText = 'Modo Sueño (Noche)';
-          pauseBtn.innerText = 'Pausado';
+          statusText.innerText = 'Sleep Mode (Night)';
+          pauseBtn.innerText = 'Paused';
         } else if (data.isPaused) {
           badge.className = 'badge-status paused';
-          statusText.innerText = 'En Pausa';
-          pauseBtn.innerText = 'Reanudar';
+          statusText.innerText = 'On Pause';
+          pauseBtn.innerText = 'Resume';
         } else {
           badge.className = 'badge-status';
-          statusText.innerText = 'Farmeando';
-          pauseBtn.innerText = 'Pausar';
+          statusText.innerText = 'Boosting Active';
+          pauseBtn.innerText = 'Pause';
         }
 
-        personaBtn.innerText = (data.personaState === 7) ? '👻 Modo: Invisible' : '🟢 Modo: En Línea';
-        cardsBtn.innerText = data.cardFarming ? '🃏 Modo Cromos: ACTIVO' : '🃏 Modo Cromos: Off';
+        personaBtn.innerText = (data.personaState === 7) ? '👻 Mode: Invisible' : '🟢 Mode: Online';
+        cardsBtn.innerText = data.cardFarming ? '🃏 Card Farming: ACTIVE' : '🃏 Card Farming: OFF';
 
         if (data.customStatus && !document.getElementById('customStatusInput').value) document.getElementById('customStatusInput').value = data.customStatus;
         if (data.discordWebhook && !document.getElementById('webhookInput').value) document.getElementById('webhookInput').value = data.discordWebhook;
@@ -1285,7 +1311,7 @@ const server = http.createServer((req, res) => {
 
     function renderPresets(presets) {
       var container = document.getElementById('presetsContainer');
-      container.innerHTML = '<span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Cargar Preset:</span>';
+      container.innerHTML = '<span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Load Preset:</span>';
       (presets || []).forEach(function(p) {
         var chip = document.createElement('span');
         chip.className = 'chip';
@@ -1299,12 +1325,12 @@ const server = http.createServer((req, res) => {
       var grid = document.getElementById('gamesGrid');
       grid.innerHTML = '';
       if (!games.length) {
-        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No tienes juegos agregados.</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px 20px; color:var(--text-muted);">No games added yet. Add a game above or load a preset.</div>';
         return;
       }
 
       games.forEach(function(id) {
-        var title = namesCache[id] || ('Juego #' + id);
+        var title = namesCache[id] || ('Game #' + id);
         var card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = 
@@ -1315,16 +1341,15 @@ const server = http.createServer((req, res) => {
               '<div class="card-appid">AppID: ' + id + '</div>' +
             '</div>' +
             '<div class="card-btn-row">' +
-              '<button class="btn-card btn-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Logros</button>' +
-              '<button class="btn-card btn-remove" onclick="removeGame(' + id + ')">Quitar</button>' +
+              '<button class="btn-card btn-ach" onclick="openAchModal(' + id + ', \\'' + title.replace(/'/g, "\\\\'") + '\\')">🏆 Achievements</button>' +
+              '<button class="btn-card btn-remove" onclick="removeGame(' + id + ')">Remove</button>' +
             '</div>' +
           '</div>';
         grid.appendChild(card);
       });
     }
 
-    // Modal de Logros con Caché
-    async function openAchModal(appid, title) {
+    async function openAchModal(appid, title, forceRefresh) {
       currentAchAppId = appid;
       currentAchGameName = title;
       selectedApinames.clear();
@@ -1336,17 +1361,18 @@ const server = http.createServer((req, res) => {
       document.getElementById('achSortSelect').value = 'default';
       document.getElementById('achSearchInput').value = '';
       document.getElementById('achGameTitle').innerText = title;
-      document.getElementById('achProgressText').innerText = 'Consultando base de datos de Steam...';
+      document.getElementById('achProgressText').innerText = 'Loading achievements and syncing profile...';
       document.getElementById('achProgressFill').style.width = '0%';
       document.getElementById('achPrivacyWarning').style.display = 'none';
-      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Cargando catálogo completo de trofeos y sincronizando perfil...</p>';
+      document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; padding:40px; color:var(--text-muted);">Syncing achievements directly with Steam...</p>';
       document.getElementById('achModal').style.display = 'flex';
       
       updateFilterButtonsUI();
       updateBatchToolbar();
 
       try {
-        var res = await fetch('/api/achievements?appid=' + appid);
+        var fetchUrl = '/api/achievements?appid=' + appid + (forceRefresh ? '&refresh=1' : '');
+        var res = await fetch(fetchUrl);
         var data = await res.json();
         
         currentAchList = Array.isArray(data) ? data : (data.achievements || []);
@@ -1355,8 +1381,14 @@ const server = http.createServer((req, res) => {
         document.getElementById('achPrivacyWarning').style.display = isPrivate ? 'block' : 'none';
         renderAchModal();
       } catch (e) {
-        document.getElementById('achProgressText').innerText = 'Error al cargar';
-        document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Error al consultar logros en Steam.</p>';
+        document.getElementById('achProgressText').innerText = 'Error loading';
+        document.getElementById('achListContainer').innerHTML = '<p style="text-align:center; color:var(--danger);">Failed to query achievements from Steam.</p>';
+      }
+    }
+
+    function forceRefreshAchievements() {
+      if (currentAchAppId) {
+        openAchModal(currentAchAppId, currentAchGameName, true);
       }
     }
 
@@ -1401,18 +1433,18 @@ const server = http.createServer((req, res) => {
       cont.innerHTML = '';
 
       if (!currentAchList || !currentAchList.length) {
-        document.getElementById('achProgressText').innerText = '0 logros disponibles';
+        document.getElementById('achProgressText').innerText = '0 achievements found';
         document.getElementById('achProgressFill').style.width = '0%';
-        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">Este juego no posee logros públicos en Steam.</p>';
+        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">This game has no public achievements on Steam.</p>';
         return;
       }
 
       var totalUnlocked = currentAchList.filter(x => x.unlocked).length;
       var pctTotal = Math.round((totalUnlocked / currentAchList.length) * 100);
-      document.getElementById('achProgressText').innerText = totalUnlocked + ' de ' + currentAchList.length + ' conseguidos (' + pctTotal + '%)';
+      document.getElementById('achProgressText').innerText = totalUnlocked + ' of ' + currentAchList.length + ' unlocked (' + pctTotal + '%)';
       document.getElementById('achProgressFill').style.width = pctTotal + '%';
 
-      // 1. Filtrado reactivo en memoria
+      // 1. Reactive memory filtering
       var filteredList = currentAchList.filter(function(a) {
         var matchesSearch = !searchQuery || a.name.toLowerCase().includes(searchQuery) || (a.description && a.description.toLowerCase().includes(searchQuery));
         
@@ -1430,7 +1462,7 @@ const server = http.createServer((req, res) => {
         return matchesSearch && matchesStatus && matchesRarity;
       });
 
-      // 2. Ordenamiento en memoria
+      // 2. In-memory sorting
       if (currentSort === 'locked_first') {
         filteredList.sort((a, b) => (a.unlocked === b.unlocked ? 0 : a.unlocked ? 1 : -1));
       } else if (currentSort === 'unlocked_first') {
@@ -1444,12 +1476,12 @@ const server = http.createServer((req, res) => {
       }
 
       if (!filteredList.length) {
-        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No hay logros que coincidan con los filtros seleccionados.</p>';
+        cont.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">No achievements match the selected filters.</p>';
         updateBatchToolbar();
         return;
       }
 
-      // 3. Renderizado limpio
+      // 3. Render items
       filteredList.forEach(function(a) {
         var pctNum = parseFloat(a.percent) || 0;
         var rarityClass = 'gray';
@@ -1458,12 +1490,11 @@ const server = http.createServer((req, res) => {
         else if (pctNum < 40.0) rarityClass = 'blue';
 
         var statusClass = a.unlocked ? 'unlocked-item' : 'locked-item';
-
         var div = document.createElement('div');
         div.className = 'ach-item ' + rarityClass + ' ' + statusClass + (selectedApinames.has(a.apiname) ? ' selected' : '');
         div.setAttribute('data-apiname', a.apiname);
         
-        var dateLabel = a.unlockDate ? '<small style="color:var(--success); font-size:0.75rem; display:block; margin-top:2px;">Conseguido: ' + a.unlockDate + '</small>' : '';
+        var dateLabel = a.unlockDate ? '<small style="color:var(--success); font-size:0.75rem; display:block; margin-top:2px;">Unlocked: ' + a.unlockDate + '</small>' : '';
 
         div.innerHTML = 
           '<input type="checkbox" class="ach-checkbox" ' + (selectedApinames.has(a.apiname) ? 'checked' : '') + ' onclick="event.stopPropagation(); toggleSelectSingle(\\'' + a.apiname.replace(/'/g, "\\\\'") + '\\', this.checked)">' +
@@ -1475,10 +1506,10 @@ const server = http.createServer((req, res) => {
           '</div>' +
           '<div>' +
             (a.unlocked 
-              ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Conseguido</span>' 
+              ? '<span style="color:var(--success); font-weight:700; font-size:0.8rem;">✓ Unlocked</span>' 
               : (a.inQueue 
-                  ? '<span style="color:var(--warning); font-weight:700; font-size:0.8rem;">⏳ En Cola</span>' 
-                  : '<span style="color:var(--text-muted); font-size:0.8rem;">🔒 Bloqueado</span>')) +
+                  ? '<span style="color:var(--warning); font-weight:700; font-size:0.8rem;">⏳ Queued</span>' 
+                  : '<span style="color:var(--text-muted); font-size:0.8rem;">🔒 Locked</span>')) +
           '</div>';
 
         div.onclick = function() {
@@ -1526,21 +1557,21 @@ const server = http.createServer((req, res) => {
 
     function updateBatchToolbar() {
       var count = selectedApinames.size;
-      document.getElementById('selectedCountText').innerText = count + ' seleccionados';
+      document.getElementById('selectedCountText').innerText = count + ' selected';
       document.getElementById('selectAllCheckbox').checked = count > 0 && count === currentAchList.length;
 
       var estText = document.getElementById('estimatedTimeText');
       if (count > 0) {
         var minHours = ((count * 45) / 60).toFixed(1);
         var maxHours = ((count * 85) / 60).toFixed(1);
-        estText.innerText = '⏱️ Cadencia Orgánica: ~' + minHours + 'h a ' + maxHours + 'h';
+        estText.innerText = '⏱️ Organic Cadence: ~' + minHours + 'h to ' + maxHours + 'h';
       } else {
         estText.innerText = '';
       }
     }
 
     async function unlockSelected() {
-      if (!selectedApinames.size) return alert('Selecciona al menos un logro marcando las casillas.');
+      if (!selectedApinames.size) return alert('Select at least one achievement first by checking the boxes.');
       var items = currentAchList.filter(x => selectedApinames.has(x.apiname));
       await reqAction('/api/unlock-batch', {
         appid: currentAchAppId,
@@ -1554,8 +1585,8 @@ const server = http.createServer((req, res) => {
     }
 
     async function lockSelected() {
-      if (!selectedApinames.size) return alert('Selecciona al menos un logro primero.');
-      if (!confirm('¿Deseas volver a bloquear los ' + selectedApinames.size + ' logros seleccionados?')) return;
+      if (!selectedApinames.size) return alert('Select at least one achievement first.');
+      if (!confirm('Are you sure you want to re-lock the ' + selectedApinames.size + ' selected achievements on the dashboard?')) return;
       var apinames = Array.from(selectedApinames);
       await reqAction('/api/lock-batch', {
         appid: currentAchAppId,
@@ -1570,16 +1601,16 @@ const server = http.createServer((req, res) => {
     }
 
     async function queueSelectedOrganic() {
-      if (!selectedApinames.size) return alert('Selecciona los logros que deseas encolar.');
+      if (!selectedApinames.size) return alert('Select the achievements you want to queue.');
       var items = currentAchList.filter(x => selectedApinames.has(x.apiname) && !x.unlocked && !x.inQueue);
-      if (!items.length) return alert('Los logros seleccionados ya están conseguidos o en cola.');
+      if (!items.length) return alert('All selected achievements are already unlocked or queued.');
       
       await reqAction('/api/queue-achievements', {
         appid: currentAchAppId,
         gameName: currentAchGameName,
         items: items
       });
-      alert('⚡ ' + items.length + ' logros programados. Se registrarán progresivamente cada 45-85 minutos.');
+      alert('⚡ ' + items.length + ' achievements scheduled. They will be unlocked organically every 45-85 minutes.');
       items.forEach(it => it.inQueue = true);
       selectedApinames.clear();
       renderAchModal();
@@ -1624,7 +1655,7 @@ const server = http.createServer((req, res) => {
       body.pin = savedPin;
       var res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       var data = await res.json();
-      if (res.status === 401) { alert('PIN incorrecto o sesión caducada.'); lock(); return null; }
+      if (res.status === 401) { alert('Incorrect PIN or session expired.'); lock(); return null; }
       return data;
     }
 
@@ -1635,12 +1666,12 @@ const server = http.createServer((req, res) => {
     }
 
     async function removeGame(appid) { await reqAction('/api/remove', { appid: Number(appid) }); loadStatus(); }
-    async function clearAll() { if (confirm('¿Vaciar toda la lista?')) { await reqAction('/api/clear-all'); loadStatus(); } }
+    async function clearAll() { if (confirm('Are you sure you want to clear the entire list?')) { await reqAction('/api/clear-all'); loadStatus(); } }
     async function applyPreset(presetKey) { await reqAction('/api/apply-preset', { presetKey: presetKey }); loadStatus(); }
     async function togglePause() { await reqAction('/api/toggle'); loadStatus(); }
     async function togglePersona() { await reqAction('/api/persona'); loadStatus(); }
     async function toggleCards() { await reqAction('/api/toggle-cards'); loadStatus(); }
-    async function claimFreeGames() { var res = await reqAction('/api/claim-free'); if (res) alert('Licencias gratuitas solicitadas.'); }
+    async function claimFreeGames() { var res = await reqAction('/api/claim-free'); if (res) alert('Free licenses requested from Steam.'); }
 
     async function saveSleep() {
       await reqAction('/api/set-sleep', {
@@ -1648,21 +1679,21 @@ const server = http.createServer((req, res) => {
         start: document.getElementById('sleepStart').value,
         end: document.getElementById('sleepEnd').value
       });
-      alert('Horario de descanso guardado.');
+      alert('Sleep schedule saved.');
       loadStatus();
     }
 
     async function saveCustomStatus() {
       await reqAction('/api/custom-status', { status: document.getElementById('customStatusInput').value });
-      alert('Texto en Steam guardado.');
+      alert('Custom status updated on Steam.');
       loadStatus();
     }
 
     async function saveWebhook() {
       var webhook = document.getElementById('webhookInput').value.trim();
       var res = await reqAction('/api/set-webhook', { webhook: webhook });
-      if (res && res.success) alert('✅ Webhook vinculado exitosamente.');
-      else alert('❌ Error al enviar mensaje: ' + (res ? res.error : 'Desconocido'));
+      if (res && res.success) alert('✅ Webhook linked successfully! Check your Discord channel.');
+      else alert('❌ Error sending message: ' + (res ? res.error : 'Unknown'));
       loadStatus();
     }
 
@@ -1673,4 +1704,4 @@ const server = http.createServer((req, res) => {
 </html>`);
 });
 
-server.listen(PORT, () => console.log('[Web] Servidor Enterprise listo en puerto ' + PORT));
+server.listen(PORT, () => console.log('[Web] Enterprise Server running on port ' + PORT));
