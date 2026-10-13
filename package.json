@@ -1,10 +1,7 @@
 {
-  "name": "steam-farmer",
-  "version": "1.0.0",
-  "scripts": {
-    "start": "node bot.js"
-  },
-  "dependencies": {
-    "steam-user": "^5.0.0"
-  }
+  "name": "steam-farmer", "version": "2.0.0", "private": true,
+  "description": "Panel personal para gestionar sesiones Steam y verificar logros reales",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node bot.js", "test": "node --test", "check": "node --check bot.js && node --check public/app.js" },
+  "dependencies": { "steam-user": "^5.0.0", "steam-session": "^1.9.0", "cheerio": "^1.1.0", "fast-xml-parser": "^5.0.0" }
 }
