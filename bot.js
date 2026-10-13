@@ -43,13 +43,17 @@ const PRESETS = {
   }
 };
 
-// Webhook con formato PNG e informe de estado
+// Webhook con bypass automático de proxy para Cloudflare Error 1015 en Render
 function sendDiscordWebhook(title, description, color, cb) {
-  if (!cfg.discordWebhook || !cfg.discordWebhook.startsWith('https://discord.com/api/webhooks/')) {
-    if (cb) cb({ success: false, error: 'URL de Webhook inválida. Debe comenzar por https://discord.com/api/webhooks/' });
+  if (!cfg.discordWebhook || !cfg.discordWebhook.includes('/api/webhooks/')) {
+    if (cb) cb({ success: false, error: 'URL de Webhook inválida.' });
     return;
   }
   try {
+    let targetUrl = cfg.discordWebhook
+      .replace('https://discord.com', 'https://webhook.lewisakura.moe')
+      .replace('https://discordapp.com', 'https://webhook.lewisakura.moe');
+
     const payload = JSON.stringify({
       username: 'Steam Booster Enterprise',
       avatar_url: 'https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png',
@@ -61,13 +65,14 @@ function sendDiscordWebhook(title, description, color, cb) {
         timestamp: new Date().toISOString()
       }]
     });
-    const parsed = new URL(cfg.discordWebhook);
+
+    const parsed = new URL(targetUrl);
     const req = https.request(parsed, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        'User-Agent': 'SteamBoosterBot/1.0'
       }
     }, (res) => {
       let resBody = '';
@@ -80,9 +85,11 @@ function sendDiscordWebhook(title, description, color, cb) {
         }
       });
     });
+
     req.on('error', (err) => {
       if (cb) cb({ success: false, error: err.message });
     });
+
     req.write(payload);
     req.end();
   } catch (err) {
@@ -101,7 +108,7 @@ client.on('loggedOn', () => {
   client.setPersona(cfg.personaState);
   resolverNombresFaltantes();
   actualizarFarmeo();
-  sendDiscordWebhook('🟢 Bot Iniciado', 'Farmeando ' + cfg.games.length + ' juegos en la nube.', 1095985);
+  sendDiscordWebhook('🟢 Bot Conectado', 'Farmeando ' + cfg.games.length + ' juegos en la nube.', 1095985);
 });
 
 client.on('webSession', (sessionID, cookies) => {
@@ -127,7 +134,7 @@ client.on('playingElsewhere', () => {
   }, 10 * 60 * 1000);
 });
 
-// Comandos por Chat
+// Comandos por Chat de Steam
 client.on('friendMessage', (steamID, message) => {
   const msg = message.trim().toLowerCase();
   const args = msg.split(' ');
@@ -978,7 +985,7 @@ const server = http.createServer((req, res) => {
     }
 
     checkAuth();
-    setInterval(loadStatus, 3000); // Actualización rápida cada 3 segundos
+    setInterval(loadStatus, 3000);
   </script>
 </body>
 </html>`);
