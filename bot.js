@@ -180,12 +180,12 @@ function createApp(options = {}) {
       }, Math.min(300000, 5000 * 2 ** Math.min(st.retryCount++, 6)));
     }
     client.on('error', offline); client.on('disconnected', () => offline());
-    client.on('friendMessage', (steamid, message) => {
+    client.on('friendMessage', async (steamid, message) => {
       if (!isCurrent() || !(acc.chatAdmins || []).includes(steamid.toString())) return;
       const command = message.trim().toLowerCase();
       if (command === '!pause') st.isPaused = true;
       if (command === '!resume') st.isPaused = false;
-      if (command === '!pause' || command === '!resume') {acc.paused=st.isPaused;try{save();}catch{disconnect(acc.id);return;}farming(acc);}
+      if (command === '!pause' || command === '!resume') {acc.paused=st.isPaused;try{save();if(persistence)await persistence.flush();}catch{disconnect(acc.id);return;}farming(acc);}
       if (['!pause', '!resume', '!status', '!help'].includes(command)) {
         try { client.chatMessage(steamid, `SteamFarmer: ${st.connected ? 'connected' : 'disconnected'}, ${st.isFarming ? 'activity sent' : 'paused'}. Commands: !status !pause !resume`); } catch {}
       }
@@ -561,15 +561,16 @@ async function createPersistentApp(options={}){
   const url=process.env.APP_DATABASE_URL||'';
   if(!url && !options.persistence)return createApp(options);
   const persistence=options.persistence || new AppState({url,key:process.env.APP_STATE_KEY});
+  let app;
   try{
     const restored=await persistence.load();
-    const app=createApp({...options,connect:false,persistence,config:restored?.config,restoredTokens:restored?.tokens});
+    app=createApp({...options,connect:false,persistence,config:restored?.config||options.config,restoredTokens:restored?.tokens});
     await persistence.flush();await app.journal.ready();
     if(!options.silent)console.log('[Application memory] '+JSON.stringify({...persistence.status(),accounts:app.cfg.accounts.length,checkpoint:app.cfg.persistenceCheckpoint||null}));
     // Keep the synchronous factory used by tests; bootstrap restores before connecting.
     const close=app.close;app.close=async()=>{try{await close();}finally{await persistence.close();}};
     if(options.connect!==false)app.startConnections();
     return app;
-  }catch(err){await persistence.close().catch(()=>{});throw err;}
+  }catch(err){await app?.close().catch(()=>{});await persistence.close().catch(()=>{});throw err;}
 }
 module.exports = { createApp,createPersistentApp };
