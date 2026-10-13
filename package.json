@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node bot.js",
     "test": "node --test",
-    "check": "node --check bot.js && node --check public/app.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js"
+    "check": "node --check bot.js && node --check public/app.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js && node --check lib/achievement-experiment.js"
   },
   "dependencies": {
     "binarykvparser": "^2.3.0",

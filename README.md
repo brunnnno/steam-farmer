@@ -1,6 +1,6 @@
 # SteamFarmer
 
-Personal web dashboard for Steam sessions, game activity, card farming and reading actual achievement states. All panel options are in English. Achievement writing and simulated unlocks are unavailable.
+Personal web dashboard for Steam sessions, game activity, card farming and reading actual achievement states. All panel options are in English. General achievement writing is unavailable. A single explicitly requested Model Mania experiment is available for the main account after direct verification.
 
 ## Render deployment
 
@@ -26,7 +26,7 @@ Render Free has an ephemeral filesystem. Environment variables survive deploymen
 
 ## Achievements
 
-The standard reader uses Steam Community XML/HTML and optional Steam API data, with global catalogs as fallbacks. **Verify directly** reads schema and personal states through the authenticated Steam client protocol without SAM. Direct verification currently does not supply global rarity percentages; standard verification remains available by reopening the game. Personal states are marked verified only when Steam returns them. Unknown state is displayed as **Not verified**, never treated as locked or locally unlocked. Refresh requests bypass the result cache and retain the selected reading method. Direct verification does not change achievements. See [protocol research](docs/achievement-research.md) for the investigated writing route and its limits. Private profiles or games without readable stats can prevent verification.
+The standard reader uses Steam Community XML/HTML and optional Steam API data, with global catalogs as fallbacks. **Verify directly** reads schema and personal states through the authenticated Steam client protocol without SAM. Direct verification currently does not supply global rarity percentages; standard verification remains available by reopening the game. Personal states are marked verified only when Steam returns them. Unknown state is displayed as **Not verified**, never treated as locked or locally unlocked. Refresh requests bypass the result cache and retain the selected reading method. Direct verification does not change achievements. For Resident Evil Requiem (AppID 3764200), a separate experimental button can request only Model Mania (View all models) on the environment-managed main account. It identifies the real API name from a fresh schema, refuses unknown permissions or progress dependencies, submits at most one write, and re-reads Steam. It records evidence before sending and never retries automatically. This is experimental and has not been validated on a live account; no startup, GET request, UptimeRobot ping or deployment activates an achievement. An already unlocked achievement never submits a write. All other writes and bulk actions remain unavailable. See [protocol research](docs/achievement-research.md) for the investigated writing route and its limits. Private profiles or games without readable stats can prevent verification.
 
 Results are shared between simultaneous requests for the same account/game/session. Cache retention is limited to 64 entries, 4 MiB of serialized payloads and 60 seconds; this is not a limit on total process RAM. Static assets use conditional HTTP caching. Dashboard polling runs every 10 seconds while visible and resumes immediately when returning to the tab.
 
