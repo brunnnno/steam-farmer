@@ -4,6 +4,7 @@ function ui(t, responder) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-rarity.js'),'utf8'));
   w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-availability.js'),'utf8'));
   w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},lock:showLock,open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory};`);
   w.testUI.select('a');return w;
@@ -144,9 +145,9 @@ test('missing global percentages explain empty rarity results without inventing 
 });
 test('stale percentage lookup never populates a different game after using rarity filters',async t=>{
   let resolveLookup;const lookup=new Promise(resolve=>{resolveLookup=resolve;});
-  const w=ui(t,url=>url.includes('/percentages?')?lookup:response([{apiname:'SAME',name:url.includes('appid=440')?'Old game':'New game',unlocked:false,percent:null}]));
+  const w=ui(t,url=>url.includes('/percentages?')?(url.includes('appid=440')?lookup:{percentages:{SAME:10}}):response([{apiname:'SAME',name:url.includes('appid=440')?'Old game':'New game',unlocked:false,percent:null}]));
   await w.testUI.open(440,'Old',false,'protocol');w.document.querySelector('[data-val="rare"]').click();await w.testUI.open(550,'New',false,'protocol');
-  resolveLookup({percentages:{SAME:20}});await new Promise(r=>setImmediate(r));assert.match(w.document.getElementById('achListContainer').textContent,/New game/);assert.match(w.document.getElementById('achListContainer').textContent,/Unknown rarity/);
+  resolveLookup({percentages:{SAME:20}});await new Promise(r=>setImmediate(r));assert.match(w.document.getElementById('achListContainer').textContent,/New game/);assert.match(w.document.getElementById('achListContainer').textContent,/Epic · 10.0%/);assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/20.0%/);
 });
 test('shared update displays every effect and cancellation never sends a write',async t=>{
   const calls=[],row={name:'Doctor',apiname:'DOCTOR',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewShared:true}};
@@ -345,4 +346,17 @@ test('confirmed panel activation has an explicit removal review; unrecorded unlo
 });
 test('disconnected or additional accounts do not expose an enabled verification shortcut',async t=>{
   for(const profile of [{tokenSource:'environment',connected:false},{tokenSource:'saved',connected:true}]){const w=ui(t,()=>({...response([{name:'A',unlocked:false}]),readingMethod:'web'}));w.testUI.activate(profile);await w.testUI.open(550,'Game',false,'web');const button=w.document.getElementById('verifyAchievementChanges');assert.ok(button.hidden||button.disabled);assert.match(w.document.getElementById('achievementSelectionHint').textContent,/main account/);}
+});
+
+test('direct readings automatically load global rarity without clicking a filter and preserve selection',async t=>{
+  let release;const lookup=new Promise(r=>release=r),calls=[],w=ui(t,url=>{calls.push(url);return url.includes('/percentages?')?lookup:response([{name:'Epic',apiname:'A',unlocked:false,compatibility:{status:'provisional',canUnlock:true}},{name:'Mythic',apiname:'B',unlocked:true}]);});w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(240,'Game',false,'protocol');await new Promise(r=>setImmediate(r));assert.equal(calls.filter(u=>u.includes('/percentages?')).length,1,w.document.getElementById('achListContainer').textContent);const check=w.document.querySelector('.ach-select');check.checked=true;check.dispatchEvent(new w.Event('change'));release({percentages:{A:10,B:2}});await new Promise(r=>setImmediate(r));assert.match(w.document.getElementById('achListContainer').textContent,/Epic · 10.0%/);assert.equal(w.document.querySelector('.ach-select').checked,true);assert.equal(w.document.querySelectorAll('.verified').length,1);assert.ok(!calls.some(u=>u.includes('/change')));
+});
+test('uniform 100% is unverified, never all common; explicit retry recovers Mythic and Epic',async t=>{
+  let retries=0;const calls=[],w=ui(t,url=>{calls.push(url);if(url.includes('/percentages?'))return url.includes('refresh=1')?(retries++,{percentages:{A:2,B:10}}):{percentages:{A:100,B:100},rarityStatus:'suspect_uniform_100',rarityMessage:'Steam returned 100% for every achievement. Rarity cannot be verified.'};return response([{name:'One',apiname:'A',unlocked:true,percent:100,tier:'Common'},{name:'Two',apiname:'B',unlocked:false,percent:100,tier:'Common'}]);});await w.testUI.open(550,'L4D2',false,'protocol');await new Promise(r=>setImmediate(r));assert.doesNotMatch(w.document.getElementById('achListContainer').textContent,/Common|100.0%/);assert.match(w.document.getElementById('achRarityMessage').textContent,/100%/);w.document.getElementById('retryAchievementRarity').click();await new Promise(r=>setImmediate(r));assert.equal(retries,1);w.testUI.filter('rarity','mythic');assert.equal(w.document.querySelector('.ach-title').textContent,'One');w.testUI.filter('rarity','epic');assert.equal(w.document.querySelector('.ach-title').textContent,'Two');assert.equal(calls.filter(u=>u.includes('/api/achievements?')).length,1);
+});
+test('percentage formatting rejects coercible or out-of-range data and derives its tier',async t=>{
+  const w=ui(t,()=>response([{name:'Bad boolean',percent:true,unlocked:false},{name:'Bad negative',percent:-1,unlocked:false},{name:'Bad high',percent:101,unlocked:false},{name:'Bad blank',percent:' ',unlocked:false},{name:'Epic',percent:'10',tier:'Common',unlocked:false}]));await w.testUI.open(240,'Game',false,'web');assert.equal([...w.document.querySelectorAll('.ach-info small')].filter(e=>e.textContent==='Unknown rarity').length,4);assert.match(w.document.getElementById('achListContainer').textContent,/Epic · 10.0%/);
+});
+test('status sorts keep unknown personal states last and preserve order within each state',async t=>{
+  const w=ui(t,()=>response([{name:'Locked 1',unlocked:false,percent:10},{name:'Unknown',unlocked:null,percent:20},{name:'Unlocked 1',unlocked:true,percent:30},{name:'Unlocked 2',unlocked:true,percent:40},{name:'Locked 2',unlocked:false,percent:50}]));await w.testUI.open(240,'Game',false,'web');const sort=w.document.getElementById('achSortSelect');sort.value='unlocked_first';sort.dispatchEvent(new w.Event('change'));assert.deepEqual([...w.document.querySelectorAll('.ach-title')].map(e=>e.textContent),['Unlocked 1','Unlocked 2','Locked 1','Locked 2','Unknown']);sort.value='locked_first';sort.dispatchEvent(new w.Event('change'));assert.deepEqual([...w.document.querySelectorAll('.ach-title')].map(e=>e.textContent),['Locked 1','Locked 2','Unlocked 1','Unlocked 2','Unknown']);
 });

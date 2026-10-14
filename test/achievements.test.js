@@ -79,3 +79,13 @@ test('stats view parameters and cookies are not carried to another origin',async
   const seen=[];const fetcher=async(url,options)=>{seen.push({url:url.href,cookie:options.headers.Cookie});if(seen.length===1)return new Response('',{status:302,headers:{Location:'https://store.steampowered.com/stats/550/'}});return new Response('ok',{status:200});};
   await remote('https://steamcommunity.com/profiles/76561198000000001/stats/550/?tab=achievements&xml=1&l=english',{cookie:'session=private'},fetcher);assert.equal(new URL(seen[1].url).search,'');assert.equal(seen[1].cookie,undefined);
 });
+
+test('standard readings reject uniform 100% rarity while preserving exact personal states',async()=>{
+  const html='<div class="achieveRow"><h3>One</h3><div class="achievePercent">100%</div></div><div class="achieveRow"><h3>Two</h3><div class="achievePercent">100%</div></div>';
+  const request=async url=>{if(url.includes('GetGlobal'))return {body:'{"achievementpercentages":{"achievements":[{"name":"A","percent":100},{"name":"B","percent":100}]}}',finalUrl:url};if(url.includes('xml=1'))return {body:'<playerstats><achievements><achievement closed="1"><apiname>A</apiname><name>One</name></achievement><achievement closed="0"><apiname>B</apiname><name>Two</name></achievement></achievements></playerstats>',finalUrl:url};if(url.includes('steamcommunity'))return {body:html,finalUrl:url};throw Error('unavailable');};
+  const result=await achievements({}, {steamId64:sid},550,'',request);assert.equal(result.verified,true);assert.deepEqual(result.achievements.map(a=>a.unlocked),[true,false]);assert.deepEqual(result.achievements.map(a=>a.percent),[null,null]);assert.equal(result.rarityStatus,'suspect_uniform_100');
+});
+test('standard readers do not arbitrarily match duplicate global titles or invalid percentages',async()=>{
+  const html='<div class="achieveRow"><h3>Same</h3><div class="achievePercent">10%</div></div><div class="achieveRow"><h3>Same</h3><div class="achievePercent">20%</div></div>';
+  const result=await achievements({}, {steamId64:sid},240,'',async url=>{if(url.includes('xml=1'))return {body:'<playerstats><achievements><achievement closed="1"><name>Same</name></achievement></achievements></playerstats>',finalUrl:url};if(url.includes('GetGlobal'))return {body:'{"achievementpercentages":{"achievements":[{"name":"INVALID","percent":-5}]}}',finalUrl:url};if(url.includes('/stats/240/achievements/'))return {body:html,finalUrl:url};throw Error('unavailable');});assert.equal(result.achievements[0].percent,null);assert.equal(result.achievements[0].unlocked,true);
+});
