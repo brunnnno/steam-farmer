@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events');
 const Schema = require('steam-user/protobufs/generated/_load.js');
 const EMsg = require('steam-user/enums/EMsg');
-const {readProtocol, parseSnapshot} = require('../lib/steam-protocol');
+const {readProtocol, parseSnapshot,readLibrarySummary} = require('../lib/steam-protocol');
 // Minimal real-format binary KeyValues fixture, including a bit at the signed-int boundary.
 function kv(obj) {
   const pieces=[];
@@ -45,6 +45,19 @@ test('wrong-game, rejected and malformed protocol responses cannot verify achiev
   assert.throws(()=>parseSnapshot(snap({schema:Buffer.from([0])}),550));
 });
 function client(respond) { const c=new EventEmitter();c.steamID={toString:()=> '76561198000000001'};c._currentJobID=0;c._jobs=new Map();c._send=(header,body,cb)=>{const job=String(++c._currentJobID);c._jobs.set(job,cb);respond?.(header,body,cb);};return c; }
+test('library corroboration is read-only, validates identity/game/count and cleans timeouts',async()=>{
+  const c=client(),row={appid:550,unlocked:1,total:2,cache_time:123};
+  c._sendUnified=(method,input,cb)=>{assert.equal(method,'Player.GetAchievementsProgress#1');assert.deepEqual(input.appids,[550]);assert.equal(input.steamid,c.steamID.toString());cb({achievement_progress:[row]},{proto:{eresult:1}});};
+  assert.deepEqual(await readLibrarySummary(c,550),{unlocked:1,total:2,cacheTime:123});
+  for(const bad of [{...row,appid:440},{...row,unlocked:3},{...row,total:undefined},{...row,total:9000}]){c._sendUnified=(_,__,cb)=>cb({achievement_progress:[bad]},{proto:{eresult:1}});assert.equal(await readLibrarySummary(c,550),null);}
+  c._sendUnified=()=>{};assert.equal(await readLibrarySummary(c,550,{timeoutMs:5}),null);assert.equal(c.listenerCount('error'),0);assert.equal(c.listenerCount('disconnected'),0);
+});
+test('a library/statistics disagreement exposes unknown state and prevents write eligibility',()=>{
+  const r=parseSnapshot(snap({librarySummary:{unlocked:2,total:2,cacheTime:123}}),550);
+  assert.equal(r.stateConflict,true);assert.equal(r.verified,false);assert.match(r.message,/statistics report 1\/2/);
+  assert.ok(r.achievements.every(a=>a.unlocked===null&&!a.removalSupport.canRemove&&!a.compatibility.canUnlock));
+  assert.equal(r.achievements[0].stateEvidence.bitUnlocked,false);
+});
 test('direct transport sends only read message and cleans callbacks after completion',async()=>{
   const c=client((header,body,cb)=>{assert.equal(header.msg,EMsg.ClientGetUserStats);const req=Schema.CMsgClientGetUserStats.decode(body);assert.equal(req.game_id.toString(),'550');assert.equal(req.steam_id_for_user.toString(),c.steamID.toString());queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode(snap()).finish()),{msg:EMsg.ClientGetUserStatsResponse}));});
   const r=await readProtocol(c,550);assert.equal(r.verified,true);assert.equal(c._jobs.size,0);assert.equal(c.listenerCount('disconnected'),0);

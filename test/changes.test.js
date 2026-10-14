@@ -9,8 +9,14 @@ function snapshot({bits={0:{name:'A'},1:{name:'B'},2:{name:'OTHER'}},mask=4,valu
 }
 const choose=(...names)=>names.map(apiname=>({apiname,action:'unlock'})),remove=(...names)=>names.map(apiname=>({apiname,action:'remove'}));
 const evidence=(apiname,bitIndex,change)=>({appid:550,apiname,statId:7,bitIndex,before:false,after:true,outcome:'confirmed',checkedAt:'2026-10-13T12:00:00Z',...(change?{progressChanges:[{statId:9,statName:'COUNT',type:'INT',...change}]}:{})});
-const final=(s,plan)=>({...s,crc_stats:13,stats:[...plan.expectedValues].map(([stat_id,stat_value])=>({stat_id,stat_value}))});
+const final=(s,plan)=>({...s,crc_stats:13,stats:[...plan.expectedValues].map(([stat_id,stat_value])=>({stat_id,stat_value})),librarySummary:{total:plan.view.achievements.length,unlocked:plan.view.achievements.filter(r=>{const effect=plan.effects.find(e=>e.apiname===r.apiname);return effect?effect.after:r.unlocked;}).length,cacheTime:Math.floor(Date.now()/1000)}});
 const ack={result:1,gameId:'550',stale:false,rejectedStats:[]};
+test('a cleared bit cannot confirm removal with missing, older or conflicting Steam library evidence',()=>{
+  const s=snapshot({mask:7}),p=prepareChanges(s,550,remove('A')),good=final(s,p);
+  for(const librarySummary of [null,{...good.librarySummary,cacheTime:1},{...good.librarySummary,unlocked:3},{...good.librarySummary,total:4}])assert.equal(verifyChanges(s,{...good,librarySummary},p,ack).confirmed,false);
+  assert.equal(verifyChanges(s,good,p,ack).confirmed,true);
+  assert.throws(()=>prepareChanges({...s,librarySummary:{total:3,unlocked:2,cacheTime:1}},550,remove('A')),/complete/);
+});
 test('multiple selected bits combine into one mask while preserving every unrelated bit/statistic',()=>{
   const s=snapshot(),plan=prepareChanges(s,550,choose('B','A'));assert.deepEqual(plan.selection,choose('A','B'));assert.deepEqual(plan.payload.stats,[{stat_id:7,stat_value:7}]);assert.equal(s.stats[0].stat_value,4);assert.equal(verifyChanges(s,final(s,plan),plan,ack).confirmed,true);
   const edge=snapshot({bits:{0:{name:'A'},31:{name:'HIGH'}},mask:1});const p=prepareChanges(edge,550,choose('HIGH'));assert.equal(p.payload.stats[0].stat_value,0x80000001);

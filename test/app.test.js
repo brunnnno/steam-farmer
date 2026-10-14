@@ -20,6 +20,9 @@ test('real-format unrecorded unlocked bits expose removal and preview without re
   const read=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(read.data.achievements.every(a=>a.batchSupport.canRemove),true);assert.equal(read.data.achievements.some(a=>a.panelOperationAt),false);
   const preview=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,selection:[{apiname:'NATURAL',action:'remove'},{apiname:'NATURAL_BIT',action:'remove'}]});assert.equal(preview.response.status,200);assert.equal(preview.data.canActivate,true);assert.equal(preview.data.effects.length,2);assert.deepEqual(preview.data.progressChanges,[]);assert.match(preview.data.effects.find(e=>e.apiname==='NATURAL').warning,/unchanged/);
   receipts.set('NATURAL',{outcome:'unknown'});const blocked=await f.request('/api/achievements?accountId=main&appid=550&method=protocol&refresh=1');assert.equal(blocked.data.achievements[0].batchSupport.canRemove,false);assert.match(blocked.data.achievements[0].batchSupport.removalReason,/previous attempt/);
+  snapshot.librarySummary={total:2,unlocked:1,cacheTime:123};
+  const conflict=await f.request('/api/achievements?accountId=main&appid=550&method=auto&refresh=1');assert.equal(conflict.data.readingMethod,'protocol');assert.equal(conflict.data.stateConflict,true);assert.ok(conflict.data.achievements.every(a=>a.unlocked===null&&!a.batchSupport.canRemove));
+  const conflictPreview=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,selection:[{apiname:'NATURAL_BIT',action:'remove'}]});assert.equal(conflictPreview.response.status,409);
 });
 
 test('a successful Steam login cancels stale reconnect work; rejected credentials cancel any earlier transient retry',async t=>{

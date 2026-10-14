@@ -1,6 +1,6 @@
 {
   "name": "steam-farmer",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "private": true,
   "description": "Personal Steam session dashboard with verified achievement reading",
   "engines": {

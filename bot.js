@@ -443,7 +443,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             })
             :Promise.resolve({receipts:new Map()});
           const task = Promise.resolve().then(async () => {
-            if(requestedMethod==='auto'&&st.connected&&readClient){try{const result=await protocolRead(readClient,id,{timeoutMs:2500});if(result.verified){method='protocol';return result;}}catch{}method='web';}
+            if(requestedMethod==='auto'&&st.connected&&readClient){try{const result=await protocolRead(readClient,id,{timeoutMs:2500});if(result.verified||result.stateConflict){method='protocol';return result;}}catch{}method='web';}
             else if(requestedMethod==='auto')method='web';
             return method==='protocol'?protocolRead(readClient,id):steamRead(acc,st,id,process.env.STEAM_API_KEY||'');
           }).then(async result => {
@@ -467,6 +467,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             result.readDurationMs=Date.now()-readStarted;
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} durationMs=${result.readDurationMs} webSession=${Boolean(st.webCookies)}`);
             if(result.diagnostics?.retainedUnlockDateCount)console.log('[Achievement state evidence]',JSON.stringify({appid:id,count:result.diagnostics.retainedUnlockDateCount,rows:result.diagnostics.retainedUnlockDates}));
+            if(result.diagnostics?.librarySummary)console.log('[Achievement library summary]',JSON.stringify({appid:id,statistics:result.diagnostics.statsUnlocked,summary:result.diagnostics.librarySummary,conflict:result.stateConflict}));
             if (result.outcome === 'catalog' && st.connected && Date.now() - st.lastWebRefresh > 120000) { st.lastWebRefresh = Date.now(); try { clients.get(acc.id)?.webLogOn(); } catch {} }
             return result;
           }).finally(() => achievementPending.delete(key));
