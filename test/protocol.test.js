@@ -29,6 +29,16 @@ test('timestamps never override locked bitmasks and future dates are not display
   assert.equal(r.achievements[0].unlocked,false);assert.equal(r.achievements[0].unlockTimestamp,0);
   assert.equal(r.achievements[1].unlocked,true);assert.equal(r.achievements[1].unlockTimestamp,0);
 });
+test('cleared bits retain separate timestamp evidence without inventing a displayed unlock date',()=>{
+  const r=parseSnapshot(snap({achievement_blocks:[{achievement_id:7,unlock_time:[123456]}]}),550);
+  assert.equal(r.achievements[0].unlocked,false);
+  assert.equal(r.achievements[0].unlockTimestamp,0);
+  assert.deepEqual(r.achievements[0].stateEvidence,{bitUnlocked:false,unlockTimePresent:true,reportedUnlockTimestamp:123456});
+  assert.equal(r.diagnostics.retainedUnlockDateCount,1);
+  assert.equal(r.diagnostics.retainedUnlockDates[0].apiname,'ONE');
+  const missing=parseSnapshot(snap(),550).achievements[0].stateEvidence;
+  assert.deepEqual(missing,{bitUnlocked:false,unlockTimePresent:false,reportedUnlockTimestamp:null});
+});
 test('wrong-game, rejected and malformed protocol responses cannot verify achievements',()=>{
   assert.throws(()=>parseSnapshot(snap({game_id:'240'}),550),/different game/);
   assert.throws(()=>parseSnapshot(snap({eresult:15}),550),/rejected/);
