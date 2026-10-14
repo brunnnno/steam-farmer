@@ -89,7 +89,7 @@ function createApp(options = {}) {
   const startupDiagnostics=options.startupDiagnostics??(process.env.STEAM_STARTUP_DIAGNOSTICS==='1');
   const namePending=new Map();
   const percentageCache=new ResultCache({maxBytes:256*1024,maxEntries:16,ttl:3600000}),percentagePending=new Map();
-  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
+  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/achievement-rarity.js': ['achievement-rarity.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
   }));
@@ -347,7 +347,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       // Public GET pages may be reached from bookmarks, search engines or external links.
       // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
-      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-availability.js', '/manifest.json', '/style.css'].includes(url.pathname));
+      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-availability.js', '/achievement-rarity.js', '/manifest.json', '/style.css'].includes(url.pathname));
       if (!['GET', 'POST'].includes(req.method)) throw fail('Method not allowed.', 405);
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') throw fail('Route not found.', 404);
@@ -416,7 +416,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       if(url.pathname==='/api/achievement/percentages'&&req.method==='GET'){
         getAccount(req,url);const id=appId(url.searchParams.get('appid'));rate(`percentages:${token}`,20,60000);
         const includeTitles=url.searchParams.get('titles')==='1',key=String(id)+(includeTitles?':titles':':api');
-        const cached=percentageCache.get(key);if(cached)return json(res,200,cached);
+        const cached=url.searchParams.get('refresh')==='1'?null:percentageCache.get(key);if(cached)return json(res,200,cached);
         if(!percentagePending.has(key))percentagePending.set(key,(async()=>{
           const result=await percentagesRead(id,{includeTitles});if(Object.keys(result.percentages||{}).length||Object.keys(result.titlePercentages||{}).length)percentageCache.set(key,result);return result;
         })().finally(()=>percentagePending.delete(key)));

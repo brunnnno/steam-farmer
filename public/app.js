@@ -183,13 +183,13 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
   }
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
-  currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
+  rarityWarning='';currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
   $('achReadMode').value=method;
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';updateSelectionSummary();
   const serial = ++achSerial, account = achAccountId,readStarted=performance.now();
   const cacheKey=previewKey(account,id,method),preview=achievementPreviews.get(cacheKey);
   if(preview&&Date.now()-preview.at<300000){
-    currentAchMethod='cached';currentAchList=JSON.parse(preview.text).achievements||[];
+    currentAchMethod='cached';currentAchList=AchievementRarity.normalizeRows(JSON.parse(preview.text).achievements||[]);
     $('achReadMessage').textContent='Previous reading — checking Steam now. Activation is unavailable until verification finishes.';
     $('achPrivacyWarning').style.display='block';$('achievementSource').textContent='Previous reading · Updating…';renderAchModal();
   }else if(preview)achievementPreviews.delete(cacheKey);
@@ -198,14 +198,17 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
     const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':''}${method!=='web'?'&method='+encodeURIComponent(method):''}`);
     if (serial !== achSerial || account !== activeAccountId) return;
     currentAchMethod=data.readingMethod||method;
-    currentAchList=(Array.isArray(data.achievements)?data.achievements:[]).map(a=>({ ...a, name:String(a.name||a.apiname||'Achievement'), description:String(a.description||''), unlocked:typeof a.unlocked==='boolean'?a.unlocked:null, percent:a.percent!=null && a.percent!=='' && Number.isFinite(Number(a.percent))?Number(a.percent):null }));
+    const rawRows=Array.isArray(data.achievements)?data.achievements:[];
+    rarityWarning=data.rarityMessage|| (AchievementRarity.uniformHundred(rawRows.map(a=>a.percent))?'Steam returned 100% for every achievement. Rarity is temporarily unverified.':'');
+    currentAchList=AchievementRarity.normalizeRows(rawRows.map(a=>({...a,name:String(a.name||a.apiname||'Achievement'),description:String(a.description||''),unlocked:typeof a.unlocked==='boolean'?a.unlocked:null})));
+
     rememberAchievements(cacheKey,{achievements:currentAchList});
     $('achReadMessage').textContent=data.message || '';
     $('achPrivacyWarning').style.display=data.message ? 'block':'none';
     $('achGameTitle').textContent=title;
     $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')} · Read: ${((performance.now()-readStarted)/1000).toFixed(2)} s`;
     renderAchModal();
-    if((filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
+    if((currentAchMethod==='protocol'||rarityWarning||filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
   } catch(e) { if(serial===achSerial&&account===activeAccountId) { if(currentAchMethod==='cached'){$('achReadMessage').textContent='Previous reading only. Current verification failed: '+e.message;$('achievementSource').textContent='Previous reading · Verification failed';}else{$('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[]));} } }
 }
 async function loadGameRequirements(id,serial,account) {
@@ -229,35 +232,38 @@ function setFilter(type,val) {
   renderAchModal();
   if(type==='rarity'&&filterRarity!=='all'&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
-let percentageRequest=null,percentageFetchedSerial=-1;
+let percentageRequest=null,percentageFetchedSerial=-1,rarityWarning='';
 function setSort(val) {
   currentSort=val;renderAchModal();
   if(['percentage_desc','rarity_common','rarity_rare'].includes(val)&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
-async function loadAchievementPercentages(){
+async function loadAchievementPercentages(force=false){
   const serial=achSerial,id=currentAchAppId,account=achAccountId,key=serial+':'+account+':'+id;
-  if(!id||percentageRequest===key||percentageFetchedSerial===serial)return;percentageRequest=key;renderAchModal();
+  if(!id||percentageRequest===key||!force&&percentageFetchedSerial===serial)return;percentageRequest=key;renderAchModal();
   try{
     const includeTitles=currentAchMethod!=='protocol'||currentAchList.some(a=>!a.apiname);
-    const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}${includeTitles?'&titles=1':''}`);
+    const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}${includeTitles?'&titles=1':''}${force?'&refresh=1':''}`);
     if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
     if(!result.percentages||typeof result.percentages!=='object'||Array.isArray(result.percentages))throw Error('Steam did not return usable rarity percentages.');
-    percentageFetchedSerial=serial;
-    const normalize=value=>String(value).trim().replace(/\s+/g,' ').toLowerCase(),apis=new Map(),titles=new Map();
-    for(const [name,value]of Object.entries(result.percentages)){const key=normalize(name);apis.set(key,apis.has(key)?null:value);}
+    percentageFetchedSerial=serial;rarityWarning=result.rarityMessage||'';
+    const percentages=AchievementRarity.percentageMap(Object.entries(result.percentages).map(([name,percent])=>({name,percent}))).percentages;
+    const normalize=AchievementRarity.normalizeTitle,apis=new Map(),titles=new Map();
+    for(const [name,value]of Object.entries(percentages)){const key=normalize(name);apis.set(key,apis.has(key)?null:value);}
     for(const row of currentAchList){const key=normalize(row.name);titles.set(key,(titles.get(key)||0)+1);}
-    currentAchList=currentAchList.map(a=>{let value=a.apiname&&Object.hasOwn(result.percentages,a.apiname)?result.percentages[a.apiname]:a.apiname?apis.get(normalize(a.apiname)):null;
+    const suspect=result.rarityStatus==='suspect_uniform_100'||AchievementRarity.uniformHundred(Object.values(result.percentages));if(suspect&&!Object.keys(result.titlePercentages||{}).length){rarityWarning ||= 'Steam returned 100% for every achievement. Rarity is temporarily unverified.';currentAchList=AchievementRarity.normalizeRows(currentAchList.map(a=>({...a,percent:null})));}
+    currentAchList=AchievementRarity.normalizeRows(currentAchList.map(a=>{let value=a.apiname&&Object.hasOwn(percentages,a.apiname)?percentages[a.apiname]:a.apiname?apis.get(normalize(a.apiname)):null;
       if(value==null&&titles.get(normalize(a.name))===1)value=result.titlePercentages?.[normalize(a.name)];
-      const p=typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:a.percent;return {...a,percent:p,tier:p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common'};});renderAchModal();
+      const p=AchievementRarity.validPercent(value);return {...a,percent:p??a.percent};}));renderAchModal();
     if(currentAchList.every(a=>a.percent===null))notice('Steam did not return percentages for these achievements. Unknown values remain at the end.');
-  }catch(e){if(serial===achSerial)notice(e.message);}finally{if(percentageRequest===key)percentageRequest=null;if(serial===achSerial&&account===activeAccountId&&id===currentAchAppId)renderAchModal();}
+  }catch(e){if(serial===achSerial){rarityWarning=e.message;notice(e.message);}}finally{if(percentageRequest===key)percentageRequest=null;if(serial===achSerial&&account===activeAccountId&&id===currentAchAppId)renderAchModal();}
 }
 function onSearchInput(val) { searchQuery=val.trim().toLowerCase(); renderAchModal(); }
 function renderAchModal(page=0) {
   const rarityMissing=currentAchList.filter(a=>a.percent===null).length,rarityLoading=percentageRequest===achSerial+':'+achAccountId+':'+currentAchAppId;
   const rarityRelevant=filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort);
-  $('achRarityMessage').hidden=!rarityRelevant||!rarityMissing;
-  $('achRarityMessage').textContent=rarityLoading?'Loading community unlock percentages from Steam…':rarityMissing===currentAchList.length?'Steam rarity percentages are unavailable. Unknown rarity is not treated as 0%.':`${rarityMissing} achievements have unknown rarity and ${filterRarity!=='all'?'are excluded from rarity filters':'remain last in percentage sorting'}.`;
+  $('achRarityMessage').hidden=!rarityWarning&&!rarityLoading&&(!rarityRelevant||!rarityMissing);
+  $('retryAchievementRarity').hidden=!currentAchList.length||!rarityMissing&&!rarityWarning;$('retryAchievementRarity').disabled=rarityLoading||experimentBusy;
+  $('achRarityMessage').textContent=rarityWarning||(rarityLoading?'Loading community unlock percentages from Steam…':rarityMissing===currentAchList.length?'Steam rarity percentages are unavailable. Unknown rarity is not treated as 0%.':`${rarityMissing} achievements have unknown rarity and ${filterRarity!=='all'?'are excluded from rarity filters':'remain last in percentage sorting'}.`);
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
   $('achProgressText').textContent=unknown===currentAchList.length && unknown>0 ? `${unknown} achievements · Personal state not verified` : `${confirmed}/${currentAchList.length-unknown} verified achievements unlocked${unknown ? ` · ${unknown} not verified` : ''}`;
   $('achProgressFill').style.width=(currentAchList.length?confirmed/currentAchList.length*100:0)+'%';
@@ -271,8 +277,7 @@ function renderAchModal(page=0) {
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
   list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&!['unknown','review'].includes(v.status)&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
-  if(currentSort==='locked_first'||currentSort==='unlocked_first') list.sort((a,b)=>Number(a.unlocked===true)-Number(b.unlocked===true));
-  if(currentSort==='unlocked_first') list.reverse();
+  if(currentSort==='locked_first'||currentSort==='unlocked_first'){const rank=a=>a.unlocked===null?2:(a.unlocked===(currentSort==='unlocked_first')?0:1);list.sort((a,b)=>rank(a)-rank(b));}
   const cont=$('achListContainer'); cont.replaceChildren();
   const pages=Math.max(1,Math.ceil(list.length/200));page=Math.min(Math.max(0,page),pages-1);
   for(const a of list.slice(page*200,(page+1)*200)) {
@@ -335,6 +340,7 @@ async function confirmChangeSelection(preview,{id,account,serial,version}){
   catch(e){notice(e.message);}
   finally{experimentBusy=false;if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
 }
+$('retryAchievementRarity').addEventListener('click',()=>loadAchievementPercentages(true));
 $('verifyAchievementChanges').addEventListener('click',()=>{if(currentAchAppId&&!experimentBusy&&active?.tokenSource==='environment'&&active?.connected===true)openAchModal(currentAchAppId,currentAchGameName,true,'protocol');});
 $('reviewAchievementSelection').addEventListener('click',()=>reviewChangeSelection());
 $('clearAchievementSelection').addEventListener('click',()=>{clearAchievementSelection();$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');renderAchModal();});

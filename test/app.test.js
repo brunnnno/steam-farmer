@@ -363,3 +363,8 @@ test('revoking the panel session during durable reservation blocks the Steam tra
   const input={accountId:'main',appid:550,selection:[{apiname:'A',action:'unlock'}]};const review=await f.request('/api/achievement/change-preview',input);
   const result=await f.request('/api/achievement/change',{...input,revision:review.data.revision,confirmed:true});assert.equal(result.response.status,401);assert.equal(reserved,1);assert.equal(sent,0);
 });
+
+test('rarity retry bypasses stored percentages without making a Steam write',async t=>{
+  let calls=0;const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]},{percentagesReader:async()=>({percentages:{A:++calls===1?10:2}})});await f.login();const route='/api/achievement/percentages?accountId=a&appid=240';assert.equal((await f.request(route)).data.percentages.A,10);assert.equal((await f.request(route)).data.percentages.A,10);assert.equal((await f.request(route+'&refresh=1')).data.percentages.A,2);assert.equal(calls,2);
+});
+test('shared rarity parser is served with the other public static scripts',async t=>{const f=await fixture(t);const r=await fetch(f.base+'/achievement-rarity.js');assert.equal(r.status,200);assert.match(await r.text(),/AchievementRarity/);assert.match(r.headers.get('content-type'),/javascript/);});

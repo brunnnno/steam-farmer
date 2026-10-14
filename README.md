@@ -124,3 +124,7 @@ The main Steam session retrieves its owned library and sequentially inspects up 
 ## Current continuation: reviewed selection and audit
 
 `migrations/003-achievement-operations.sql` was validated on an isolated branch and applied to production with user confirmation on 2026-10-14 UTC, enabling multi-selection/removal. Existing activation history is preserved. [Selection and removal](docs/achievement-selection-and-removal.md) documents scope, API and pending migration; [web audit](docs/web-audit-2026-10-13.md) records the fixes and resource measurements. The latest local suite has 256 passing tests. Synthetic peaks were 149.2 MiB for 8,192 achievements and 234.2 MiB under concurrent HTTP load, both below 500 MB. No live achievement was changed during this continuation.
+
+## 2.1.2: rarity and regression audit
+
+Direct achievement lists now load global percentages automatically without delaying personal verification. Invalid or complete uniform 100% responses remain unverified; a unique Community-title fallback and read-only Retry rarity are available. Mythic/Epic filters use validated percentages and preserve personal states. See [rarity and regression audit](docs/rarity-and-regression-audit-2026-10-14.md) for reproduced live-source results, broad checks and memory evidence. 271 regression tests pass, and dependencies/resource budgets remain unchanged.
