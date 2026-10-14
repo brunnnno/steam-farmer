@@ -5,10 +5,53 @@ function ui(t, responder) {
   const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
   w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
   w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-availability.js'),'utf8'));
-  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory};`);
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},lock:showLock,open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+test('selection spans filters, reviews mixed unlocks/removals and sends only after exact confirmation',async t=>{
+  const rows=[{name:'New',apiname:'A',unlocked:false,compatibility:{status:'provisional',canUnlock:true}},{name:'Panel granted',apiname:'B',unlocked:true,lastWriteOutcome:'confirmed',batchSupport:{canRemove:true}},{name:'Natural unlock',apiname:'OTHER',unlocked:true}];
+  const selected=[{apiname:'A',action:'unlock'},{apiname:'B',action:'remove'}],preview={selection:selected,effects:[{apiname:'A',name:'New',action:'unlock',progressChanges:[]},{apiname:'B',name:'Panel granted',action:'remove',progressChanges:[]}],progressChanges:[],canActivate:true,revision:'a'.repeat(64),message:'Review every effect.'};
+  const w=ui(t,url=>url==='/api/achievement/change-preview'?preview:response(rows));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');assert.equal(w.document.querySelectorAll('.ach-select').length,2);
+  for(const check of w.document.querySelectorAll('.ach-select')){check.checked=true;check.dispatchEvent(new w.Event('change'));}w.testUI.filter('status','locked');assert.match(w.document.getElementById('achievementSelectionSummary').textContent,/1 to unlock · 1 to remove/);
+  w.document.getElementById('reviewAchievementSelection').click();await new Promise(r=>setImmediate(r));assert.match(w.document.getElementById('sharedProgressReview').textContent,/Will unlock/);assert.match(w.document.getElementById('sharedProgressReview').textContent,/Will remove/);
+  let submitted;w.fetch=async(url,options)=>{if(url==='/api/achievement/change')submitted=JSON.parse(options.body);return {ok:true,json:async()=>url==='/api/achievement/change'?{message:'Confirmed.'}:response(rows)};};
+  let confirmation;w.confirm=text=>{confirmation=text;return false;};w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(submitted,undefined);assert.match(confirmation,/New: unlock/);assert.match(confirmation,/Panel granted: remove/);
+  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:550,selection:selected,revision:'a'.repeat(64),confirmed:true});assert.equal(w.document.getElementById('achievementSelectionBar').hidden,true);
+});
+test('selection is capped, invalidated by edits or refresh, and absent from cached readings',async t=>{
+  const rows=Array.from({length:40},(_,i)=>({name:'Target '+i,apiname:'A'+i,unlocked:false,compatibility:{status:'provisional',canUnlock:true}})),w=ui(t,()=>response(rows));w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
+  for(const check of [...w.document.querySelectorAll('.ach-select')].slice(0,32)){check.checked=true;check.dispatchEvent(new w.Event('change'));}assert.equal(w.document.querySelectorAll('.ach-select:disabled').length,8);assert.match(w.document.getElementById('achievementSelectionSummary').textContent,/32 to unlock/);
+  w.document.getElementById('clearAchievementSelection').click();assert.equal(w.document.querySelectorAll('.ach-select:checked').length,0);assert.equal(w.document.getElementById('achievementSelectionBar').hidden,true);
+  await w.testUI.refresh();assert.equal(w.document.querySelectorAll('.ach-select:checked').length,0);w.testUI.close();assert.equal(w.document.querySelectorAll('.ach-select').length,0);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);
+});
+test('game requirements load only when expanded and do not repeat or fetch after closing',async t=>{
+  const calls=[],w=ui(t,url=>{calls.push(url);return url.includes('game-requirements')?{facts:[],explanation:'Read-only context.',action:'Review the official game.',sourceUrl:'https://store.steampowered.com/app/550/'}:response([{name:'A',unlocked:false}]);});
+  await w.testUI.open(550,'Game');assert.equal(calls.filter(url=>url.includes('game-requirements')).length,0);const details=w.document.getElementById('gameRequirements');details.open=true;details.dispatchEvent(new w.Event('toggle'));await new Promise(r=>setImmediate(r));details.open=false;details.open=true;details.dispatchEvent(new w.Event('toggle'));await new Promise(r=>setImmediate(r));assert.equal(calls.filter(url=>url.includes('game-requirements')).length,1);
+  await w.testUI.open(550,'Game');w.testUI.close();details.open=true;details.dispatchEvent(new w.Event('toggle'));await new Promise(r=>setImmediate(r));assert.equal(calls.filter(url=>url.includes('game-requirements')).length,1);
+});
+test('locking clears history and ignores status/history responses that were already in flight',async t=>{
+  let resolveStatus,resolveHistory;const status=new Promise(r=>resolveStatus=r),history=new Promise(r=>resolveHistory=r);
+  const w=ui(t,url=>url==='/api/status'?status:url.startsWith('/api/achievement/history')?history:response([]));w.testUI.authenticate();w.document.getElementById('historyList').textContent='Old personal history';
+  const statusTask=w.testUI.load(),historyTask=w.testUI.history();w.testUI.lock();assert.equal(w.document.getElementById('historyList').childElementCount,0);
+  resolveStatus({accounts:[{id:'a',name:'Stale private account',connected:true,games:[],sleepMode:{},cardDropGames:[]}],presets:[],timezone:'UTC'});resolveHistory({entries:[{name:'Stale private history',outcome:'confirmed'}]});await Promise.all([statusTask,historyTask]);assert.equal(w.document.getElementById('historyList').childElementCount,0);assert.doesNotMatch(w.document.getElementById('userLabel').textContent,/Stale private/);
+});
+test('a slow progress preview cannot confirm after closing and reopening the same game',async t=>{
+  let release;const preview=new Promise(r=>release=r),target={name:'Progress',apiname:'P',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canComplete:true}};
+  const w=ui(t,url=>url.includes('/progress-preview?')?preview:response([target]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');const operation=w.testUI.completeProgress(target);w.testUI.close();await w.testUI.open(550,'Game',false,'protocol');w.confirm=()=>{throw Error('A stale preview must not confirm');};release({name:'Progress',revision:'a'.repeat(64),progressChanges:[],message:'Review'});await operation;
+});
+test('disconnecting disables selected changes until a fresh Steam reading completes',async t=>{
+  const account={id:'a',name:'A',connected:true,tokenSource:'environment',linkedSteamId:'76561198000000001',games:[],sleepMode:{},cardDropGames:[]};let disconnected=false;
+  const w=ui(t,url=>url==='/api/status'?{accounts:[{...account,connected:!disconnected}],presets:[],timezone:'UTC'}:response([{name:'A',apiname:'A',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}}]));w.testUI.authenticate();w.testUI.activate(account);await w.testUI.open(550,'Game',false,'protocol');const check=w.document.querySelector('.ach-select');check.checked=true;check.dispatchEvent(new w.Event('change'));disconnected=true;await w.testUI.load();assert.equal(w.document.getElementById('achievementSelectionBar').hidden,true);assert.equal(w.document.querySelectorAll('.ach-select').length,0);assert.match(w.document.getElementById('achReadMessage').textContent,/disconnected/);
+});
+test('operation history expands bounded effect details on demand and releases them on collapse',async t=>{
+  const effects=Array.from({length:64},(_,i)=>({apiname:'A'+i,name:'Achievement '+i,action:i?'unlock':'remove',before:false,after:true})),w=ui(t,()=>({entries:[{operationId:'test',outcome:'confirmed',effects,progressChanges:[]}]}));w.testUI.authenticate();await w.testUI.history();const details=w.document.querySelector('#historyList details');assert.ok(details);assert.equal(details.querySelectorAll('p').length,0);details.open=true;details.dispatchEvent(new w.Event('toggle'));assert.equal(details.querySelectorAll('p').length,64);details.open=false;details.dispatchEvent(new w.Event('toggle'));assert.equal(details.querySelectorAll('p').length,0);
+});
+test('polling closes stale achievement context when a profile disappears or its Steam identity changes',async t=>{
+  const account={id:'a',name:'A',connected:true,tokenSource:'environment',linkedSteamId:'76561198000000001',games:[],sleepMode:{},cardDropGames:[]};let next={...account};
+  const w=ui(t,url=>url==='/api/status'?{accounts:[next],presets:[],timezone:'UTC'}:response([{name:'A',apiname:'A',unlocked:false,compatibility:{canUnlock:true,status:'provisional'}}]));w.testUI.authenticate();w.testUI.activate(account);await w.testUI.open(550,'Game',false,'protocol');next={...account,linkedSteamId:'76561198000000002'};await w.testUI.load();assert.equal(w.document.getElementById('achModal').style.display,'none');assert.equal(w.document.querySelectorAll('.ach-item').length,0);
+  await w.testUI.open(550,'Game',false,'protocol');next={...next,id:'replacement'};await w.testUI.load();assert.equal(w.document.getElementById('achModal').style.display,'none');
+});
 test('XML-style lists use unique titles and case-insensitive API names for rarity without changing personal states',async t=>{
   const calls=[],rows=[{name:'GNOME ALONE',apiname:'global_gnome_alone',unlocked:true,percent:null},{name:'An Epic',apiname:null,unlocked:false,percent:null},{name:'Duplicate',apiname:null,unlocked:false,percent:null},{name:'Duplicate',apiname:null,unlocked:true,percent:null}];
   const w=ui(t,url=>{calls.push(url);return url.includes('/percentages?')?{percentages:{GLOBAL_GNOME_ALONE:69.8},titlePercentages:{'an epic':10,duplicate:5}}:response(rows);});await w.testUI.open(550,'Left 4 Dead 2',false,'web');w.testUI.filter('rarity','epic');await new Promise(resolve=>setImmediate(resolve));
@@ -30,7 +73,7 @@ test('one progress action dispatches supported and shared counters to their exis
 });
 test('decimal preview shows decoded values and schema limits without confirmation or write controls',async t=>{
   const calls=[],row={apiname:'DECIMAL',name:'Distance',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency',canUnlock:false},progressSupport:{canPreviewFloat:true,canComplete:false,code:'float_review_only'},progressDetails:{currentValue:1.25,maximum:10.5}};
-  const w=ui(t,url=>{calls.push(url);return url.includes('/float-progress-preview?')?{name:'Distance',counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},canActivate:false,message:'Read-only decimal preview. No changes.'}:response([row]);});
+  const w=ui(t,url=>{calls.push(url);return url.includes('/float-progress-preview?')?{name:'Distance',counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},canActivate:false,message:'Read-only progress review. No changes.'}:response([row]);});
   w.testUI.activate({tokenSource:'environment',connected:true});w.confirm=()=>{throw Error('Read-only review must not ask for confirmation');};await w.testUI.open(550,'Game',false,'protocol');
   const button=[...w.document.querySelectorAll('#achListContainer button')].find(b=>b.textContent==='Review progress');assert.ok(button);button.click();await new Promise(resolve=>setImmediate(resolve));
   const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Review progress/);assert.match(panel.textContent,/1.25/);assert.match(panel.textContent,/10.5/);assert.match(panel.textContent,/Allowed range: 0 to 100/);assert.doesNotMatch(panel.textContent,/FLOAT|decimal/i);assert.equal(w.document.getElementById('floatSearchStart'),null);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);assert.ok(!calls.some(url=>url.includes('/unlock')));
@@ -118,6 +161,21 @@ test('shared update submission uses only the reviewed revision and requires expl
   const w=ui(t,url=>url.includes('shared-progress-preview')?preview:response([row]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});await w.testUI.open(440,'TF2',false,'protocol');await w.testUI.reviewShared(row);w.confirm=()=>true;
   let submitted;w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock')submitted=JSON.parse(options.body);return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
   w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:440,apiname:'DOCTOR',mode:'shared',revision:'a'.repeat(64)});
+});
+test('decimal update requires an exact review, respects cancellation and posts only the reviewed revision',async t=>{
+  const row={name:'Distance',apiname:'DECIMAL',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewFloat:true}};
+  const preview={appid:550,apiname:'DECIMAL',name:'Distance',canActivate:true,revision:'b'.repeat(64),counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0},message:'Review the exact counter change.'};
+  const w=ui(t,url=>url.includes('float-progress-preview')?preview:response([row]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
+  const review=w.document.querySelector('#achListContainer button');assert.equal(review.textContent,'Review progress');review.click();await new Promise(r=>setImmediate(r));
+  let submitted,count=0,confirmation='';w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock'){submitted=JSON.parse(options.body);count++;}return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
+  w.confirm=text=>{confirmation=text;return false;};w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,0);assert.match(confirmation,/DISTANCE: 1.25 → 10.5/);assert.match(confirmation,/Only this counter will be sent/);assert.match(confirmation,/Steam may unlock this linked achievement/);
+  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,1);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'DECIMAL',mode:'float',revision:'b'.repeat(64)});
+});
+test('decimal confirmation cannot submit after account or reading context changes',async t=>{
+  const row={name:'Distance',apiname:'DECIMAL',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewFloat:true}};
+  const preview={appid:550,apiname:'DECIMAL',name:'Distance',canActivate:true,revision:'b'.repeat(64),counter:{statName:'DISTANCE',before:1.25,after:10.5,goal:10.5,min:0,max:100,maxChange:0}};
+  const w=ui(t,url=>url.includes('float-progress-preview')?preview:response([row]));w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');w.document.querySelector('#achListContainer button').click();await new Promise(r=>setImmediate(r));
+  const confirm=w.document.querySelector('#sharedProgressActions button');w.testUI.select('other');w.confirm=()=>{throw Error('Stale review cannot confirm');};confirm.click();await new Promise(r=>setImmediate(r));
 });
 test('compatibility filter includes bit and progress attempts but excludes protected, shared and unknown',async t=>{
   const calls=[],rows=[
@@ -250,7 +308,7 @@ test('individual activation submits only the chosen account, game and API name',
 });
 test('publisher requirements show explanatory context as text without inventing an activation restriction',async t=>{
   const w=ui(t,url=>url.startsWith('/api/game-requirements')?{facts:['<b>Publisher account</b>'],explanation:'An external launcher alone does not establish writability.',action:'Check the official game.',metadataAvailable:true,externalAccountOrSoftware:true,sourceUrl:'https://store.steampowered.com/app/123/'}:response([{name:'One',unlocked:false}]));
-  await w.testUI.open(123,'Game');await new Promise(resolve=>setImmediate(resolve));
+  await w.testUI.open(123,'Game');w.document.getElementById('gameRequirements').open=true;w.document.getElementById('gameRequirements').dispatchEvent(new w.Event('toggle'));await new Promise(resolve=>setImmediate(resolve));
   const context=w.document.getElementById('gameRequirements');assert.equal(context.hidden,false);assert.equal(context.open,true);assert.match(context.textContent,/does not establish/);assert.equal(context.querySelector('b'),null);
 });
 test('unknown personal states display the reason and next step without requiring hover or an unlock button',async t=>{
@@ -273,5 +331,5 @@ test('shared impact review displays all effect types as text and never submits a
   const w=ui(t,url=>{urls.push(url);return url.startsWith('/api/achievement/shared-progress-preview')?{counter:{statName:'COUNT',before:5,after:100},effects:[{name:'<img src=x>',goal:10,effect:'would_unlock'},{name:'Later',goal:1000,effect:'progress_only'},{name:'Complex',effect:'unknown'}],message:'Read-only review.'}:response([row]);});w.testUI.activate({tokenSource:'environment'});await w.testUI.open(550,'Game',true,'protocol');await w.testUI.reviewShared(row);const panel=w.document.getElementById('sharedProgressReview');assert.equal(panel.hidden,false);assert.match(panel.textContent,/Would unlock/);assert.match(panel.textContent,/Impact unknown/);assert.equal(panel.querySelector('img'),null);assert.ok(!urls.includes('/api/achievement/unlock'));
 });
 test('write history renders receipts as text and does not infer unrecorded historical attempts',async t=>{
-  const w=ui(t,()=>({entries:[{name:'<script>secret</script>',outcome:'requested',progressChanges:[{statName:'COUNT',before:0,after:1}]}]}));await w.testUI.history();const list=w.document.getElementById('historyList');assert.match(list.textContent,/COUNT: 0 → 1/);assert.equal(list.querySelector('script'),null);
+  const w=ui(t,()=>({entries:[{name:'<script>secret</script>',outcome:'requested',progressChanges:[{statName:'COUNT',before:0,after:1}]}]}));w.testUI.authenticate();await w.testUI.history();const list=w.document.getElementById('historyList');assert.match(list.textContent,/COUNT: 0 → 1/);assert.equal(list.querySelector('script'),null);
 });
