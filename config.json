@@ -1,35 +1,5 @@
 {
   "timezone": "America/Montevideo",
   "discordWebhook": "",
-  "accounts": [
-    {
-      "id": "main",
-      "name": "Main account",
-      "user": "",
-      "games": [
-        240,
-        550,
-        271590,
-        1938090,
-        1118310,
-        379720,
-        323470,
-        883710,
-        202970,
-        220240,
-        1888930,
-        730
-      ],
-      "gameNames": {},
-      "customStatus": "",
-      "personaState": 1,
-      "cardFarming": false,
-      "sleepMode": {
-        "enabled": false,
-        "start": 3,
-        "end": 8
-      },
-      "chatAdmins": []
-    }
-  ]
+  "accounts": []
 }

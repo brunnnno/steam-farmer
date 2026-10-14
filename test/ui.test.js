@@ -77,7 +77,7 @@ test('selection spans filters, reviews mixed unlocks/removals and sends only aft
 });
 test('selection is capped, invalidated by edits or refresh, and absent from cached readings',async t=>{
   const rows=Array.from({length:40},(_,i)=>({name:'Target '+i,apiname:'A'+i,unlocked:false,compatibility:{status:'provisional',canUnlock:true}})),w=ui(t,()=>response(rows));w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
-  for(const check of [...w.document.querySelectorAll('.ach-select')].slice(0,32)){check.checked=true;check.dispatchEvent(new w.Event('change'));}assert.equal(w.document.querySelectorAll('.ach-select:disabled').length,8);assert.match(w.document.getElementById('achievementSelectionSummary').textContent,/32 to unlock/);
+  for(const check of [...w.document.querySelectorAll('.ach-select')]){check.checked=true;check.dispatchEvent(new w.Event('change'));}assert.equal(w.document.querySelectorAll('.ach-select:disabled').length,0);assert.match(w.document.getElementById('achievementSelectionSummary').textContent,/40 to unlock/);
   w.document.getElementById('clearAchievementSelection').click();assert.equal(w.document.querySelectorAll('.ach-select:checked').length,0);assert.equal(w.document.getElementById('achievementSelectionBar').hidden,false);assert.equal(w.document.getElementById('reviewAchievementSelection').disabled,true);
   await w.testUI.refresh();assert.equal(w.document.querySelectorAll('.ach-select:checked').length,0);w.testUI.close();assert.equal(w.document.querySelectorAll('.ach-select').length,0);assert.equal(w.document.getElementById('sharedProgressActions').childElementCount,0);
 });

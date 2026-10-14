@@ -47,6 +47,7 @@ function createApp(options = {}) {
   if (environmentToken && !cfg.accounts.some(acc => acc.id === environmentAccountId)) cfg.accounts.push({ id: environmentAccountId, name: 'Main account', user: '', games: [], gameNames: {} });
   const isEnvironmentAccount = acc => Boolean(environmentToken && acc.id === environmentAccountId);
   const vault = new Vault(directory);
+  const isAuthorizedAccount = acc => Boolean(acc && (isEnvironmentAccount(acc) || vault.records?.[acc.id]));
   if(options.restoredTokens){vault.records={};for(const [id,token]of Object.entries(options.restoredTokens))vault.set(id,token);atomicWrite(vault.file,vault.records);}
   const persistence=options.persistence;
   if(persistence)cfg.persistenceCheckpoint ||= crypto.randomUUID();
@@ -236,7 +237,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
   }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
-return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, gameCount: acc.games.length };
+return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
@@ -392,7 +393,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:32,achievementBulkUnlockAll:true,achievementBulkLockAll:true,achievementBulkLimit:8192,sharedCounterPreview:true,sharedCounterWrite:true } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:8192,achievementBulkUnlockAll:true,achievementBulkLockAll:true,achievementBulkLimit:8192,sharedCounterPreview:true,sharedCounterWrite:true } });
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }
@@ -454,9 +455,21 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             })
             :Promise.resolve({receipts:new Map()});
           const task = Promise.resolve().then(async () => {
-            if(requestedMethod==='auto'&&st.connected&&readClient){try{const result=await protocolRead(readClient,id,{timeoutMs:2500});if(result.verified||result.stateConflict){method='protocol';return result;}}catch{}method='web';}
+            if(requestedMethod==='auto'&&st.connected&&readClient){
+              try{const result=await protocolRead(readClient,id,{timeoutMs:2500});if(result.verified||result.stateConflict){method='protocol';return result;}}
+              catch{try{const result=await protocolRead(readClient,id,{timeoutMs:8000});if(result.verified||result.stateConflict){method='protocol';return result;}}catch{}}
+              method='web';
+            }
             else if(requestedMethod==='auto')method='web';
-            return method==='protocol'?protocolRead(readClient,id):steamRead(acc,st,id,process.env.STEAM_API_KEY||'');
+            if(method==='protocol')return protocolRead(readClient,id);
+            const webResult=await steamRead(acc,st,id,process.env.STEAM_API_KEY||'');
+            if(st.connected&&readClient&&(!webResult.verified||(webResult.achievements?.length&&webResult.achievements.every(a=>!a.unlocked)))){
+              try{
+                const directResult=await protocolRead(readClient,id,{timeoutMs:6000});
+                if(directResult.verified&&directResult.achievements?.some(a=>a.unlocked===true&&a.apiname)){method='protocol';return directResult;}
+              }catch{}
+            }
+            return webResult;
           }).then(async result => {
             result.readingMethod=method;
             if(!cfg.accounts.includes(acc)||states.get(acc.id)!==st||clients.get(acc.id)!==readClient||st.webSessionVersion!==readVersion)throw fail('The selected Steam session changed during verification. Refresh again.',409);
@@ -480,7 +493,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             const pendingRemovals=(result.achievements||[]).filter(r=>r.compatibility?.code==='removal_library_pending').length;
             if(pendingRemovals&&!result.stateConflict){result.verified=false;result.message=`${pendingRemovals} achievement${pendingRemovals===1?' is':'s are'} awaiting removal confirmation. The other achievements remain available. Check Steam and refresh after making changes there.`;}
             result.readDurationMs=Date.now()-readStarted;
-            result.stateRevision=readingRevision(result);achievementCache.set(key, result);
+            result.stateRevision=readingRevision(result);if(!(requestedMethod==='auto'&&method==='web'&&st.connected))achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} durationMs=${result.readDurationMs} webSession=${Boolean(st.webCookies)}`);
             if(result.diagnostics?.retainedUnlockDateCount)console.log('[Achievement state evidence]',JSON.stringify({appid:id,count:result.diagnostics.retainedUnlockDateCount,rows:result.diagnostics.retainedUnlockDates}));
             if(result.diagnostics?.librarySummary)console.log('[Achievement library summary]',JSON.stringify({appid:id,statistics:result.diagnostics.statsUnlocked,summary:result.diagnostics.librarySummary,conflict:result.stateConflict}));
@@ -493,7 +506,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       if(url.pathname==='/api/achievement/shared-progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
-        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Shared-counter preview requires the available connected main account.',409);
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Shared-counter preview requires the available connected main account.',409);
         rate(`shared-preview:${acc.id}`,10,60000);
         const id=appId(url.searchParams.get('appid')),name=text(url.searchParams.get('apiname')||'',256),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!identity)throw fail('Steam is disconnected.',409);
@@ -517,9 +530,9 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       if(['/api/achievement/change-preview','/api/achievement/change'].includes(url.pathname)&&req.method==='POST'){
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
-        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Reviewed changes require the available connected main Steam account.',409);
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Reviewed changes require the available connected main Steam account.',409);
         const id=appId(data.appid),preview=url.pathname.endsWith('change-preview');
-        const bulk=Boolean(data.bulk||data.bulkAction),resetCounters=Boolean(data.resetCounters),allowRetoggle=Boolean(data.allowRetoggle)||bulk,overrideCooldown=Boolean(data.overrideCooldown)||bulk;
+        const bulk=Boolean(data.bulk||data.bulkAction||(Array.isArray(data.selection)&&data.selection.length>32)),resetCounters=Boolean(data.resetCounters),allowRetoggle=Boolean(data.allowRetoggle)||bulk,overrideCooldown=Boolean(data.overrideCooldown)||bulk;
         const bulkAction=data.bulkAction!==undefined?text(String(data.bulkAction),32):undefined;
         if(bulkAction&&!['unlock_all','lock_all'].includes(bulkAction))throw fail('Select unlock_all or lock_all for bulk achievement operations.',400);
         const filterNames=Array.isArray(data.filterNames)?data.filterNames.slice(0,8192).map(v=>text(String(v),256)):undefined;
@@ -543,14 +556,14 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
             writeSelection=buildBulkSelection(snapshot,id,bulkAction,receipts,{filterNames,allowRetoggle});
           }
-          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();return intent;}});
+          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed([id]);st.playedGames=[id];}}catch{}return intent;}});
           try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}
           return json(res,200,result);
-        }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
+        }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();if(options.silent){st.playedGames=[];farming(acc);}else setTimeout(()=>{if(!closing&&cfg.accounts.includes(acc)&&states.get(acc.id)===st){st.playedGames=[];farming(acc);}},3500).unref();}
       }
       if(url.pathname==='/api/achievement/float-search'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
-        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||!identity)throw fail('Decimal search requires the connected main Steam account.',409);
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||!identity)throw fail('Decimal search requires the connected main Steam account.',409);
         rate(`float-search:${acc.id}`,12,60000);
         const position=url.searchParams.get('cursor')||'0';if(!/^\d{1,4}$/.test(position))throw fail('Invalid decimal search position.');const cursor=Number(position);
         const key=JSON.stringify([acc.id,identity,st.webSessionVersion]);let library=floatLibraryCache.get(key);
@@ -564,7 +577,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       if(url.pathname==='/api/achievement/float-progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
-        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Decimal preview requires the available connected main Steam account.',409);
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Decimal preview requires the available connected main Steam account.',409);
         rate(`float-preview:${acc.id}`,10,60000);
         const id=appId(url.searchParams.get('appid')),apiName=text(url.searchParams.get('apiname')||'',256),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!identity)throw fail('Steam is disconnected.',409);
@@ -581,7 +594,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       if(url.pathname==='/api/achievement/progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
-        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Progress preview requires the available connected main Steam account.',409);
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused)throw fail('Progress preview requires the available connected main Steam account.',409);
         rate(`progress-preview:${acc.id}`,10,60000);
         const id=appId(url.searchParams.get('appid')),apiName=text(url.searchParams.get('apiname')||'',256),client=clients.get(acc.id);
         if(await journal.get(st.steamId64,id,apiName))throw fail('A write was already attempted for this achievement. Refresh to verify; retries require review.',409);
@@ -594,7 +607,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       if (url.pathname === '/api/achievement/unlock' && req.method === 'POST') {
         if(data.confirmed!==true)throw fail('Confirm the concrete achievement change before sending.');
         const acc=getAccount(req,url,data),st=stateFor(acc.id);
-        if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches)throw fail('Individual activation requires the connected main account managed by Render.',409);
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches)throw fail('Individual activation requires the connected main account managed by Render.',409);
         if(st.isCollisionPaused)throw fail('Stop playing on the other device before unlocking an achievement.',409);
         const id=appId(data.appid),apiName=text(data.apiname,256);
         const mode=data.mode||'achievement';if(!['achievement','progress','shared','float'].includes(mode))throw fail('Unknown activation mode.');
@@ -620,12 +633,13 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             reserved=true;st.lastAchievementWrite=Date.now();
             assertPanelSession();
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused||mode==='float'&&(!st.tokenAccountMatches||st.steamId64!==identity))throw fail('Steam changed while the write intent was being recorded. No write was sent.',409);
+            try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed([id]);st.playedGames=[id];}}catch{}
             console.log('[Achievement activation requested] '+JSON.stringify(evidence));
           }});
           if(reserved)try{if(mode==='shared')await journal.finishShared(st.steamId64,id,apiName,result);else await journal.finish(st.steamId64,id,apiName,result);}catch{result.historyPersisted=false;result.message+=' The result could not be saved to history; the recorded intent remains pending. Do not retry.';}
           console.log('[Achievement activation result] '+JSON.stringify(result));
           return json(res,200,result);
-        } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
+        } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();if(options.silent){st.playedGames=[];farming(acc);}else setTimeout(()=>{if(!closing&&cfg.accounts.includes(acc)&&states.get(acc.id)===st){st.playedGames=[];farming(acc);}},3500).unref();}
       }
       if (url.pathname === '/api/achievement-experiment' && req.method === 'POST') {
         if(data.confirmed!==true)throw fail('Confirm the concrete achievement change before sending.');

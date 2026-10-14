@@ -475,3 +475,60 @@ test('bulk unlock_all and lock_all API routes preview and confirm full-game chan
   assert.equal(confirmLock.response.status,200);
   assert.equal(confirmLock.data.outcome,'confirmed');
 });
+
+test('encrypted Vault accounts support >32 manual selections, live gamesPlayed emulation and protocol upgrade over 0-unlocked web reads',async t=>{
+  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+' '),typeof v==='object'?kv(v):Buffer.from(String(v)+' '));a.push(Buffer.from([8]));return Buffer.concat(a);}
+  const schema=kv({'34830':{stats:{
+    1:{type:'4',bits:Object.fromEntries(Array.from({length:32},(_,i)=>[i,{name:'ACH_'+i}]))},
+    2:{type:'4',bits:{0:{name:'ACH_32'},1:{name:'ACH_33'},2:{name:'ACH_34'},3:{name:'ACH_35'}}}
+  }}});
+  let currentSnap={game_id:'34830',eresult:1,crc_stats:12,schema,stats:[{stat_id:1,stat_value:0},{stat_id:2,stat_value:0}]};
+  const operations={
+    schema:async()=>true,
+    latest:async()=>new Map(),
+    list:async()=>[],
+    reserve:async(_,plan)=>require('../lib/achievement-operations').cleanOperation({...plan,operationId:'cccccccc-cccc-cccc-cccc-cccccccccccc',checkedAt:new Date().toISOString(),outcome:'requested'}),
+    finish:async()=>{}
+  };
+  const f=await fixture(t,{accounts:[{id:'user2',name:'Random User',games:[220]}]},{
+    operationsJournal:operations,
+    progressSnapshotReader:async()=>currentSnap,
+    protocolReader:async()=>require('../lib/steam-protocol').parseSnapshot(currentSnap,34830),
+    achievements:async()=>({verified:true,source:'Steam Community HTML',achievements:[{name:'Act 1',unlocked:false}]}),
+    changesWriter:async(client,id,selected,options)=>require('../lib/achievement-writer').applyChanges(client,id,selected,{
+      ...options,
+      read:async()=>currentSnap,
+      send:async(_,payload)=>{
+        const updated=new Map(currentSnap.stats.map(s=>[s.stat_id,s.stat_value]));
+        for(const s of payload.stats)updated.set(s.stat_id,s.stat_value);
+        currentSnap={...currentSnap,crc_stats:currentSnap.crc_stats+1,stats:[...updated].map(([stat_id,stat_value])=>({stat_id,stat_value}))};
+        return {game_id:'34830',eresult:1};
+      }
+    })
+  });
+  f.app.vault.set('user2',token());
+  await f.login();
+  const status=await f.request('/api/status');
+  assert.equal(status.data.accounts[0].encryptedSession,true);
+  Object.assign(f.app.states.get('user2'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});
+  const client=new FakeUser({});client._send=()=>{};f.app.clients.set('user2',client);
+
+  // Manual selection of 36 achievements (> 32) on an encrypted local Vault account
+  const manual36=Array.from({length:36},(_,i)=>({apiname:'ACH_'+i,action:'unlock'}));
+  const preview=await f.request('/api/achievement/change-preview',{accountId:'user2',appid:34830,selection:manual36});
+  assert.equal(preview.response.status,200);
+  assert.equal(preview.data.selection.length,36);
+
+  const confirm=await f.request('/api/achievement/change',{accountId:'user2',appid:34830,selection:manual36,revision:preview.data.revision,confirmed:true});
+  assert.equal(confirm.response.status,200);
+  assert.equal(confirm.data.outcome,'confirmed');
+  // Verify gamesPlayed([34830]) was invoked during the write and farming([220]) was restored afterwards
+  assert.ok(client.calls.some(c=>c.length===1&&c[0]===34830));
+  assert.deepEqual(client.calls.at(-1),[220]);
+
+  // Verify that even if method=web returns 0 unlocked achievements, connected session upgrades to protocol (36/36 unlocked)
+  const readWeb=await f.request('/api/achievements?accountId=user2&appid=34830&method=web&refresh=1');
+  assert.equal(readWeb.response.status,200);
+  assert.equal(readWeb.data.readingMethod,'protocol');
+  assert.equal(readWeb.data.achievements.filter(a=>a.unlocked===true).length,36);
+});
