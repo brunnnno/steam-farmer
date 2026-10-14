@@ -1,6 +1,6 @@
 # SteamFarmer
 
-Personal web dashboard for Steam sessions, game activity, card farming and reading actual achievement states. All panel options are in English. The main account supports reviewed selection of up to 32 eligible achievements, including removal of activations confirmed by this panel. Every write requires an exact impact review and explicit confirmation. Global resets and automatic retries remain unavailable.
+Personal web dashboard for Steam sessions, game activity, card farming and reading actual achievement states. All panel options are in English. The main account supports reviewed selection of up to 32 eligible achievements, including removal of currently unlocked achievements with unrestricted client permissions. Every write requires an exact impact review and explicit confirmation. Global resets and automatic retries remain unavailable.
 
 ## Render deployment
 

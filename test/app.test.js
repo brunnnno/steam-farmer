@@ -9,6 +9,26 @@ const { createApp } = require('../bot');
 const { atomicWrite, Vault, appId, hour, sleepNow } = require('../lib/core');
 const { parseXml, parseHtml, parseCards } = require('../lib/steam-data');
 const PASSWORD = 'panel-test-password-123';
+
+test('real-format unrecorded unlocked bits expose removal and preview without reservations or Steam writes',async t=>{
+  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));a.push(Buffer.from([8]));return Buffer.concat(a);}
+  const snapshot={game_id:'550',eresult:1,crc_stats:12,schema:kv({'550':{stats:{7:{type:'4',bits:{0:{name:'NATURAL',progress:{max_val:'10',value:{operation:'statvalue',operand1:'COUNT'}}},1:{name:'NATURAL_BIT'}}},9:{type:'INT',name:'COUNT'}}}}),stats:[{stat_id:7,stat_value:3},{stat_id:9,stat_value:0}]};
+  const receipts=new Map(),operations={latest:async()=>receipts,schema:async()=>true,list:async()=>[],reserve:async()=>{throw Error('A preview must not reserve');}};
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f;
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{operationsJournal:operations,protocolReader:async()=>require('../lib/steam-protocol').parseSnapshot(snapshot,550),progressSnapshotReader:async()=>snapshot,changesWriter:async()=>{throw Error('A preview must not write');}});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
+  const read=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(read.data.achievements.every(a=>a.batchSupport.canRemove),true);assert.equal(read.data.achievements.some(a=>a.panelOperationAt),false);
+  const preview=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,selection:[{apiname:'NATURAL',action:'remove'},{apiname:'NATURAL_BIT',action:'remove'}]});assert.equal(preview.response.status,200);assert.equal(preview.data.canActivate,true);assert.equal(preview.data.effects.length,2);assert.deepEqual(preview.data.progressChanges,[]);assert.match(preview.data.effects.find(e=>e.apiname==='NATURAL').warning,/unchanged/);
+  receipts.set('NATURAL',{outcome:'unknown'});const blocked=await f.request('/api/achievements?accountId=main&appid=550&method=protocol&refresh=1');assert.equal(blocked.data.achievements[0].batchSupport.canRemove,false);assert.match(blocked.data.achievements[0].batchSupport.removalReason,/previous attempt/);
+});
+
+test('a successful Steam login cancels stale reconnect work; rejected credentials cancel any earlier transient retry',async t=>{
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f;
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[],paused:true}]},{connect:true});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  const client=f.app.clients.get('main'),st=f.app.states.get('main');client.emit('error',Object.assign(new Error('Transient'),{eresult:2}));assert.ok(st.reconnectTimer);
+  client.emit('loggedOn');assert.equal(st.reconnectTimer,null);assert.equal(st.connected,true);assert.equal(st.isPaused,true);
+  client.emit('error',Object.assign(new Error('Transient'),{eresult:2}));assert.ok(st.reconnectTimer);client.emit('error',Object.assign(new Error('Rejected'),{eresult:5}));assert.equal(st.reconnectTimer,null);assert.equal(st.connected,false);assert.match(st.error,/rejected/);
+});
 test('shared API stays read-only without persistent reservations and never bypasses them',async t=>{
   function kv(obj){const p=[];for(const[k,v]of Object.entries(obj))p.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));p.push(Buffer.from([8]));return Buffer.concat(p);}
   const bit=(name,goal)=>({name,progress:{max_val:String(goal),value:{operation:'statvalue',operand1:'HEALED'}}});
