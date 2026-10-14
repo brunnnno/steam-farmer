@@ -184,6 +184,7 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
   rarityWarning='';currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
+  $('achRarityMessage').hidden=true;$('achRarityMessage').textContent='';$('retryAchievementRarity').hidden=true;$('achReadMessage').textContent='';
   $('achReadMode').value=method;
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';updateSelectionSummary();
   const serial = ++achSerial, account = achAccountId,readStarted=performance.now();
