@@ -399,7 +399,7 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 .ach-date { display:block;color:var(--text-muted);font-size:10px;margin-top:6px; }.ach-date.panel-date { color:var(--primary); }.ach-date-note { display:block;font-size:10px;color:#edc98c;line-height:1.6;margin-top:6px; }
 @media(max-width:600px) { .shared-review { margin:10px;padding:14px;max-height:54vh; }.shared-effects { grid-template-columns:1fr; }.shared-review-header { align-items:flex-start; }.shared-review-header h3 { font-size:16px; }.shared-review-footer { flex-direction:column;align-items:stretch;gap:12px; }.shared-confirm { width:100%; }.shared-counter-value strong { font-size:23px; }.shared-counter-flow { gap:18px; } }
 .ach-toolbar > div:last-child { flex-wrap:wrap;min-width:0; }
-.ach-toolbar > div:last-child { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
+.ach-toolbar > div:last-child { display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
 .ach-toolbar > div:last-child input { width:100%;max-width:none !important; }
 @media(max-width:600px) { .ach-toolbar > div:last-child { grid-template-columns:repeat(2,minmax(0,1fr)); }.ach-toolbar > div:last-child input { grid-column:1 / -1; } }
 [hidden] { display:none !important; }
