@@ -11,6 +11,13 @@ function ui(t, responder) {
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
 
+test('a pending or failed new game never displays the previous game rarity or reading message',async t=>{
+  let reject;const pending=new Promise((_,r)=>{reject=r;});const w=ui(t,url=>url.includes('appid=240')?pending:{...response([{name:'Previous',apiname:'P',unlocked:true,percent:10}]),rarityMessage:'Historical L4D2 message',message:'Previous private reading'});
+  await w.testUI.open(550,'First',false,'protocol');assert.match(w.document.getElementById('achRarityMessage').textContent,/Historical L4D2/);
+  const opening=w.testUI.open(240,'Second',false,'protocol');assert.equal(w.document.getElementById('achRarityMessage').hidden,true);assert.equal(w.document.getElementById('achRarityMessage').textContent,'');assert.equal(w.document.getElementById('achReadMessage').textContent,'');assert.equal(w.document.querySelectorAll('.ach-item').length,0);
+  reject(Error('Second unavailable'));await opening;assert.doesNotMatch(w.document.getElementById('achModal').textContent,/Historical L4D2|Previous private reading/);
+});
+
 test('natural unlock selection, preserved-progress warning and historical rarity work together without a write',async t=>{
   const calls=[],rows=[{name:'Natural progress',apiname:'N',unlocked:true,batchSupport:{canRemove:true}},{name:'Natural bit',apiname:'B',unlocked:true,batchSupport:{canRemove:true}}],preview={selection:rows.map(r=>({apiname:r.apiname,action:'remove'})),effects:rows.map(r=>({apiname:r.apiname,name:r.name,action:'remove',warning:'Linked progress is unchanged.'})),progressChanges:[],revision:'a'.repeat(64),canActivate:true,message:'Review'};
   const w=ui(t,url=>{calls.push(url);return url==='/api/achievement/change-preview'?preview:url.includes('/percentages?')?{percentages:{N:2,B:10},rarityStatus:'historical',rarityMessage:'Historical Steam percentages; current data unavailable.'}:response(rows);});w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');await new Promise(r=>setImmediate(r));assert.equal(w.document.querySelectorAll('.ach-select').length,2);assert.match(w.document.getElementById('achRarityMessage').textContent,/Historical/);w.testUI.filter('rarity','mythic');assert.match(w.document.getElementById('achListContainer').textContent,/Mythic · 2.0%/);w.testUI.filter('rarity','all');
