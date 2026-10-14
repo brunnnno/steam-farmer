@@ -152,17 +152,22 @@ function renderAccountsTabs(list, selected) {
 function switchAccount(id) { if (id === activeAccountId) return; resetSettingsDrafts();activeAccountId = id; sessionStorage.setItem('sf_account', id); active = accounts.find(a=>a.id===id); closeAchModal(); loadStatus(); }
 function renderPresets(list) { const snapshot=JSON.stringify(list);if(snapshot===presetsSnapshot)return;presetsSnapshot=snapshot; $('presetsContainer').replaceChildren(element('span','Presets:')); for (const p of list) $('presetsContainer').append(button(p.name, () => applyPreset(p.key), 'chip')); }
 function renderGames(games) {
-  const snapshot=JSON.stringify([activeAccountId,games,active.gameNames]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
+  const runningSet=new Set(active?.isFarming?(active.runningGames||[]):[]);
+  const snapshot=JSON.stringify([activeAccountId,games,active.gameNames,[...runningSet],Boolean(active?.isPaused)]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
   const grid = $('gamesGrid');
-  if (!games.length) { grid.replaceChildren(element('p','Add games by title or AppID.')); return; }
+  if (!games.length) { grid.replaceChildren(element('p','Add up to 32 games by title or AppID (you can paste multiple AppIDs separated by commas).')); return; }
   const cards = [];
   for (const id of games) {
-    const title = active.gameNames[id] || `AppID ${id}`; const card = element('div',undefined,'card');
+    const isRunning=runningSet.has(id);
+    const title = active.gameNames[id] || `AppID ${id}`; const card = element('div',undefined,'card'+(isRunning?' card-running':''));
     const art=element('div',undefined,'game-art'),fallback=element('div',undefined,'game-art-placeholder');fallback.setAttribute('aria-hidden','true');
     fallback.append(element('span',title.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(),'game-art-monogram'),element('span',title,'game-art-name'));
     const banner=image(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`,'card-banner',[`https://cdn.akamai.steamstatic.com/steam/apps/${id}/header.jpg`,`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/library_hero.jpg`]);
     art.append(fallback,banner);card.append(art);
-    const content = element('div',undefined,'card-content'); content.append(element('div',title,'card-title'),element('div',`#${id}`,'card-appid'));
+    const content = element('div',undefined,'card-content');
+    const metaRow=element('div',undefined,'card-header-info');
+    metaRow.append(element('div',`#${id}`,'card-appid'),element('span',isRunning?'● Running in Steam':active?.isPaused?'Standby':'Ready','card-state'+(isRunning?' active':'')));
+    content.append(element('div',title,'card-title'),metaRow);
     const actions = element('div',undefined,'card-actions');const menu=element('details',undefined,'control-menu');menu.append(element('summary','Options'));const menuContent=element('div',undefined,'control-menu-content');menuContent.append(button('Remove',()=>removeGame(id),'btn-card-remove'));menu.append(menuContent);actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web'),'btn-card-ach'),menu);
     content.append(actions); card.append(content); cards.push(card);
   }
@@ -409,16 +414,18 @@ async function reviewChangeSelection(input=[...achievementSelection.values()],op
   if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||!input.length||!isAuthorizedAccount(active))return;
   const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=selectionVersion;
   const selectedRows=input.map(item=>currentAchList.find(a=>a.apiname===item.apiname)).filter(Boolean);
-  const bulk=Boolean(options.bulk||input.length>32||selectedRows.some(r=>Number.isInteger(r.statId)||r.hasProgressDependency||r.batchSupport?.canReactivate));
+  const hasRealStatId=selectedRows.some(r=>Number.isInteger(r.statId));
+  const bulk=Boolean(options.bulk||input.length>32||hasRealStatId||selectedRows.some(r=>r.hasProgressDependency||r.batchSupport?.canReactivate));
+  const resetCounters=Boolean(options.resetCounters??(hasRealStatId&&input.some(i=>i.action==='remove')));
   experimentBusy=true;renderAchModal();
   try{
-    const preview=await api('/api/achievement/change-preview',{accountId:account,appid:id,selection:input,...(bulk?{bulk:true}:{})});
+    const preview=await api('/api/achievement/change-preview',{accountId:account,appid:id,selection:input,...(bulk?{bulk:true}:{}),...(resetCounters?{resetCounters:true}:{})});
     if(serial!==achSerial||version!==selectionVersion||account!==activeAccountId||id!==currentAchAppId||currentAchMethod!=='protocol')return;
-    renderReviewedChangesPanel(preview,{id,account,serial,version,bulk});
+    renderReviewedChangesPanel(preview,{id,account,serial,version,bulk,resetCounters});
   }catch(e){if(serial===achSerial&&account===activeAccountId)notice(e.message);}
   finally{experimentBusy=false;if(serial===achSerial&&account===activeAccountId)renderAchModal();}
 }
-async function reviewBulkChanges(bulkAction,resetCounters=false){
+async function reviewBulkChanges(bulkAction,resetCounters=bulkAction==='lock_all'&&currentAchList.some(a=>Number.isInteger(a.statId))){
   if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||!['unlock_all','lock_all'].includes(bulkAction)||!isAuthorizedAccount(active))return;
   const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=++selectionVersion;experimentBusy=true;renderAchModal();
   try{
@@ -568,7 +575,12 @@ async function unlockIndividualAchievement(row) {
   catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
   finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===id && $('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');else if($('achModal').style.display==='flex')renderAchModal();}
 }
-async function addGame(id,name) { const account=activeAccountId; const result=await action('/api/add',{appid:Number(id),name:name||''}); if(result && account===activeAccountId) $('searchInput').value=''; }
+async function addGame(id,name) {
+  const account=activeAccountId;
+  const payload=Array.isArray(id)?{appids:id.map(Number)}:{appid:Number(id),name:name||''};
+  const result=await action('/api/add',payload);
+  if(result && account===activeAccountId) $('searchInput').value='';
+}
 function removeGame(id){return action('/api/remove',{appid:id});}
 function clearAll(){if(confirm('Remove all games from the manual list?'))return action('/api/clear-all');}
 function applyPreset(key){return action('/api/apply-preset',{presetKey:key});}
@@ -585,7 +597,13 @@ $('searchInput').addEventListener('input',()=>{
   if(!term||/^\d+$/.test(term))return;
   debounce=setTimeout(async()=>{try{const list=await api('/api/search?term='+encodeURIComponent(term));if(serial!==searchSerial)return;for(const item of list){const b=button(item.name,()=>{addGame(item.id,item.name);$('searchResults').style.display='none';},'search-item');b.prepend(image(item.img));$('searchResults').append(b);}$('searchResults').style.display=list.length?'block':'none';}catch(e){notice(e.message);}},350);
 });
-$('searchInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&/^\d+$/.test($('searchInput').value.trim()))addGame(Number($('searchInput').value));});
+$('searchInput').addEventListener('keydown',event=>{
+  if(event.key!=='Enter')return;
+  const raw=$('searchInput').value.trim();
+  if(/^\d+$/.test(raw))return addGame(Number(raw));
+  const ids=raw.split(/[\s,;]+/).filter(Boolean);
+  if(ids.length>1&&ids.every(x=>/^\d+$/.test(x)))return addGame(ids.map(Number));
+});
 $('pinInput').addEventListener('keydown',event=>{if(event.key==='Enter')unlock();});
 document.addEventListener('click',event=>{if(!$('searchResults').contains(event.target)&&event.target!==$('searchInput'))$('searchResults').style.display='none';});
 setInterval(()=>{if(document.hidden)return;const start=active?.sessionStartTime, count=active?.runningGames?.length||0;const seconds=start&&active.isFarming?Math.max(0,Math.floor((Date.now()-start)/1000)):0;$('timerVal').textContent=`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m ${seconds%60}s`;$('hoursVal').textContent=(seconds/3600*count).toFixed(1)+' estimated hrs';},1000);

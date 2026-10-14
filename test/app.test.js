@@ -531,4 +531,20 @@ test('encrypted Vault accounts support >32 manual selections, live gamesPlayed e
   assert.equal(readWeb.response.status,200);
   assert.equal(readWeb.data.readingMethod,'protocol');
   assert.equal(readWeb.data.achievements.filter(a=>a.unlocked===true).length,36);
+
+  // When paused, completing an achievement operation immediately sends gamesPlayed([]) so Steam stops showing in-game
+  await f.request('/api/toggle',{accountId:'user2'});
+  assert.deepEqual(client.calls.at(-1),[]);
+  const lockPreview=await f.request('/api/achievement/change-preview',{accountId:'user2',appid:34830,bulk:true,bulkAction:'lock_all',resetCounters:true});
+  const lockConfirm=await f.request('/api/achievement/change',{accountId:'user2',appid:34830,bulk:true,bulkAction:'lock_all',resetCounters:true,selection:lockPreview.data.selection,revision:lockPreview.data.revision,confirmed:true});
+  assert.equal(lockConfirm.data.outcome,'confirmed');
+  assert.deepEqual(client.calls.at(-1),[]);
+
+  // Resume and add batch of 32 games simultaneously
+  await f.request('/api/toggle',{accountId:'user2'});
+  const batch32=Array.from({length:32},(_,i)=>1000+i);
+  await f.request('/api/clear-all',{accountId:'user2'});
+  await f.request('/api/add',{accountId:'user2',appids:batch32});
+  assert.equal(f.app.cfg.accounts[0].games.length,32);
+  assert.deepEqual(client.calls.at(-1),batch32);
 });

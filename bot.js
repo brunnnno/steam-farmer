@@ -101,14 +101,16 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     const state=states.get(id);if(state.pausedInitialized!==true){state.isPaused=Boolean(cfg.accounts.find(a=>a.id===id)?.paused);state.pausedInitialized=true;}return state;
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
-  function farming(acc) {
+  function farming(acc, force = false) {
     if(persistence && !persistence.available)return;
     const st = stateFor(acc.id); syncSleep(acc);
     const client = clients.get(acc.id); if (!client) return;
-    let games = acc.cardFarming ? (st.cardsReady ? st.cardDropGames.slice(0, 32).map(g => g.appid) : []) : acc.games;
+    let games = acc.cardFarming
+      ? (st.cardsReady ? [...new Set([...st.cardDropGames.map(g => g.appid), ...acc.games])].slice(0, 32) : [])
+      : acc.games.slice(0, 32);
     if (!st.connected || st.isPaused || st.isCollisionPaused || st.isSleepPaused) games = [];
-    const list = [...games]; if (games.length && acc.customStatus) list.push(acc.customStatus);
-    if (JSON.stringify(list) === JSON.stringify(st.playedGames)) return;
+    const list = [...games]; if (games.length && acc.customStatus && list.length < 32) list.push(acc.customStatus);
+    if (!force && JSON.stringify(list) === JSON.stringify(st.playedGames)) return;
     try {
       client.gamesPlayed(list); st.playedGames = list;
       if (games.length && !st.isFarming) st.sessionStartTime = Date.now();
@@ -556,10 +558,10 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
             writeSelection=buildBulkSelection(snapshot,id,bulkAction,receipts,{filterNames,allowRetoggle});
           }
-          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed([id]);st.playedGames=[id];}}catch{}return intent;}});
+          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();const hasUnlocks=plan.effects.some(e=>e.action==='unlock');try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed(hasUnlocks?[id]:[]);st.playedGames=hasUnlocks?[id]:[];}}catch{}return intent;}});
           try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}
           return json(res,200,result);
-        }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();if(options.silent){st.playedGames=[];farming(acc);}else setTimeout(()=>{if(!closing&&cfg.accounts.includes(acc)&&states.get(acc.id)===st){st.playedGames=[];farming(acc);}},3500).unref();}
+        }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }
       if(url.pathname==='/api/achievement/float-search'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
@@ -639,7 +641,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           if(reserved)try{if(mode==='shared')await journal.finishShared(st.steamId64,id,apiName,result);else await journal.finish(st.steamId64,id,apiName,result);}catch{result.historyPersisted=false;result.message+=' The result could not be saved to history; the recorded intent remains pending. Do not retry.';}
           console.log('[Achievement activation result] '+JSON.stringify(result));
           return json(res,200,result);
-        } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();if(options.silent){st.playedGames=[];farming(acc);}else setTimeout(()=>{if(!closing&&cfg.accounts.includes(acc)&&states.get(acc.id)===st){st.playedGames=[];farming(acc);}},3500).unref();}
+        } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }
       if (url.pathname === '/api/achievement-experiment' && req.method === 'POST') {
         if(data.confirmed!==true)throw fail('Confirm the concrete achievement change before sending.');
@@ -695,8 +697,15 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           for (const [id, a] of attempts) if (a.targetId === acc.id) cancelAttempt(id);
           disconnect(acc.id); vault.remove(acc.id); stateFor(acc.id).error = 'Session removed. Please sign in again.'; break;
         case '/api/add': {
-          const id = appId(data.appid); if (!acc.games.includes(id)) { if (acc.games.length >= 32) throw fail('Maximum 32 games.'); acc.games.push(id); }
-          if (data.name) acc.gameNames[id] = text(data.name, 256); save(); farming(acc); resolveNames(acc).catch(() => {}); break;
+          const rawIds = Array.isArray(data.appids) && data.appids.length ? data.appids.slice(0, 32).map(appId) : [appId(data.appid)];
+          for (const id of rawIds) {
+            if (!acc.games.includes(id)) {
+              if (acc.games.length >= 32) { if (rawIds.length === 1) throw fail('Maximum 32 games.'); break; }
+              acc.games.push(id);
+            }
+            if (rawIds.length === 1 && data.name) acc.gameNames[id] = text(data.name, 256);
+          }
+          save(); farming(acc, true); resolveNames(acc).catch(() => {}); break;
         }
         case '/api/remove': { const id = appId(data.appid); acc.games = acc.games.filter(g => g !== id); delete acc.gameNames[id]; save(); farming(acc); break; }
         case '/api/clear-all': acc.games = []; acc.gameNames = {}; save(); farming(acc); break;

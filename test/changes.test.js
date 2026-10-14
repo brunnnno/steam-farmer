@@ -186,6 +186,7 @@ test('Sniper Ghost Warrior 24-achievement scenario: unlocks remaining 10 progres
   assert.equal(unlockSel.length,10);
   const unlockPlan=prepareChanges(s,34830,unlockSel,new Map(),undefined,{bulk:true});
   assert.equal(unlockPlan.effects.length,10);
+  assert.equal(unlockPlan.payload.explicit_reset,false);
   const allUnlockedSnap={
     ...final(s,unlockPlan),
     // Simulate lagging Steam librarySummary still reporting 14/24
@@ -198,6 +199,8 @@ test('Sniper Ghost Warrior 24-achievement scenario: unlocks remaining 10 progres
   assert.equal(lockSel.length,24);
   const lockPlan=prepareChanges(allUnlockedSnap,34830,lockSel,new Map(),undefined,{bulk:true,resetCounters:true});
   assert.equal(lockPlan.effects.length,24);
+  assert.equal(lockPlan.payload.explicit_reset,true);
+  assert.ok(lockPlan.progressChanges.every(p=>p.after===0));
   const allLockedSnap={
     ...final(allUnlockedSnap,lockPlan),
     // Simulate lagging Steam librarySummary still reporting 14/24

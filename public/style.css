@@ -421,3 +421,89 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 .achievement-selection .btn-clear{padding:8px 12px;font-size:.85rem}
 .bulk-reset-toggle{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:var(--text);cursor:pointer}
 .bulk-reset-toggle input{width:16px;height:16px;accent-color:var(--primary);cursor:pointer}
+
+/* Steam Control Room Pro — Executive Polish */
+:root {
+  --bg: #060a12;
+  --card-bg: rgba(15, 23, 36, 0.86);
+  --card-border: rgba(148, 163, 184, 0.14);
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --accent-cyan: #38bdf8;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+}
+body {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -15%, rgba(52, 211, 153, 0.14), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(56, 189, 248, 0.10), transparent 55%),
+    var(--bg);
+}
+.dashboard-panel, .controls {
+  background: linear-gradient(180deg, rgba(19, 29, 46, 0.88) 0%, rgba(12, 19, 31, 0.92) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.stat-item {
+  background: linear-gradient(145deg, rgba(10, 16, 27, 0.9), rgba(15, 24, 38, 0.75));
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.stat-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.card {
+  background: linear-gradient(180deg, #121c2b 0%, #0d1522 100%);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+}
+.card.card-running {
+  border-color: rgba(52, 211, 153, 0.55);
+  box-shadow: 0 12px 32px rgba(16, 185, 129, 0.16), 0 0 0 1px rgba(52, 211, 153, 0.2);
+}
+.card-state {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  white-space: nowrap;
+}
+.card-state.active {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.2);
+}
+.btn-main {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  color: #03150e;
+  font-weight: 800;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
+}
+.btn-main:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6ee7b7 0%, #34d399 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(52, 211, 153, 0.35);
+}
+.ach-modal-card {
+  background: linear-gradient(180deg, #0f1826 0%, #09101a 100%);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.88);
+}
+.ach-item {
+  background: linear-gradient(145deg, rgba(20, 31, 46, 0.9) 0%, rgba(15, 24, 36, 0.85) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+.ach-item:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+.ach-item.unlocked-item {
+  background: linear-gradient(145deg, rgba(16, 45, 38, 0.88) 0%, rgba(12, 32, 28, 0.82) 100%);
+  border-color: rgba(52, 211, 153, 0.35);
+}
