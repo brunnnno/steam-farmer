@@ -36,3 +36,7 @@ The temporary branch passed schema, foreign-key, duplicate-reservation, two-memb
 ## Verification
 
 Unit tests exercise shared planning, stale previews, protected effects, accidental extra unlocks/statistics, failed reservation, missing verification, all-effect verification, durable reservation across instances, rollback and contention. UI tests cover complete confirmation wording, cancellation and exact submission. API tests enforce authentication, reviewed revision and missing-persistence rejection.
+
+## Reviewed multi-selection
+
+Migration 003 adds a separate reviewed selection route for multiple shared INT unlocks. Every newly crossed threshold must be explicitly selected; all related effects must be known and unrestricted. It shares account locking and cooldown with legacy writes. The legacy shared endpoint retains its one-unlock restriction. See [selection and removal](achievement-selection-and-removal.md).

@@ -17,3 +17,7 @@ Synthetic tests exercise the real protobuf serializer, upward rounding and subno
 References: [Steamworks Stats and Achievements](https://partner.steamgames.com/doc/features/achievements?l=english), steam-user's installed CMsgClientStoreUserStats2 protobuf (uint32 stat_value), and previously reviewed SAM commit de8b71048a0cee3c3e97cd8535e0f55ca86513e4. No upstream implementation was copied. Native Steamworks/SAM behavior does not certify this remote protocol writer.
 
 Next: identify an owned-game FLOAT example with fresh schema and personal state, review its exact counter change, and obtain explicit user confirmation before one live attempt. No live FLOAT candidate or unlock has been confirmed in this continuation. The diagnostic endpoint was inaccessible through this browser session; no new library-search result is claimed.
+
+## Selection and recorded removal
+
+The selection route can combine independent supported counters. FLOAT activation remains counter-only and cannot mix with explicit achievement-bit changes in the same block. Removal requires a confirmed original panel activation and exactly the recorded raw counter endpoint; constraints must permit the decrease. Later game progress blocks removal. Shared FLOAT and AVGRATE remain unsupported. See [selection and removal](achievement-selection-and-removal.md); migration 003 adds operation history for this new route only.

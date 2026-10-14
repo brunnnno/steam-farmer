@@ -25,6 +25,37 @@ test('shared API stays read-only without persistent reservations and never bypas
   assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
 });
 const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
+test('reviewed selections require authentication, CSRF, main identity, migration and exact confirmation',async t=>{
+  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));a.push(Buffer.from([8]));return Buffer.concat(a);}
+  const snapshot={game_id:'550',eresult:1,crc_stats:12,schema:kv({'550':{stats:{7:{type:'4',bits:{0:{name:'A'},1:{name:'B'}}}}}}),stats:[{stat_id:7,stat_value:0}]};
+  let ready=true,writes=0,finish=0,reservations=0,failReservation=false,failFinish=false;const receipts=new Map();
+  const operations={schema:async()=>ready,latest:async()=>receipts,list:async()=>[],reserve:async plan=>{if(failReservation)throw Object.assign(Error('Intent unavailable'),{status:503});reservations++;return require('../lib/achievement-operations').cleanOperation({...plan,operationId:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',checkedAt:new Date().toISOString(),outcome:'requested'});},finish:async(_,result)=>{if(failFinish)throw Error('Result unavailable');finish++;for(const e of result.effects)receipts.set(e.apiname,{...e,operationId:result.operationId,outcome:result.outcome,checkedAt:result.checkedAt});}};
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f;
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{operationsJournal:{...operations,reserve:(_,plan)=>operations.reserve(plan)},progressSnapshotReader:async()=>snapshot,changesWriter:async(client,id,selected,options)=>{let reads=0;return require('../lib/achievement-writer').applyChanges(client,id,selected,{...options,read:async()=>++reads===1?snapshot:{...snapshot,crc_stats:13,stats:[{stat_id:7,stat_value:3}]},send:async()=>{writes++;return {game_id:'550',eresult:1};}});}});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  const selection=[{apiname:'A',action:'unlock'},{apiname:'B',action:'unlock'}],body={accountId:'main',appid:550,selection},previewRoute='/api/achievement/change-preview',writeRoute='/api/achievement/change';
+  assert.equal((await f.request(previewRoute,body)).response.status,401);await f.login();await f.request('/api/status');assert.equal((await f.request(previewRoute,body,{csrf:false})).response.status,403);
+  Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});const client=new FakeUser({});client._send=()=>{};f.app.clients.set('main',client);
+  const review=await f.request(previewRoute,body);assert.equal(review.data.canActivate,true);assert.equal(writes,0);assert.equal(reservations,0);assert.equal(review.data.effects.length,2);assert.equal('payload'in review.data,false);assert.equal('view'in review.data,false);
+  assert.equal((await f.request(writeRoute,{...body,revision:review.data.revision})).response.status,400);
+  assert.equal((await f.request(writeRoute,{...body,revision:'b'.repeat(64),confirmed:true})).response.status,409);assert.equal(writes,0);
+  ready=false;assert.equal((await f.request(previewRoute,body)).data.canActivate,false);assert.equal((await f.request(writeRoute,{...body,revision:review.data.revision,confirmed:true})).response.status,503);ready=true;
+  failReservation=true;assert.equal((await f.request(writeRoute,{...body,revision:review.data.revision,confirmed:true})).response.status,503);assert.equal(writes,0);failReservation=false;
+  const result=await f.request(writeRoute,{...body,revision:review.data.revision,confirmed:true});assert.equal(result.data.outcome,'confirmed');assert.equal(writes,1);assert.equal(reservations,1);assert.equal(finish,1);
+});
+test('chunked oversized JSON returns a structured 413 and coercible nonnumeric IDs are rejected',async t=>{
+  const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]});await f.login();
+  for(const appid of [true,false,[550],{value:550},'0x226','5.5e2'])assert.equal((await f.request('/api/add',{accountId:'a',appid})).response.status,400);
+  const http=require('node:http'),token=[...f.app.sessions.keys()][0],csrf=f.app.sessions.get(token).csrf;
+  const response=await new Promise((resolve,reject)=>{const req=http.request(f.base+'/api/add',{method:'POST',headers:{Cookie:'sf_session='+token,'X-CSRF-Token':csrf,'Content-Type':'application/json'}},res=>{let body='';res.on('data',c=>body+=c);res.on('end',()=>resolve({status:res.statusCode,body}));});req.on('error',reject);req.write('{"accountId":"a","value":"'+'x'.repeat(40000));req.end('x'.repeat(40000)+'"}');});assert.equal(response.status,413);assert.match(response.body,/Request too large/);
+});
+test('API readings disable HTTP caching of private state',async t=>{
+  const f=await fixture(t);await f.login();assert.equal((await f.request('/api/status')).response.headers.get('cache-control'),'no-store');
+});
+test('free-license requests cannot overlap and a late response cannot be assigned to another Steam identity',async t=>{
+  const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]});await f.login();await f.request('/api/status');Object.assign(f.app.states.get('a'),{connected:true});const client=new FakeUser({});let callback,calls=0;client.requestFreeLicense=(_,cb)=>{calls++;callback=cb;};f.app.clients.set('a',client);
+  const first=f.request('/api/claim-free',{accountId:'a'});await new Promise(r=>setTimeout(r,20));assert.equal((await f.request('/api/claim-free',{accountId:'a'})).response.status,429);assert.equal(calls,1);
+  client.steamID={toString:()=> '76561198000000002'};callback(null,[10],[730]);assert.equal((await first).response.status,409);assert.equal(f.app.states.get('a').claimPending,false);
+});
 test('rarity metadata cache does not substitute an API-only result for a title-enriched XML lookup',async t=>{
   const modes=[];const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]},{percentagesReader:async(id,options)=>{modes.push(options.includeTitles);return {appid:id,percentages:{API:10},...(options.includeTitles?{titlePercentages:{title:10}}:{})};}});
   await f.login();const route='/api/achievement/percentages?accountId=a&appid=550';await f.request(route);
@@ -82,6 +113,10 @@ test('decimal API binds the review to fresh data and reserves persistent evidenc
   failHistory=false;const write=await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision});assert.equal(write.response.status,200);assert.equal(write.data.outcome,'confirmed');assert.equal(result.progressVerification[0].observedRaw,0x41280000);assert.equal(writes,1);assert.deepEqual(order,['read','reserve','send','read','finish']);assert.equal((await f.request(route)).data.canActivate,false);
 });
 function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:TOKEN_EXPIRY})).toString('base64url')}.signature`; }
+test('hours reject coercible values and cached time-zone formatters preserve cross-midnight schedules',()=>{
+  for(const value of [true,false,null,[],[0],'','0x10','1e1'])assert.throws(()=>hour(value));assert.equal(hour('00'),0);assert.equal(hour('23'),23);
+  const schedule={enabled:true,start:22,end:3},date=new Date('2026-10-13T03:30:00Z');assert.equal(sleepNow(schedule,'America/Montevideo',date),true);assert.equal(sleepNow(schedule,'UTC',date),false);assert.equal(sleepNow(schedule,'America/Montevideo',date),true);
+});
 class FakeLogin extends EventEmitter {
   static latest;
   constructor(){super();FakeLogin.latest=this;this.steamID={toString:()=> '76561198000000001'};this.accountName='owner';this.refreshToken=token();}
@@ -316,4 +351,15 @@ test('unavailable persistent history does not hide real Steam states and blocks 
   let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{achievementJournal:journal,protocolReader:async()=>({achievements:[{apiname:'ONE',unlocked:false,compatibility:{status:'provisional',canUnlock:true}}],verified:true}),individualWriter:async(_,id,name,options)=>{await options.beforeSend({appid:id,apiname:name});writes++;return {outcome:'confirmed'};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
   const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.response.status,200);assert.equal(view.data.achievements[0].unlocked,false);assert.equal(view.data.achievements[0].compatibility.canUnlock,false);assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'ONE'})).response.status,503);assert.equal(writes,0);
+});
+
+test('revoking the panel session during durable reservation blocks the Steam transport',async t=>{
+  const kv=obj=>{const parts=[];for(const[k,v]of Object.entries(obj))parts.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));parts.push(Buffer.from([8]));return Buffer.concat(parts);};
+  const snapshot={game_id:'550',eresult:1,crc_stats:12,schema:kv({'550':{stats:{7:{type:'4',bits:{0:{name:'A'}}}}}}),stats:[{stat_id:7,stat_value:0}]};
+  let f,reserved=0,sent=0;const operations={schema:async()=>true,latest:async()=>new Map(),list:async()=>[],reserve:async(_,plan)=>{reserved++;f.app.sessions.clear();return {...require('../lib/achievement-operations').cleanOperation(plan),operationId:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',outcome:'requested'};},finish:async()=>assert.fail('No result may be confirmed after a blocked send.')};
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();
+  try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{operationsJournal:operations,progressSnapshotReader:async()=>snapshot,changesWriter:async(client,id,selected,options)=>require('../lib/achievement-writer').applyChanges(client,id,selected,{...options,read:async()=>snapshot,send:async()=>{sent++;return {game_id:'550',eresult:1};}})});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});const client=new FakeUser({});client._send=()=>{};f.app.clients.set('main',client);
+  const input={accountId:'main',appid:550,selection:[{apiname:'A',action:'unlock'}]};const review=await f.request('/api/achievement/change-preview',input);
+  const result=await f.request('/api/achievement/change',{...input,revision:review.data.revision,confirmed:true});assert.equal(result.response.status,401);assert.equal(reserved,1);assert.equal(sent,0);
 });

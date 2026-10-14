@@ -2,6 +2,9 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {achievements,parseXml,parseHtml,remote,parseCards}=require('../lib/steam-data');
 const sid='76561198000000001';
+test('successful HTTP 204 webhook responses do not attempt to iterate a missing body',async()=>{
+  let calls=0;const r=await remote('https://discord.com/api/webhooks/123/test-token',{method:'POST',body:'{}'},async()=>{calls++;return new Response(null,{status:204});});assert.equal(r.body,'');assert.equal(calls,1);
+});
 test('verified personal XML returns before a stalled optional source and aborts remaining fetches',async()=>{
   let signal,release;const stalled=new Promise(r=>release=r);
   const xml='<playerstats><steamID64>'+sid+'</steamID64><achievements><achievement closed="1"><apiname>REAL</apiname><name>One</name></achievement></achievements></playerstats>';

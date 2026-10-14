@@ -404,3 +404,12 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 @media(max-width:600px) { .ach-toolbar > div:last-child { grid-template-columns:repeat(2,minmax(0,1fr)); }.ach-toolbar > div:last-child input { grid-column:1 / -1; } }
 [hidden] { display:none !important; }
 @media(max-width:600px) { .ach-impact-effect { grid-template-columns:minmax(0,1fr); } }
+.achievement-selection{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 20px;border-block:1px solid var(--card-border);background:rgba(52,211,153,.07);flex-shrink:0}
+.achievement-selection[hidden]{display:none}
+.achievement-selection>div{display:flex;gap:8px;flex-wrap:wrap}
+.achievement-selection .btn-main{padding:8px 12px;font-size:.85rem}
+.ach-select{width:20px!important;height:20px;min-width:20px;max-width:20px;accent-color:#34d399;margin-block:auto;padding:0;flex-shrink:0;cursor:pointer}
+.ach-selector{width:44px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.shared-review-open .achievement-selection,.shared-review-open .privacy-banner{display:none!important}
+@media(max-width:600px){.ach-item.selectable{grid-template-columns:44px 40px minmax(0,1fr);gap:10px 8px}.ach-item.selectable .ach-selector{grid-column:1;grid-row:1 / span 2}.ach-item.selectable img{width:40px;height:40px;grid-column:2;grid-row:1}.ach-item.selectable .ach-info{grid-column:3;grid-row:1}.ach-item.selectable .ach-state{grid-column:3;grid-row:2}}
+@media(max-width:600px){.achievement-selection{flex-wrap:wrap;padding:10px 12px}.achievement-selection>div{width:100%}.achievement-selection .btn-main{flex:1}}
