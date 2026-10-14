@@ -44,3 +44,9 @@ The user explicitly approved publication and migration. The Neon connector appli
 ## Visible controls (2.1.3)
 
 The action strip remains visible before selection. Community/automatic fallback readings show **Enable achievement changes**, which requests a fresh direct reading only. After successful verification, the strip explains the 32-selection limit and current unrestricted removal scope. **Review selected changes** stays disabled until a checkbox is selected; **Clear selection** appears only for a selection. Eligible unlocked achievements also have **Review removal**. Unavailable rows display their actual snapshot, permission or history reason. No shortcut writes Steam or bypasses full-impact confirmation. The footer shows v2.1.3. No live removal is claimed until Steam confirms a separately authorized write.
+
+## Bulk Unlock all, Lock all and counter reset
+
+- **Unlock all / Lock all**: `POST /api/achievement/change-preview` and `POST /api/achievement/change` accept `bulk: true`, `bulkAction: 'unlock_all' | 'lock_all'`, `resetCounters: boolean` and `allowRetoggle: boolean`, scaling up to 8,192 achievements in a single reviewed operation while retaining full bitmask/counter verification.
+- **Counter reset on Lock all**: When `resetCounters: true` is selected during `lock_all` (or bulk removal), writable non-`incrementonly` INT and FLOAT counters whose referencing achievements will all be locked are reset to `Math.max(0, min)`.
+- **Bounded JSONB receipts**: `cleanOperation` compacts stored effect arrays above 64 items when a bulk receipt would otherwise exceed 65,536 bytes, preserving `totalEffects` and `effectsTruncated: true`.

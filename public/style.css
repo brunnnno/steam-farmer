@@ -417,3 +417,7 @@ footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; b
 .achievement-selection .achievement-selection-copy{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}
 .achievement-selection-copy small{font-size:.78rem;line-height:1.45;color:var(--text-muted)}
 .achievement-selection .achievement-selection-actions{align-items:center}
+
+.achievement-selection .btn-clear{padding:8px 12px;font-size:.85rem}
+.bulk-reset-toggle{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:var(--text);cursor:pointer}
+.bulk-reset-toggle input{width:16px;height:16px;accent-color:var(--primary);cursor:pointer}

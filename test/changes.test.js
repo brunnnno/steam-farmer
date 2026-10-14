@@ -80,3 +80,72 @@ test('typed executor sends once after durable reservation, verifies removals and
   const pending=Object.assign(new EventEmitter(),{steamID:client.steamID,_send(){}});const unknown={...options,read:async()=>s,send:async()=>{sends++;throw Error('Timeout');}};assert.equal((await applyChanges(pending,550,remove('A','B'),unknown)).outcome,'unknown');await assert.rejects(applyChanges(pending,550,remove('A','B'),unknown),/already attempted/);assert.equal(sends,2);
   const fresh=Object.assign(new EventEmitter(),{steamID:client.steamID,_send(){}});await assert.rejects(applyChanges(fresh,550,remove('A','B'),{...unknown,beforeSend:async()=>{throw Error('History unavailable');}}));assert.equal(sends,2);
 });
+
+test('bulk unlock_all and lock_all handle >32 achievements, mixed FLOAT/bit blocks, counter resets and retoggling',()=>{
+  const {buildBulkSelection}=require('../lib/achievement-changes');
+  const {cleanOperation}=require('../lib/achievement-operations');
+  const bits={
+    0:{name:'BIT_0'},
+    1:{name:'INT_SHARED_1',progress:progress(10)},
+    2:{name:'INT_SHARED_2',progress:progress(50)},
+    3:{name:'FLOAT_1',progress:{max_val:'12.5',value:{operation:'statvalue',operand1:'DIST'}}},
+    4:{name:'SERVER_PROTECTED',permission:'2'}
+  };
+  for(let i=5;i<32;i++)bits[i]={name:'EXTRA_'+i};
+  const extraBlocks={};
+  for(let b=1;b<=3;b++){
+    const bBits={};
+    for(let i=0;i<20;i++)bBits[i]={name:`BULK_${b}_${i}`};
+    extraBlocks[100+b]={type:'4',bits:bBits};
+  }
+  const s={
+    game_id:'550',eresult:1,crc_stats:55,
+    schema:kv({'550':{stats:{
+      7:{type:'4',bits},
+      ...extraBlocks,
+      9:{type:'INT',name:'COUNT',min:'0',max:'100'},
+      10:{type:'FLOAT',name:'DIST',min:'0',max:'100'}
+    }}}),
+    stats:[
+      {stat_id:7,stat_value:0},
+      {stat_id:101,stat_value:0},
+      {stat_id:102,stat_value:0},
+      {stat_id:103,stat_value:0},
+      {stat_id:9,stat_value:0},
+      {stat_id:10,stat_value:floatBits(1.5)}
+    ]
+  };
+  const unlockSel=buildBulkSelection(s,550,'unlock_all');
+  assert.equal(unlockSel.length,91);
+  assert.ok(!unlockSel.some(x=>x.apiname==='SERVER_PROTECTED'));
+  const unlockPlan=prepareChanges(s,550,unlockSel,new Map(),undefined,{bulk:true});
+  assert.equal(unlockPlan.bulk,true);
+  assert.equal(unlockPlan.effects.length,91);
+  assert.equal(unlockPlan.progressChanges.length,2);
+  const unlockedSnap=final(s,unlockPlan);
+  assert.equal(verifyChanges(s,unlockedSnap,unlockPlan,ack).confirmed,true);
+
+  const lockSel=buildBulkSelection(unlockedSnap,550,'lock_all');
+  assert.equal(lockSel.length,91);
+  const lockPreserve=prepareChanges(unlockedSnap,550,lockSel,new Map(),undefined,{bulk:true,resetCounters:false});
+  assert.equal(lockPreserve.progressChanges.length,0);
+  const lockReset=prepareChanges(unlockedSnap,550,lockSel,new Map(),undefined,{bulk:true,resetCounters:true});
+  assert.equal(lockReset.progressChanges.length,2);
+  assert.equal(lockReset.progressChanges.find(p=>p.statName==='COUNT').after,0);
+  assert.equal(lockReset.progressChanges.find(p=>p.statName==='DIST').after,0);
+  const lockedSnap=final(unlockedSnap,lockReset);
+  assert.equal(verifyChanges(unlockedSnap,lockedSnap,lockReset,ack).confirmed,true);
+
+  // Retoggling after previous confirmed unlock/remove receipts works in bulk/retoggle mode
+  const priorReceipts=new Map(unlockSel.map(item=>[item.apiname,evidence(item.apiname,0)]));
+  const retogglePlan=prepareChanges(s,550,unlockSel,priorReceipts,undefined,{bulk:true,allowRetoggle:true});
+  assert.equal(retogglePlan.effects.length,91);
+
+  // Large bulk receipt compaction stays within the 64 KiB JSONB budget
+  const hugeEffects=Array.from({length:500},(_,i)=>({apiname:'ACH_'+i,name:'Achievement title '+i+' '.repeat(8),statId:100,bitIndex:i%32,action:'unlock',before:false,after:true,progressChanges:[]}));
+  const cleaned=cleanOperation({...unlockPlan,bulk:true,effects:hugeEffects,selection:hugeEffects.map(e=>({apiname:e.apiname,action:'unlock'}))});
+  assert.ok(JSON.stringify(cleaned).length<=65536);
+  assert.equal(cleaned.effectsTruncated,true);
+  assert.equal(cleaned.totalEffects,500);
+  assert.equal(cleaned.effects.length,64);
+});

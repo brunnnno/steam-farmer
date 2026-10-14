@@ -10,13 +10,24 @@ function resetSettingsDrafts(){if(settingIds.includes(document.activeElement?.id
 let experimentBusy = false;
 const achievementSelection=new Map();let selectionVersion=0;
 function clearAchievementSelection(){achievementSelection.clear();selectionVersion++;updateSelectionSummary();}
+function eligibleForUnlock(a){
+  return Boolean(a?.apiname&&a.unlocked===false&&!a.serverControlled&&!['steam_rejected','pending_verification','insufficient_data'].includes(a.compatibility?.status)&&(a.compatibility?.canUnlock||a.progressSupport?.canComplete||a.progressSupport?.canPreviewFloat||a.progressSupport?.canPreviewShared||a.batchSupport?.canReactivate||a.lastWriteOutcome==='confirmed'));
+}
+function eligibleForLock(a){
+  return Boolean(a?.apiname&&a.unlocked===true&&(a.batchSupport?.canRemove===true||a.removalSupport?.canRemove===true));
+}
 function updateSelectionSummary(){
   const bar=$('achievementSelectionBar');bar.hidden=!currentAchAppId;
   const unlocks=[...achievementSelection.values()].filter(v=>v.action==='unlock').length,removals=achievementSelection.size-unlocks;
   const main=active?.tokenSource==='environment',connected=active?.connected===true&&active?.tokenAccountMatches!==false&&!active?.isCollisionPaused,direct=currentAchMethod==='protocol';
+  const canUnlockAllCount=direct&&main?currentAchList.filter(eligibleForUnlock).length:0;
+  const canLockAllCount=direct&&main?currentAchList.filter(eligibleForLock).length:0;
   $('achievementSelectionSummary').textContent=achievementSelection.size?`${unlocks} to unlock · ${removals} to remove`:'Unlock or remove achievements';
-  $('achievementSelectionHint').textContent=!main?'Achievement changes are available on the main account.':!connected?'Connect the main account to Steam, then verify this game.':!direct?'Verify through Steam to show selection boxes and check which unlocked achievements can be removed.':'Select up to 32 achievements to unlock or remove. Removal preserves gameplay progress. Review before confirming.';
+  $('achievementSelectionHint').textContent=!main?'Achievement changes are available on the main account.':!connected?'Connect the main account to Steam, then verify this game.':!direct?'Verify through Steam to show selection boxes and check which unlocked achievements can be removed.':'Select up to 32 achievements manually, or use Unlock all / Lock all for full-game reviewed operations. Removal preserves gameplay progress by default.';
   $('verifyAchievementChanges').hidden=direct||!main;$('verifyAchievementChanges').disabled=experimentBusy||!connected;
+  if($('unlockAllAchievements')){$('unlockAllAchievements').hidden=!direct||!main;$('unlockAllAchievements').disabled=experimentBusy||!direct||!connected||!canUnlockAllCount;}
+  if($('lockAllAchievements')){$('lockAllAchievements').hidden=!direct||!main;$('lockAllAchievements').disabled=experimentBusy||!direct||!connected||!canLockAllCount;}
+  if($('selectPageAchievements')){$('selectPageAchievements').hidden=!direct||!main;$('selectPageAchievements').disabled=experimentBusy||!direct||!connected||(!canUnlockAllCount&&!canLockAllCount);}
   $('reviewAchievementSelection').hidden=!direct;$('reviewAchievementSelection').disabled=experimentBusy||!direct||!achievementSelection.size;
   $('clearAchievementSelection').hidden=!achievementSelection.size;
   for(const check of document.querySelectorAll('.ach-select'))check.disabled=experimentBusy||!direct||achievementSelection.size>=32&&!check.checked;
@@ -118,15 +129,16 @@ function renderCardFarming(account){
   $('cardsStatus').textContent=account.cardError?account.cardError+' Counts may be outdated.':stopped?stopped+'. No card-farming activity is being sent.':!account.cardsReady?'Reading games with remaining card drops…':games.length?'Activity is sent to Steam for the active games; drops are not guaranteed immediately.':'Steam reports no games with pending card drops.';
   $('cardsUpdated').textContent=account.cardScanAt?`Last scan: ${new Date(account.cardScanAt).toLocaleTimeString('en-US')} · Badge counts are checked about every 10 minutes.`:'Badge counts are checked about every 10 minutes.';
   const snapshot=JSON.stringify([account.id,games,account.gameNames,[...running],stopped,account.cardsReady]);if(snapshot===cardsSnapshot)return;cardsSnapshot=snapshot;
-  const list=$('cardsList');list.replaceChildren();
+  const list=$('cardsList'),nodes=[];
   for(const game of games.slice(0,80)){
     const row=element('div',undefined,'cards-game');
     const title=game.name||account.gameNames?.[game.appid]||`AppID ${game.appid}`;
     const identity=element('div',undefined,'cards-game-identity');identity.append(element('strong',title),element('small',`#${game.appid}`));
     const state=running.has(game.appid)?'Active':stopped?'Paused':account.cardsReady?'Waiting':'Checking';
-    row.append(identity,element('span',state,'cards-game-state'+(running.has(game.appid)?' active':'')),element('span',`${game.remaining} pending`, 'cards-game-remaining'));list.append(row);
+    row.append(identity,element('span',state,'cards-game-state'+(running.has(game.appid)?' active':'')),element('span',`${game.remaining} pending`, 'cards-game-remaining'));nodes.push(row);
   }
-  if(games.length>80)list.append(element('small',`Showing the first 80 of ${games.length} games to keep the panel lightweight.`));
+  if(games.length>80)nodes.push(element('small',`Showing the first 80 of ${games.length} games to keep the panel lightweight.`));
+  list.replaceChildren(...nodes);
 }
 function renderAccountsTabs(list, selected) {
   const snapshot = JSON.stringify([selected,list.map(a=>[a.id,a.name,a.games.length])]); if(snapshot===tabsSnapshot)return; tabsSnapshot=snapshot;
@@ -136,8 +148,9 @@ function switchAccount(id) { if (id === activeAccountId) return; resetSettingsDr
 function renderPresets(list) { const snapshot=JSON.stringify(list);if(snapshot===presetsSnapshot)return;presetsSnapshot=snapshot; $('presetsContainer').replaceChildren(element('span','Presets:')); for (const p of list) $('presetsContainer').append(button(p.name, () => applyPreset(p.key), 'chip')); }
 function renderGames(games) {
   const snapshot=JSON.stringify([activeAccountId,games,active.gameNames]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
-  const grid = $('gamesGrid'); grid.replaceChildren();
-  if (!games.length) { grid.append(element('p','Add games by title or AppID.')); return; }
+  const grid = $('gamesGrid');
+  if (!games.length) { grid.replaceChildren(element('p','Add games by title or AppID.')); return; }
+  const cards = [];
   for (const id of games) {
     const title = active.gameNames[id] || `AppID ${id}`; const card = element('div',undefined,'card');
     const art=element('div',undefined,'game-art'),fallback=element('div',undefined,'game-art-placeholder');fallback.setAttribute('aria-hidden','true');
@@ -146,8 +159,9 @@ function renderGames(games) {
     art.append(fallback,banner);card.append(art);
     const content = element('div',undefined,'card-content'); content.append(element('div',title,'card-title'),element('div',`#${id}`,'card-appid'));
     const actions = element('div',undefined,'card-actions');const menu=element('details',undefined,'control-menu');menu.append(element('summary','Options'));const menuContent=element('div',undefined,'control-menu-content');menuContent.append(button('Remove',()=>removeGame(id),'btn-card-remove'));menu.append(menuContent);actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web'),'btn-card-ach'),menu);
-    content.append(actions); card.append(content); grid.append(card);
+    content.append(actions); card.append(content); cards.push(card);
   }
+  grid.replaceChildren(...cards);
 }
 function stopLoginPoll() { clearTimeout(loginTimer); loginTimer = null; }
 function openAddAccModal() { loginTarget = active && !active.user ? active.id : null; $('newAccUser').value = ''; $('newAccName').value = ''; $('newAccPassword').value = ''; $('steamGuardCode').value = ''; $('steamLoginMessage').textContent = ''; $('guardControls').hidden = true; $('connectSteamBtn').disabled = false; $('addAccModal').style.display = 'flex'; }
@@ -319,15 +333,16 @@ function renderAchModal(page=achievementPage) {
   list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&!['unknown','review'].includes(v.status)&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
   if(currentSort==='locked_first'||currentSort==='unlocked_first'){const rank=a=>a.unlocked===null?2:(a.unlocked===(currentSort==='unlocked_first')?0:1);list.sort((a,b)=>rank(a)-rank(b));}
-  const cont=$('achListContainer'); cont.replaceChildren();
+  const cont=$('achListContainer');
   const pages=Math.max(1,Math.ceil(list.length/200));page=Math.min(Math.max(0,page),pages-1);
   achievementPage=page;
+  const renderedNodes=[];
   for(const a of list.slice(page*200,(page+1)*200)) {
     const row=element('div',undefined,'ach-item '+(a.unlocked===true?'unlocked-item':'locked-item'));
     const selectEligible=currentAchMethod==='protocol'&&allowActivation&&(a.batchSupport?.canRemove===true||a.unlocked===false&&!['steam_rejected','pending_verification','attempted','insufficient_data'].includes(a.compatibility?.status)&&(a.compatibility?.canUnlock||a.progressSupport?.canComplete||a.progressSupport?.canPreviewFloat||a.progressSupport?.canPreviewShared||a.batchSupport?.canReactivate));
     if(selectEligible&&a.apiname){row.classList.add('selectable');const label=element('label',undefined,'ach-selector'),check=element('input',undefined,'ach-select');check.type='checkbox';check.checked=achievementSelection.has(a.apiname);check.setAttribute('aria-label',(a.unlocked?'Select removal of ':'Select unlock of ')+a.name);label.title=check.getAttribute('aria-label');check.addEventListener('change',()=>{
       if(experimentBusy||currentAchMethod!=='protocol')return;
-      if(check.checked){if(achievementSelection.size>=32){check.checked=false;notice('Select up to 32 achievements per reviewed operation.');return;}achievementSelection.set(a.apiname,{apiname:a.apiname,action:a.unlocked?'remove':'unlock'});}else achievementSelection.delete(a.apiname);
+      if(check.checked){if(achievementSelection.size>=32){check.checked=false;notice('Select up to 32 achievements per manual operation, or use Unlock all / Lock all.');return;}achievementSelection.set(a.apiname,{apiname:a.apiname,action:a.unlocked?'remove':'unlock'});}else achievementSelection.delete(a.apiname);
       selectionVersion++;$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');updateSelectionSummary();
     });label.append(check);row.append(label);}
     row.append(image(a.unlocked?a.iconOpen:a.iconClosed));
@@ -350,41 +365,92 @@ function renderAchModal(page=achievementPage) {
       }
       if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.action||'','ach-write-reason'));
     } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
-    row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); cont.append(row);
+    row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); renderedNodes.push(row);
   }
-  if(pages>1){const nav=element('div',undefined,'ach-pagination');if(page>0)nav.append(button('Previous',()=>{renderAchModal(page-1);cont.scrollTop=0;}));nav.append(element('span',`Page ${page+1} of ${pages} · ${list.length} matching achievements`));if(page+1<pages)nav.append(button('Next',()=>{renderAchModal(page+1);cont.scrollTop=0;}));cont.append(nav);}
-  if(!list.length) { const message=element('p',filterRarity!=='all'&&rarityLoading?'Loading rarity percentages from Steam…':filterRarity!=='all'&&rarityMissing===currentAchList.length&&currentAchList.length?'Steam has not supplied rarity percentages for this list. Try again later or use Show all.':currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); cont.append(message); if(currentAchList.length) cont.append(button('Show all',()=>{achievementPage=0;filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+  if(pages>1){const nav=element('div',undefined,'ach-pagination');if(page>0)nav.append(button('Previous',()=>{renderAchModal(page-1);cont.scrollTop=0;}));nav.append(element('span',`Page ${page+1} of ${pages} · ${list.length} matching achievements`));if(page+1<pages)nav.append(button('Next',()=>{renderAchModal(page+1);cont.scrollTop=0;}));renderedNodes.push(nav);}
+  if(!list.length) { const message=element('p',filterRarity!=='all'&&rarityLoading?'Loading rarity percentages from Steam…':filterRarity!=='all'&&rarityMissing===currentAchList.length&&currentAchList.length?'Steam has not supplied rarity percentages for this list. Try again later or use Show all.':currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); renderedNodes.push(message); if(currentAchList.length) renderedNodes.push(button('Show all',()=>{achievementPage=0;filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+  cont.replaceChildren(...renderedNodes);
   updateSelectionSummary();
 }
-async function reviewChangeSelection(input=[...achievementSelection.values()]){
+function renderReviewedChangesPanel(preview,context){
+  const {id,account,serial,version,bulk=false,bulkAction=null,resetCounters=false}=context;
+  document.querySelector('#sharedProgressReview .eyebrow').textContent='REVIEW BEFORE CONFIRMING';
+  document.querySelector('#sharedProgressReview h3').textContent=bulkAction==='unlock_all'?'Unlock all eligible achievements':bulkAction==='lock_all'?'Lock all unlocked achievements':'Selected achievement changes';
+  const summary=$('sharedProgressSummary');
+  const unlockCount=preview.selection.filter(e=>e.action==='unlock').length,removeCount=preview.selection.filter(e=>e.action==='remove').length;
+  summary.replaceChildren(element('strong',`${unlockCount} to unlock · ${removeCount} to remove`));
+  if(removeCount)summary.append(element('p',resetCounters?'Removal clears the selected achievements and resets writable non-increment-only progress counters to their minimum.':'Removal clears only the selected achievements. Gameplay counters stay unchanged; the game may unlock them again.','shared-counter-meta'));
+  if(bulkAction==='lock_all'){
+    const toggleWrap=element('label',undefined,'bulk-reset-toggle'),toggleInput=element('input');
+    toggleInput.type='checkbox';toggleInput.id='bulkResetCountersToggle';toggleInput.checked=Boolean(resetCounters);
+    toggleInput.addEventListener('change',()=>reviewBulkChanges('lock_all',toggleInput.checked));
+    toggleWrap.append(toggleInput,element('span','Reset writable progress counters to minimum when locking all'));
+    summary.append(toggleWrap);
+  }
+  for(const p of preview.progressChanges)summary.append(element('p',`${p.statName}: ${p.before} → ${p.after}`,'shared-counter-meta'));
+  const effects=$('sharedProgressEffects'),effectNodes=[];
+  for(const e of (preview.effects||[]).slice(0,64)){
+    const card=element('article',undefined,'shared-effect-card '+(e.action==='unlock'?'would_unlock':e.action==='remove'?'restricted':'progress_only')),heading=element('div',undefined,'shared-effect-heading');
+    heading.append(element('strong',e.name),element('span',e.action==='unlock'?'Will unlock':e.action==='remove'?'Will remove':'Progress only','shared-effect-badge'));card.append(heading);
+    for(const p of e.progressChanges||[])card.append(element('small',`${p.statName}: ${p.before} → ${p.after}`,'shared-effect-progress'));
+    if(e.warning)card.append(element('small',e.warning,'shared-effect-progress'));effectNodes.push(card);
+  }
+  if((preview.effects||[]).length>64)effectNodes.push(element('small',`Showing the first 64 of ${preview.effects.length} reviewed achievement effects.`));
+  effects.replaceChildren(...effectNodes);
+  $('sharedProgressActions').replaceChildren();$('sharedProgressMessage').textContent=preview.message+' Nothing has been sent to Steam.';
+  if(preview.canActivate===true)$('sharedProgressActions').append(button(bulkAction==='unlock_all'?'Confirm unlock all':bulkAction==='lock_all'?'Confirm lock all':'Confirm selected changes',()=>confirmChangeSelection(preview,{id,account,serial,version,bulk,bulkAction,resetCounters}),'btn-main shared-confirm'));
+  $('sharedProgressReview').hidden=false;document.querySelector('.ach-modal-card').classList.add('shared-review-open');
+}
+async function reviewChangeSelection(input=[...achievementSelection.values()],options={}){
   if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||!input.length||active?.tokenSource!=='environment')return;
-  const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=selectionVersion;experimentBusy=true;renderAchModal();
+  const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=selectionVersion,bulk=Boolean(options.bulk);experimentBusy=true;renderAchModal();
   try{
-    const preview=await api('/api/achievement/change-preview',{accountId:account,appid:id,selection:input});
+    const preview=await api('/api/achievement/change-preview',{accountId:account,appid:id,selection:input,...(bulk?{bulk:true}:{})});
     if(serial!==achSerial||version!==selectionVersion||account!==activeAccountId||id!==currentAchAppId||currentAchMethod!=='protocol')return;
-    document.querySelector('#sharedProgressReview .eyebrow').textContent='REVIEW BEFORE CONFIRMING';document.querySelector('#sharedProgressReview h3').textContent='Selected achievement changes';
-    const summary=$('sharedProgressSummary');summary.replaceChildren(element('strong',`${preview.selection.filter(e=>e.action==='unlock').length} to unlock · ${preview.selection.filter(e=>e.action==='remove').length} to remove`));
-    if(preview.selection.some(e=>e.action==='remove'))summary.append(element('p','Removal clears only the selected achievements. Gameplay counters stay unchanged; the game may unlock them again.','shared-counter-meta'));
-    for(const p of preview.progressChanges)summary.append(element('p',`${p.statName}: ${p.before} → ${p.after}`,'shared-counter-meta'));
-    const effects=$('sharedProgressEffects');effects.replaceChildren();
-    for(const e of preview.effects){const card=element('article',undefined,'shared-effect-card '+(e.action==='unlock'?'would_unlock':e.action==='remove'?'restricted':'progress_only')),heading=element('div',undefined,'shared-effect-heading');heading.append(element('strong',e.name),element('span',e.action==='unlock'?'Will unlock':e.action==='remove'?'Will remove':'Progress only','shared-effect-badge'));card.append(heading);for(const p of e.progressChanges||[])card.append(element('small',`${p.statName}: ${p.before} → ${p.after}`,'shared-effect-progress'));if(e.warning)card.append(element('small',e.warning,'shared-effect-progress'));effects.append(card);}
-    $('sharedProgressActions').replaceChildren();$('sharedProgressMessage').textContent=preview.message+' Nothing has been sent to Steam.';
-    if(preview.canActivate===true)$('sharedProgressActions').append(button('Confirm selected changes',()=>confirmChangeSelection(preview,{id,account,serial,version}),'btn-main shared-confirm'));
-    $('sharedProgressReview').hidden=false;document.querySelector('.ach-modal-card').classList.add('shared-review-open');
+    renderReviewedChangesPanel(preview,{id,account,serial,version,bulk});
   }catch(e){if(serial===achSerial&&account===activeAccountId)notice(e.message);}
   finally{experimentBusy=false;if(serial===achSerial&&account===activeAccountId)renderAchModal();}
 }
-async function confirmChangeSelection(preview,{id,account,serial,version}){
+async function reviewBulkChanges(bulkAction,resetCounters=false){
+  if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||!['unlock_all','lock_all'].includes(bulkAction)||active?.tokenSource!=='environment')return;
+  const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=++selectionVersion;experimentBusy=true;renderAchModal();
+  try{
+    const preview=await api('/api/achievement/change-preview',{accountId:account,appid:id,bulk:true,bulkAction,resetCounters:Boolean(resetCounters)});
+    if(serial!==achSerial||version!==selectionVersion||account!==activeAccountId||id!==currentAchAppId||currentAchMethod!=='protocol')return;
+    renderReviewedChangesPanel(preview,{id,account,serial,version,bulk:true,bulkAction,resetCounters:Boolean(resetCounters)});
+  }catch(e){if(serial===achSerial&&account===activeAccountId)notice(e.message);}
+  finally{experimentBusy=false;if(serial===achSerial&&account===activeAccountId)renderAchModal();}
+}
+function selectPageAchievements(){
+  if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||active?.tokenSource!=='environment')return;
+  const boxes=[...document.querySelectorAll('.ach-select')];
+  if(!boxes.length)return;
+  const allChecked=boxes.every(b=>b.checked);
+  if(allChecked){clearAchievementSelection();renderAchModal();return;}
+  for(const check of boxes){
+    if(achievementSelection.size>=32)break;
+    if(!check.checked){check.checked=true;check.dispatchEvent(new Event('change'));}
+  }
+}
+async function confirmChangeSelection(preview,{id,account,serial,version,bulk=false,bulkAction=null,resetCounters=false}){
   if(experimentBusy||currentAchMethod!=='protocol'||id!==currentAchAppId||account!==activeAccountId||serial!==achSerial||version!==selectionVersion||preview.canActivate!==true)return;
-  const effects=preview.effects.map(e=>`${e.name}: ${e.action==='unlock'?'unlock':e.action==='remove'?'remove':'progress only'}`).join('\n'),progress=preview.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join('\n'),title=currentAchGameName;
-  if(!confirm(`Apply exactly these reviewed changes in "${title}"?\n\n${effects}\n\n${progress}\n\nThis changes Steam achievements and statistics. Game-save progress is not verified. No automatic retry will be sent.`))return;
+  const shownEffects=preview.effects.slice(0,24).map(e=>`${e.name}: ${e.action==='unlock'?'unlock':e.action==='remove'?'remove':'progress only'}`).join('\n')+(preview.effects.length>24?`\n…and ${preview.effects.length-24} more reviewed achievements`:'');
+  const progress=preview.progressChanges.slice(0,16).map(p=>`${p.statName}: ${p.before} → ${p.after}`).join('\n');
+  const title=currentAchGameName;
+  if(!confirm(`Apply exactly these reviewed changes in "${title}"?\n\n${shownEffects}\n\n${progress}\n\nThis changes Steam achievements and statistics. Game-save progress is not verified. No automatic retry will be sent.`))return;
   achievementPreviews.clear();experimentBusy=true;$('sharedProgressActions').replaceChildren();updateSelectionSummary();
-  try{const result=await api('/api/achievement/change',{accountId:account,appid:id,selection:preview.selection,revision:preview.revision,confirmed:true});notice(result.message);}
+  try{
+    const payload={accountId:account,appid:id,selection:preview.selection,revision:preview.revision,confirmed:true,...(bulk?{bulk:true}:{}),...(bulkAction?{bulkAction}:{}),...(resetCounters?{resetCounters:true}:{})};
+    const result=await api('/api/achievement/change',payload);notice(result.message);
+  }
   catch(e){notice(e.message);}
   finally{experimentBusy=false;if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
 }
 $('retryAchievementRarity').addEventListener('click',()=>loadAchievementPercentages(true));
 $('verifyAchievementChanges').addEventListener('click',()=>{if(currentAchAppId&&!experimentBusy&&active?.tokenSource==='environment'&&active?.connected===true)openAchModal(currentAchAppId,currentAchGameName,true,'protocol');});
+if($('unlockAllAchievements'))$('unlockAllAchievements').addEventListener('click',()=>reviewBulkChanges('unlock_all'));
+if($('lockAllAchievements'))$('lockAllAchievements').addEventListener('click',()=>reviewBulkChanges('lock_all'));
+if($('selectPageAchievements'))$('selectPageAchievements').addEventListener('click',()=>selectPageAchievements());
 $('reviewAchievementSelection').addEventListener('click',()=>reviewChangeSelection());
 $('clearAchievementSelection').addEventListener('click',()=>{clearAchievementSelection();$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');renderAchModal();});
 function reviewAchievementProgress(row){
@@ -431,7 +497,7 @@ async function refreshWriteHistory(){
       if(Number.isFinite(Date.parse(receipt.checkedAt)))item.append(element('small',new Date(receipt.checkedAt).toLocaleString('en-US')));
       if(receipt.progressChanges?.length)item.append(element('small',receipt.progressChanges.map(p=>`${p.statName}: ${p.before} → ${p.after}`).join(' · ')));
       const effects=receipt.effects||receipt.sharedEffects;
-      if(effects?.length){const details=element('details'),summary=element('summary',`${effects.length} reviewed effects`),content=element('div');details.append(summary,content);details.addEventListener('toggle',()=>{content.replaceChildren();if(!details.open)return;for(const effect of effects.slice(0,64)){const verified=receipt.verification?.effects?.find(v=>v.apiname===effect.apiname)?.verified===true||receipt.sharedVerification?.find(v=>v.apiname===effect.apiname)?.verified===true;content.append(element('p',`${effect.name||effect.apiname}: ${effect.action||effect.effect} · ${effect.before} → ${effect.after} · ${verified?'Verified effect':'Recorded intent; not confirmed'}`));}});item.append(details);}
+      if(effects?.length){const details=element('details'),summary=element('summary',`${receipt.totalEffects||effects.length} reviewed effects`),content=element('div');details.append(summary,content);details.addEventListener('toggle',()=>{content.replaceChildren();if(!details.open)return;for(const effect of effects.slice(0,64)){const verified=receipt.verification?.effects?.find(v=>v.apiname===effect.apiname)?.verified===true||receipt.sharedVerification?.find(v=>v.apiname===effect.apiname)?.verified===true;content.append(element('p',`${effect.name||effect.apiname}: ${effect.action||effect.effect} · ${effect.before} → ${effect.after} · ${verified?'Verified effect':'Recorded intent; not confirmed'}`));}});item.append(details);}
       list.append(item);
     }
     if(!result.entries.length)list.append(element('p','No recorded attempts are available for this account. This does not mean no achievements were activated before history was connected.'));

@@ -408,3 +408,70 @@ test('rarity retry bypasses stored percentages without making a Steam write',asy
   let calls=0;const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]},{percentagesReader:async()=>({percentages:{A:++calls===1?10:2}})});await f.login();const route='/api/achievement/percentages?accountId=a&appid=240';assert.equal((await f.request(route)).data.percentages.A,10);assert.equal((await f.request(route)).data.percentages.A,10);assert.equal((await f.request(route+'&refresh=1')).data.percentages.A,2);assert.equal(calls,2);
 });
 test('shared rarity parser is served with the other public static scripts',async t=>{const f=await fixture(t);const r=await fetch(f.base+'/achievement-rarity.js');assert.equal(r.status,200);assert.match(await r.text(),/AchievementRarity/);assert.match(r.headers.get('content-type'),/javascript/);});
+
+test('bulk unlock_all and lock_all API routes preview and confirm full-game changes with optional counter reset',async t=>{
+  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));a.push(Buffer.from([8]));return Buffer.concat(a);}
+  const bits={};for(let i=0;i<36;i++)bits[i<32?i:i-32]={name:'ACH_'+i};
+  const schema=kv({'550':{stats:{
+    7:{type:'4',bits:Object.fromEntries(Array.from({length:32},(_,i)=>[i,{name:'ACH_'+i,...(i===0?{progress:{max_val:'10',value:{operation:'statvalue',operand1:'COUNT'}}}:{}) }]))},
+    8:{type:'4',bits:{0:{name:'ACH_32'},1:{name:'ACH_33'},2:{name:'ACH_34'},3:{name:'ACH_35'},4:{name:'PROTECTED',permission:'2'}}},
+    9:{type:'INT',name:'COUNT',min:'0',max:'100'}
+  }}});
+  let currentSnap={game_id:'550',eresult:1,crc_stats:12,schema,stats:[{stat_id:7,stat_value:0},{stat_id:8,stat_value:0},{stat_id:9,stat_value:0}]};
+  const receipts=new Map();
+  const operations={
+    schema:async()=>true,
+    latest:async()=>receipts,
+    list:async()=>[],
+    reserve:async(_,plan)=>require('../lib/achievement-operations').cleanOperation({...plan,operationId:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',checkedAt:new Date().toISOString(),outcome:'requested'}),
+    finish:async()=>{}
+  };
+  const previous=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let f;
+  try{
+    f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{
+      operationsJournal:operations,
+      progressSnapshotReader:async()=>currentSnap,
+      changesWriter:async(client,id,selected,options)=>{
+        let reads=0;
+        return require('../lib/achievement-writer').applyChanges(client,id,selected,{
+          ...options,
+          read:async()=>{
+            if(++reads===1)return currentSnap;
+            return currentSnap;
+          },
+          send:async(_,payload)=>{
+            const updated=new Map(currentSnap.stats.map(s=>[s.stat_id,s.stat_value]));
+            for(const s of payload.stats)updated.set(s.stat_id,s.stat_value);
+            const stats=[...updated].map(([stat_id,stat_value])=>({stat_id,stat_value}));
+            const view=require('../lib/steam-protocol').parseSnapshot({...currentSnap,stats},550);
+            currentSnap={...currentSnap,crc_stats:currentSnap.crc_stats+1,stats,librarySummary:{total:view.achievements.length,unlocked:view.achievements.filter(a=>a.unlocked===true).length,cacheTime:Math.floor(Date.now()/1000)}};
+            return {game_id:'550',eresult:1};
+          }
+        });
+      }
+    });
+  }finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
+  await f.login();await f.request('/api/status');
+  Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});
+  const client=new FakeUser({});client._send=()=>{};f.app.clients.set('main',client);
+
+  const previewUnlock=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,bulk:true,bulkAction:'unlock_all'});
+  assert.equal(previewUnlock.response.status,200);
+  assert.equal(previewUnlock.data.selection.length,36);
+  assert.equal(previewUnlock.data.progressChanges.length,1);
+  assert.equal(previewUnlock.data.progressChanges[0].after,10);
+
+  const confirmUnlock=await f.request('/api/achievement/change',{accountId:'main',appid:550,bulk:true,bulkAction:'unlock_all',selection:previewUnlock.data.selection,revision:previewUnlock.data.revision,confirmed:true});
+  assert.equal(confirmUnlock.response.status,200);
+  assert.equal(confirmUnlock.data.outcome,'confirmed');
+
+  const previewLock=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,bulk:true,bulkAction:'lock_all',resetCounters:true});
+  assert.equal(previewLock.response.status,200);
+  assert.equal(previewLock.data.selection.length,36);
+  assert.equal(previewLock.data.progressChanges.length,1);
+  assert.equal(previewLock.data.progressChanges[0].after,0);
+
+  const confirmLock=await f.request('/api/achievement/change',{accountId:'main',appid:550,bulk:true,bulkAction:'lock_all',resetCounters:true,selection:previewLock.data.selection,revision:previewLock.data.revision,confirmed:true});
+  assert.equal(confirmLock.response.status,200);
+  assert.equal(confirmLock.data.outcome,'confirmed');
+});

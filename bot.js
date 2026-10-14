@@ -10,7 +10,7 @@ const { readProtocol,requestSnapshot,libraryCorroborates } = require('./lib/stea
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement,prepare,prepareShared,prepareFloat,applyChanges } = require('./lib/achievement-writer');
 const {AchievementOperations,cleanOperation}=require('./lib/achievement-operations');
-const {selection:changeSelection,prepareChanges}=require('./lib/achievement-changes');
+const {selection:changeSelection,buildBulkSelection,prepareChanges}=require('./lib/achievement-changes');
 const { gameRequirements } = require('./lib/game-requirements');
 const { scanCandidates } = require('./lib/achievement-candidates');
 const { runReadOnlyProbes,runSharedImpactProbes } = require('./lib/achievement-probes');
@@ -349,7 +349,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       }
       // Public GET pages may be reached from bookmarks, search engines or external links.
       // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
-      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-availability.js', '/achievement-rarity.js', '/manifest.json', '/style.css'].includes(url.pathname));
+      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-live.js', '/draft-settings.js', '/achievement-availability.js', '/achievement-rarity.js', '/manifest.json', '/style.css'].includes(url.pathname));
       if (!['GET', 'POST'].includes(req.method)) throw fail('Method not allowed.', 405);
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') throw fail('Route not found.', 404);
@@ -392,7 +392,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:32,sharedCounterPreview:true,sharedCounterWrite:true } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:32,achievementBulkUnlockAll:true,achievementBulkLockAll:true,achievementBulkLimit:8192,sharedCounterPreview:true,sharedCounterWrite:true } });
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }
@@ -517,13 +517,19 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
       if(['/api/achievement/change-preview','/api/achievement/change'].includes(url.pathname)&&req.method==='POST'){
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Reviewed changes require the available connected main Steam account.',409);
-        const id=appId(data.appid),selected=changeSelection(data.selection),preview=url.pathname.endsWith('change-preview');
+        const id=appId(data.appid),preview=url.pathname.endsWith('change-preview');
+        const bulk=Boolean(data.bulk||data.bulkAction),resetCounters=Boolean(data.resetCounters),allowRetoggle=Boolean(data.allowRetoggle)||bulk,overrideCooldown=Boolean(data.overrideCooldown)||bulk;
+        const bulkAction=data.bulkAction!==undefined?text(String(data.bulkAction),32):undefined;
+        if(bulkAction&&!['unlock_all','lock_all'].includes(bulkAction))throw fail('Select unlock_all or lock_all for bulk achievement operations.',400);
+        const filterNames=Array.isArray(data.filterNames)?data.filterNames.slice(0,8192).map(v=>text(String(v),256)):undefined;
+        const selected=bulkAction&&!Array.isArray(data.selection)?null:changeSelection(data.selection,{bulk});
         rate(`reviewed-${preview?'preview':'write'}:${acc.id}`,preview?10:5,60000);
         const current=()=>{assertPanelSession();if(!cfg.accounts.includes(acc)||clients.get(acc.id)!==client||client.steamID?.toString()!==identity||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||st.steamId64!==identity)throw fail('The Steam session changed during the operation.',409);};
         if(preview){
           const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
-          const plan=prepareChanges(snapshot,id,selected,receipts);cleanOperation(plan);const available=await operations.schema();current();
-          return json(res,200,{appid:id,selection:plan.selection,effects:plan.effects,progressChanges:plan.progressChanges,revision:plan.revision,canActivate:available,message:available?'Review every unlock, removal and progress change. Compatibility remains provisional until Steam confirms the complete operation.':'Persistent reviewed-operation reservations are not installed. The selection can be reviewed, but cannot be sent yet.'});
+          const effectiveSelection=selected||buildBulkSelection(snapshot,id,bulkAction,receipts,{filterNames,allowRetoggle});
+          const plan=prepareChanges(snapshot,id,effectiveSelection,receipts,undefined,{bulk,resetCounters,allowRetoggle});cleanOperation(plan);const available=await operations.schema();current();
+          return json(res,200,{appid:id,...(bulk?{bulk:true,resetCounters}:{}),...(bulkAction?{bulkAction}:{}),selection:plan.selection,effects:plan.effects,progressChanges:plan.progressChanges,revision:plan.revision,canActivate:available,message:available?'Review every unlock, removal and progress change. Compatibility remains provisional until Steam confirms the complete operation.':'Persistent reviewed-operation reservations are not installed. The selection can be reviewed, but cannot be sent yet.'});
         }
         if(typeof data.revision!=='string'||!/^[a-f0-9]{64}$/.test(data.revision))throw fail('Review a fresh selection before confirming.');
         if(data.confirmed!==true)throw fail('Explicitly confirm the exact reviewed changes before sending.');
@@ -531,7 +537,12 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if(!await operations.schema())throw fail('Persistent reviewed-operation reservations must be installed first.',503);
         experimentBusy.add(acc.id);
         try{
-          const result=await changesWrite(client,id,selected,{expectedRevision:data.revision,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan);current();st.lastAchievementWrite=Date.now();return intent;}});
+          let writeSelection=selected;
+          if(!writeSelection&&bulkAction){
+            const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
+            writeSelection=buildBulkSelection(snapshot,id,bulkAction,receipts,{filterNames,allowRetoggle});
+          }
+          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();return intent;}});
           try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}
           return json(res,200,result);
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}

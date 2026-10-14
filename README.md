@@ -134,3 +134,11 @@ Direct achievement lists now load global percentages automatically without delay
 Open a game to keep its achievements and linked progress synchronized with Steam every ten seconds while the list is visible. Updates pause during selections/reviews, offline periods and hidden tabs. Unchanged reads keep the existing list and position; observed unlock/removal/progress changes appear in a small collapsed activity section. This is read-only and never grants or removes achievements automatically. Steam availability and source caching can delay updates. See [the synchronization design and test workflow](docs/live-achievements.md).
 
 Run `npm run check`, `npm test`, `npm run test:memory` and `npm audit --omit=dev`. GitHub Quality checks repeats the same checks without Steam credentials.
+
+## Advanced bulk achievement control (Unlock all / Lock all)
+
+In addition to manual selection (up to 32 achievements per manual batch) and `Select page`, verified direct readings on the main account expose **Unlock all** and **Lock all** in the selection bar:
+
+- **Unlock all (`bulkAction: 'unlock_all'`)**: Automatically selects all locked, unrestricted client-writable achievements in the game (up to 8,192 achievements), computes all required bitmasks and INT/FLOAT progress counter updates (including shared INT/FLOAT counters and mixed blocks), presents the complete impact review, and applies the entire update in one atomic `CMsgClientStoreUserStats2` write after explicit confirmation.
+- **Lock all (`bulkAction: 'lock_all'`)**: Automatically selects all unlocked, unrestricted client-writable achievements in the game (up to 8,192 achievements) for removal. Includes an optional **Reset writable progress counters to minimum when locking all** toggle (`resetCounters: true`) that resets linked non-`incrementonly` INT/FLOAT counters back to their minimum when all referencing achievements are locked, while preserving `incrementonly` counters safely.
+- **Re-toggling (`allowRetoggle`) & compact bulk receipts**: Previously confirmed achievements can be unlocked and locked repeatedly without getting blocked by prior confirmed receipts, and large bulk receipts (>64 effects) are automatically compacted in JSONB storage to stay strictly within the 64 KiB PostgreSQL receipt budget and Render Free memory headroom.

@@ -422,3 +422,70 @@ test('percentage formatting rejects coercible or out-of-range data and derives i
 test('status sorts keep unknown personal states last and preserve order within each state',async t=>{
   const w=ui(t,()=>response([{name:'Locked 1',unlocked:false,percent:10},{name:'Unknown',unlocked:null,percent:20},{name:'Unlocked 1',unlocked:true,percent:30},{name:'Unlocked 2',unlocked:true,percent:40},{name:'Locked 2',unlocked:false,percent:50}]));await w.testUI.open(240,'Game',false,'web');const sort=w.document.getElementById('achSortSelect');sort.value='unlocked_first';sort.dispatchEvent(new w.Event('change'));assert.deepEqual([...w.document.querySelectorAll('.ach-title')].map(e=>e.textContent),['Unlocked 1','Unlocked 2','Locked 1','Locked 2','Unknown']);sort.value='locked_first';sort.dispatchEvent(new w.Event('change'));assert.deepEqual([...w.document.querySelectorAll('.ach-title')].map(e=>e.textContent),['Locked 1','Locked 2','Unlocked 1','Unlocked 2','Unknown']);
 });
+
+test('Unlock all, Lock all with counter reset toggle, and Select page buttons review and submit bulk operations',async t=>{
+  const rows=[
+    {name:'Locked One',apiname:'L1',unlocked:false,compatibility:{status:'provisional',canUnlock:true}},
+    {name:'Locked Two',apiname:'L2',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency',canUnlock:false},progressSupport:{canComplete:true}},
+    {name:'Unlocked One',apiname:'U1',unlocked:true,batchSupport:{canRemove:true},removalSupport:{canRemove:true}}
+  ];
+  const calls=[];
+  const unlockPreview={bulk:true,bulkAction:'unlock_all',selection:[{apiname:'L1',action:'unlock'},{apiname:'L2',action:'unlock'}],effects:[{apiname:'L1',name:'Locked One',action:'unlock',progressChanges:[]},{apiname:'L2',name:'Locked Two',action:'unlock',progressChanges:[{statName:'COUNT',before:0,after:10}]}],progressChanges:[{statName:'COUNT',before:0,after:10}],canActivate:true,revision:'c'.repeat(64),message:'Review unlock all.'};
+  const lockPreview=(reset)=>({bulk:true,bulkAction:'lock_all',resetCounters:reset,selection:[{apiname:'U1',action:'remove'}],effects:[{apiname:'U1',name:'Unlocked One',action:'remove',progressChanges:reset?[{statName:'COUNT',before:10,after:0}]:[]}],progressChanges:reset?[{statName:'COUNT',before:10,after:0}]:[],canActivate:true,revision:(reset?'d':'e').repeat(64),message:'Review lock all.'});
+  const w=ui(t,url=>({...response(rows),readingMethod:'protocol'}));
+  w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});
+  await w.testUI.open(550,'Game',false,'protocol');
+
+  const unlockAllBtn=w.document.getElementById('unlockAllAchievements');
+  const lockAllBtn=w.document.getElementById('lockAllAchievements');
+  const selectPageBtn=w.document.getElementById('selectPageAchievements');
+  assert.equal(unlockAllBtn.hidden,false);assert.equal(unlockAllBtn.disabled,false);
+  assert.equal(lockAllBtn.hidden,false);assert.equal(lockAllBtn.disabled,false);
+  assert.equal(selectPageBtn.hidden,false);assert.equal(selectPageBtn.disabled,false);
+
+  // Select page selects all 3 eligible rows and clicking again clears selection
+  selectPageBtn.click();
+  assert.equal(w.document.querySelectorAll('.ach-select:checked').length,3);
+  selectPageBtn.click();
+  assert.equal(w.document.querySelectorAll('.ach-select:checked').length,0);
+
+  let lastPayload;
+  w.fetch=async(url,options)=>{
+    const body=options?.body?JSON.parse(options.body):undefined;
+    calls.push({url,body});
+    if(url==='/api/achievement/change-preview'){
+      if(body.bulkAction==='unlock_all')return {ok:true,status:200,json:async()=>unlockPreview};
+      if(body.bulkAction==='lock_all')return {ok:true,status:200,json:async()=>lockPreview(Boolean(body.resetCounters))};
+    }
+    if(url==='/api/achievement/change'){lastPayload=body;return {ok:true,status:200,json:async()=>({message:'Bulk confirmed.'})};}
+    return {ok:true,status:200,json:async()=>({...response(rows),readingMethod:'protocol'})};
+  };
+
+  unlockAllBtn.click();
+  await new Promise(r=>setImmediate(r));
+  assert.match(w.document.querySelector('#sharedProgressReview h3').textContent,/Unlock all/);
+  assert.match(w.document.getElementById('sharedProgressSummary').textContent,/2 to unlock · 0 to remove/);
+  w.confirm=()=>true;
+  w.document.querySelector('#sharedProgressActions button').click();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(lastPayload.bulk,true);
+  assert.equal(lastPayload.bulkAction,'unlock_all');
+  assert.equal(lastPayload.revision,'c'.repeat(64));
+
+  lockAllBtn.click();
+  await new Promise(r=>setImmediate(r));
+  assert.match(w.document.querySelector('#sharedProgressReview h3').textContent,/Lock all/);
+  const resetToggle=w.document.getElementById('bulkResetCountersToggle');
+  assert.ok(resetToggle);
+  assert.equal(resetToggle.checked,false);
+  resetToggle.checked=true;
+  resetToggle.dispatchEvent(new w.Event('change'));
+  await new Promise(r=>setImmediate(r));
+  assert.match(w.document.getElementById('sharedProgressSummary').textContent,/COUNT: 10 → 0/);
+  w.document.querySelector('#sharedProgressActions button').click();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(lastPayload.bulk,true);
+  assert.equal(lastPayload.bulkAction,'lock_all');
+  assert.equal(lastPayload.resetCounters,true);
+  assert.equal(lastPayload.revision,'d'.repeat(64));
+});
