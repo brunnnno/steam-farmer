@@ -58,6 +58,7 @@ test('a library/statistics disagreement exposes unknown state and prevents write
   assert.equal(r.stateConflict,true);assert.equal(r.verified,false);assert.match(r.message,/statistics report 1\/2/);
   assert.ok(r.achievements.every(a=>a.unlocked===null&&!a.removalSupport.canRemove&&!a.compatibility.canUnlock));
   assert.equal(r.achievements[0].stateEvidence.bitUnlocked,false);
+  assert.equal(r.achievements[0].compatibility.code,'library_state_conflict');assert.doesNotMatch(r.achievements[0].compatibility.action,/open it normally|publisher sign-in/);
 });
 test('direct transport sends only read message and cleans callbacks after completion',async()=>{
   const messages=[];const c=client((header,body,cb)=>{messages.push(header.msg);if(header.msg===EMsg.ServiceMethodCallFromClient)return queueMicrotask(()=>cb(Buffer.from(Schema.CPlayer_GetAchievementsProgress_Response.encode({achievement_progress:[{appid:550,total:2,unlocked:1,cache_time:123}]}).finish()),{msg:EMsg.ServiceMethodResponse,proto:{target_job_name:'Player.GetAchievementsProgress#1',eresult:1}}));assert.equal(header.msg,EMsg.ClientGetUserStats);const req=Schema.CMsgClientGetUserStats.decode(body);assert.equal(req.game_id.toString(),'550');assert.equal(req.steam_id_for_user.toString(),c.steamID.toString());queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode(snap()).finish()),{msg:EMsg.ClientGetUserStatsResponse}));});
