@@ -40,3 +40,7 @@ Completed Neon migration context (audit only; do not reuse):
 - migration_sql: exact contents of migrations/003-achievement-operations.sql
 
 The user explicitly approved publication and migration. The Neon connector applied the exact migration SQL to the parent production branch on 2026-10-14 UTC and deleted the temporary test branch. Production legacy history count and fingerprint remained unchanged across application. New operation tables contain no synthetic records.
+
+## Visible controls (2.1.1)
+
+The action strip remains visible before selection. Community/automatic fallback readings show **Enable achievement changes**, which requests a fresh direct reading only. After successful verification, the strip explains the 32-selection limit and confirmed-panel removal scope. **Review selected changes** stays disabled until a checkbox is selected; **Clear selection** appears only for a selection. Confirmed removable activations also have **Review removal**. Unrecorded unlocked rows explain why removal is unavailable. No shortcut writes Steam or bypasses full-impact confirmation. The footer shows v2.1.1. Regression suite: 259 tests pass.

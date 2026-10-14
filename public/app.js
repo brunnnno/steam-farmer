@@ -6,12 +6,17 @@ let experimentBusy = false;
 const achievementSelection=new Map();let selectionVersion=0;
 function clearAchievementSelection(){achievementSelection.clear();selectionVersion++;updateSelectionSummary();}
 function updateSelectionSummary(){
-  const bar=$('achievementSelectionBar');bar.hidden=!achievementSelection.size;
+  const bar=$('achievementSelectionBar');bar.hidden=!currentAchAppId;
   const unlocks=[...achievementSelection.values()].filter(v=>v.action==='unlock').length,removals=achievementSelection.size-unlocks;
-  $('achievementSelectionSummary').textContent=`${unlocks} to unlock · ${removals} to remove`;
-  $('reviewAchievementSelection').disabled=experimentBusy||currentAchMethod!=='protocol';
-  for(const check of document.querySelectorAll('.ach-select'))check.disabled=experimentBusy||currentAchMethod!=='protocol'||achievementSelection.size>=32&&!check.checked;
+  const main=active?.tokenSource==='environment',connected=active?.connected===true&&active?.tokenAccountMatches!==false&&!active?.isCollisionPaused,direct=currentAchMethod==='protocol';
+  $('achievementSelectionSummary').textContent=achievementSelection.size?`${unlocks} to unlock · ${removals} to remove`:'Unlock or remove achievements';
+  $('achievementSelectionHint').textContent=!main?'Achievement changes are available on the main account.':!connected?'Connect the main account to Steam, then verify this game.':!direct?'Verify through Steam to show selection boxes and check which unlocked achievements can be removed.':'Tick the boxes to select up to 32 achievements. Removal is available for activations confirmed by this panel.';
+  $('verifyAchievementChanges').hidden=direct||!main;$('verifyAchievementChanges').disabled=experimentBusy||!connected;
+  $('reviewAchievementSelection').hidden=!direct;$('reviewAchievementSelection').disabled=experimentBusy||!direct||!achievementSelection.size;
+  $('clearAchievementSelection').hidden=!achievementSelection.size;
+  for(const check of document.querySelectorAll('.ach-select'))check.disabled=experimentBusy||!direct||achievementSelection.size>=32&&!check.checked;
 }
+
 const achievementPreviews = new Map();
 function previewKey(account,id,method) { return JSON.stringify([account,active?.linkedSteamId||active?.steamId64||active?.mySteamID||'',id,method]); }
 function rememberAchievements(key,data) {
@@ -180,7 +185,7 @@ async function openAchModal(id,title,forceRefresh=false,method='web') {
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
   currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[];
   $('achReadMode').value=method;
-  $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';
+  $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';updateSelectionSummary();
   const serial = ++achSerial, account = achAccountId,readStarted=performance.now();
   const cacheKey=previewKey(account,id,method),preview=achievementPreviews.get(cacheKey);
   if(preview&&Date.now()-preview.at<300000){
@@ -217,7 +222,7 @@ async function loadGameRequirements(id,serial,account) {
 }
 let requirementsContext=null;
 $('gameRequirements').addEventListener('toggle',()=>{const context=requirementsContext;if($('gameRequirements').open&&context&&context.serial===achSerial&&context.account===activeAccountId&&$('achModal').style.display==='flex'&&!context.requested){context.requested=true;loadGameRequirements(context.id,context.serial,context.account);}});
-function closeAchModal() { requirementsContext=null;clearAchievementSelection();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren(); }
+function closeAchModal() { requirementsContext=null;clearAchievementSelection();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren();updateSelectionSummary(); }
 function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true,$('achReadMode').value); }
 function setFilter(type,val) {
   if(type==='status')filterStatus=val;else filterRarity=filterRarity===val?'all':val;
@@ -281,6 +286,7 @@ function renderAchModal(page=0) {
     row.append(image(a.unlocked?a.iconOpen:a.iconClosed));
     const info=element('div',undefined,'ach-info'); info.append(element('div',a.name,'ach-title'),element('div',a.description,'ach-desc'),element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
     if(a.unlockTimestamp) info.append(element('small','Steam-reported unlock date: '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'),'ach-date')); else if(a.unlockDate) info.append(element('small','Steam-reported unlock date: '+a.unlockDate,'ach-date'));
+    if(a.unlocked===true&&currentAchMethod==='protocol'){if(selectEligible&&a.batchSupport?.canRemove){const remove=button('Review removal',()=>reviewChangeSelection([{apiname:a.apiname,action:'remove'}]),'btn-action-sm');remove.disabled=experimentBusy;info.append(remove);}else info.append(element('small',a.compatibility?.code==='history_unavailable'?'Removal unavailable: recorded history could not be verified.':'Removal unavailable: no matching activation confirmed by this panel.','ach-write-reason'));}
     const recordedAt=a.panelVerifiedAt||a.panelOperationAt;
     if(recordedAt&&Number.isFinite(Date.parse(recordedAt)))info.append(element('small',(a.panelVerifiedAt?'Verified by this panel: ':'Panel operation recorded: ')+new Date(recordedAt).toLocaleString('en-US'),'ach-date panel-date'));
     if(a.panelOperationAt&&a.unlockTimestamp&&a.unlockTimestamp*1000<Date.parse(a.panelOperationAt)-86400000)info.append(element('small','Steam\'s reported date predates this panel operation. It is separate from the recorded test time.','ach-date-note'));
@@ -329,6 +335,7 @@ async function confirmChangeSelection(preview,{id,account,serial,version}){
   catch(e){notice(e.message);}
   finally{experimentBusy=false;if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
 }
+$('verifyAchievementChanges').addEventListener('click',()=>{if(currentAchAppId&&!experimentBusy&&active?.tokenSource==='environment'&&active?.connected===true)openAchModal(currentAchAppId,currentAchGameName,true,'protocol');});
 $('reviewAchievementSelection').addEventListener('click',()=>reviewChangeSelection());
 $('clearAchievementSelection').addEventListener('click',()=>{clearAchievementSelection();$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');renderAchModal();});
 function reviewAchievementProgress(row){
