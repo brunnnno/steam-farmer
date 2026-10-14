@@ -47,10 +47,11 @@ test('wrong-game, rejected and malformed protocol responses cannot verify achiev
 function client(respond) { const c=new EventEmitter();c.steamID={toString:()=> '76561198000000001'};c._currentJobID=0;c._jobs=new Map();c._send=(header,body,cb)=>{const job=String(++c._currentJobID);c._jobs.set(job,cb);respond?.(header,body,cb);};return c; }
 test('library corroboration is read-only, validates identity/game/count and cleans timeouts',async()=>{
   const c=client(),row={appid:550,unlocked:1,total:2,cache_time:123};
-  c._sendUnified=(method,input,cb)=>{assert.equal(method,'Player.GetAchievementsProgress#1');assert.deepEqual(input.appids,[550]);assert.equal(input.steamid,c.steamID.toString());cb({achievement_progress:[row]},{proto:{eresult:1}});};
+  const respond=(row,cb)=>cb(Buffer.from(Schema.CPlayer_GetAchievementsProgress_Response.encode({achievement_progress:[row]}).finish()),{msg:EMsg.ServiceMethodResponse,proto:{eresult:1,target_job_name:'Player.GetAchievementsProgress#1'}});
+  c._send=(header,bytes,cb)=>{assert.equal(header.msg,EMsg.ServiceMethodCallFromClient);assert.equal(header.proto.target_job_name,'Player.GetAchievementsProgress#1');const input=Schema.CPlayer_GetAchievementsProgress_Request.decode(bytes);assert.deepEqual(input.appids,[550]);assert.equal(input.steamid.toString(),c.steamID.toString());respond(row,cb);};
   assert.deepEqual(await readLibrarySummary(c,550),{unlocked:1,total:2,cacheTime:123});
-  for(const bad of [{...row,appid:440},{...row,unlocked:3},{...row,total:undefined},{...row,total:9000}]){c._sendUnified=(_,__,cb)=>cb({achievement_progress:[bad]},{proto:{eresult:1}});assert.equal(await readLibrarySummary(c,550),null);}
-  c._sendUnified=()=>{};assert.equal(await readLibrarySummary(c,550,{timeoutMs:5}),null);assert.equal(c.listenerCount('error'),0);assert.equal(c.listenerCount('disconnected'),0);
+  for(const bad of [{...row,appid:440},{...row,unlocked:3},{...row,total:undefined},{...row,total:9000}]){c._send=(_,__,cb)=>respond(bad,cb);assert.equal(await readLibrarySummary(c,550),null);}
+  c._send=()=>{};assert.equal(await readLibrarySummary(c,550,{timeoutMs:5}),null);assert.equal(c.listenerCount('error'),0);assert.equal(c.listenerCount('disconnected'),0);
 });
 test('a library/statistics disagreement exposes unknown state and prevents write eligibility',()=>{
   const r=parseSnapshot(snap({librarySummary:{unlocked:2,total:2,cacheTime:123}}),550);
@@ -59,8 +60,9 @@ test('a library/statistics disagreement exposes unknown state and prevents write
   assert.equal(r.achievements[0].stateEvidence.bitUnlocked,false);
 });
 test('direct transport sends only read message and cleans callbacks after completion',async()=>{
-  const c=client((header,body,cb)=>{assert.equal(header.msg,EMsg.ClientGetUserStats);const req=Schema.CMsgClientGetUserStats.decode(body);assert.equal(req.game_id.toString(),'550');assert.equal(req.steam_id_for_user.toString(),c.steamID.toString());queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode(snap()).finish()),{msg:EMsg.ClientGetUserStatsResponse}));});
+  const messages=[];const c=client((header,body,cb)=>{messages.push(header.msg);if(header.msg===EMsg.ServiceMethodCallFromClient)return queueMicrotask(()=>cb(Buffer.from(Schema.CPlayer_GetAchievementsProgress_Response.encode({achievement_progress:[{appid:550,total:2,unlocked:1,cache_time:123}]}).finish()),{msg:EMsg.ServiceMethodResponse,proto:{target_job_name:'Player.GetAchievementsProgress#1',eresult:1}}));assert.equal(header.msg,EMsg.ClientGetUserStats);const req=Schema.CMsgClientGetUserStats.decode(body);assert.equal(req.game_id.toString(),'550');assert.equal(req.steam_id_for_user.toString(),c.steamID.toString());queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode(snap()).finish()),{msg:EMsg.ClientGetUserStatsResponse}));});
   const r=await readProtocol(c,550);assert.equal(r.verified,true);assert.equal(c._jobs.size,0);assert.equal(c.listenerCount('disconnected'),0);
+  assert.deepEqual(messages,[EMsg.ClientGetUserStats,EMsg.ServiceMethodCallFromClient]);assert.equal(r.diagnostics.librarySummary.unlocked,1);
 });
 test('protocol timeout and disconnection release pending callbacks',async()=>{
   const c=client();await assert.rejects(readProtocol(c,550,{timeoutMs:10}),/in time/);assert.equal(c._jobs.size,0);
