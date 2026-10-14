@@ -15,10 +15,12 @@ test('multiple selected bits combine into one mask while preserving every unrela
   const s=snapshot(),plan=prepareChanges(s,550,choose('B','A'));assert.deepEqual(plan.selection,choose('A','B'));assert.deepEqual(plan.payload.stats,[{stat_id:7,stat_value:7}]);assert.equal(s.stats[0].stat_value,4);assert.equal(verifyChanges(s,final(s,plan),plan,ack).confirmed,true);
   const edge=snapshot({bits:{0:{name:'A'},31:{name:'HIGH'}},mask:1});const p=prepareChanges(edge,550,choose('HIGH'));assert.equal(p.payload.stats[0].stat_value,0x80000001);
 });
-test('only matching confirmed panel activations can be removed, without resetting the entire game',()=>{
-  const s=snapshot({mask:7}),receipts=new Map([['A',evidence('A',0)],['B',evidence('B',1)]]),p=prepareChanges(s,550,remove('A','B'),receipts);assert.deepEqual(p.payload.stats,[{stat_id:7,stat_value:4}]);assert.equal(verifyChanges(s,final(s,p),p,ack).confirmed,true);
-  for(const receipt of [null,{...evidence('A',0),outcome:'unknown'},{...evidence('A',0),before:true},{...evidence('A',0),bitIndex:1},{...evidence('A',0),after:false}])assert.throws(()=>prepareChanges(s,550,remove('A'),receipt?new Map([['A',receipt]]):new Map()));
+test('any verified unrestricted unlock can be removed while unresolved attempts remain blocked',()=>{
+  const s=snapshot({mask:7}),p=prepareChanges(s,550,remove('A','B'));assert.deepEqual(p.payload.stats,[{stat_id:7,stat_value:4}]);assert.equal(p.payload.explicit_reset,false);assert.equal(verifyChanges(s,final(s,p),p,ack).confirmed,true);
+  for(const outcome of ['unknown','requested','rejected'])assert.throws(()=>prepareChanges(s,550,remove('A'),new Map([['A',{...evidence('A',0),outcome}]])),/unresolved/);
+  assert.ok(prepareChanges(s,550,remove('A'),new Map([['A',{...evidence('A',31),before:true}]])));
 });
+
 test('confirmed removal allows a separately reviewed new activation while unresolved history blocks it',()=>{
   const s=snapshot(),removed={...evidence('A',0),action:'remove',before:true,after:false};assert.ok(prepareChanges(s,550,choose('A'),new Map([['A',removed]])).payload);
   for(const receipt of [evidence('A',0),{...removed,outcome:'requested'},{...removed,outcome:'unknown'}])assert.throws(()=>prepareChanges(s,550,choose('A'),new Map([['A',receipt]])));
@@ -26,19 +28,20 @@ test('confirmed removal allows a separately reviewed new activation while unreso
 test('a shared counter requires selecting all newly crossed unlocks and reviews still-locked progress',()=>{
   const bits={0:{name:'A',progress:progress(10)},1:{name:'B',progress:progress(20)},2:{name:'OTHER',progress:progress(100)}},s=snapshot({bits,mask:0}),p=prepareChanges(s,550,choose('A','B'));
   assert.deepEqual(p.payload.stats,[{stat_id:7,stat_value:3},{stat_id:9,stat_value:20}]);assert.equal(p.effects.length,3);assert.equal(p.effects.find(e=>e.apiname==='OTHER').after,false);assert.throws(()=>prepareChanges(s,550,choose('B')),/Add it to the selection/);
-  const receipts=new Map([['A',evidence('A',0,{before:0,after:20})],['B',evidence('B',1,{before:0,after:20})]]);const current=final(s,p),undo=prepareChanges(current,550,remove('A','B'),receipts);assert.equal(undo.progressChanges[0].after,0);assert.equal(verifyChanges(current,final(current,undo),undo,ack).confirmed,true);
+  const receipts=new Map([['A',evidence('A',0,{before:0,after:20})],['B',evidence('B',1,{before:0,after:20})]]);const current=final(s,p),undo=prepareChanges(current,550,remove('A','B'),receipts);assert.deepEqual(undo.progressChanges,[]);assert.equal(undo.expectedValues.get(9),20);assert.equal(verifyChanges(current,final(current,undo),undo,ack).confirmed,true);
 });
-test('counter removal follows the recorded chain and refuses later progress or unselected unlocked dependencies',()=>{
-  const bits={0:{name:'A',progress:progress(10)},1:{name:'B',progress:progress(20)},2:{name:'OTHER',progress:progress(100)}},s=snapshot({bits,mask:3,value:20}),receipts=new Map([['A',evidence('A',0,{before:0,after:10})],['B',evidence('B',1,{before:10,after:20})]]);
-  assert.equal(prepareChanges(s,550,remove('B'),receipts).progressChanges[0].after,10);assert.equal(prepareChanges(s,550,remove('A','B'),receipts).progressChanges[0].after,0);assert.throws(()=>prepareChanges(s,550,remove('A'),receipts),/Progress changed/);
-  assert.throws(()=>prepareChanges(snapshot({bits,mask:3,value:21}),550,remove('A','B'),receipts),/Progress changed/);
-  const singleSource=new Map([['B',evidence('B',1,{before:0,after:20})]]);assert.throws(()=>prepareChanges(s,550,remove('B'),singleSource),/another unlocked/);
-  assert.throws(()=>prepareChanges(snapshot({bits,mask:3,value:20,stat:{incrementonly:'1'}}),550,remove('B'),receipts),/decreasing/);
+test('removing progressed achievements preserves later gameplay, shared and increment-only counters',()=>{
+  const bits={0:{name:'A',progress:progress(10)},1:{name:'B',progress:progress(20)},2:{name:'OTHER',progress:progress(100)}};
+  for(const value of [0,20,21,100])for(const stat of [{},{incrementonly:'1'}]){
+    const s=snapshot({bits,mask:7,value,stat}),p=prepareChanges(s,550,remove('A','B'));
+    assert.deepEqual(p.payload.stats,[{stat_id:7,stat_value:4}]);assert.deepEqual(p.progressChanges,[]);assert.equal(p.expectedValues.get(9),value);assert.equal(p.effects.length,2);assert.match(p.effects[0].warning,/unchanged/);assert.equal(verifyChanges(s,final(s,p),p,ack).confirmed,true);
+  }
 });
-test('decimal selections retain raw values and can reverse only a matching exclusive recorded delta',()=>{
+
+test('decimal unlocks review raw values and removals preserve all decimal progress',()=>{
   const bits={0:{name:'A',progress:progress(10.5)}},s=snapshot({bits,type:'FLOAT',value:1.25,mask:0}),p=prepareChanges(s,550,choose('A'));assert.deepEqual(p.payload.stats,[{stat_id:9,stat_value:floatBits(10.5)}]);assert.equal(verifyChanges(s,final(s,p),p,ack).confirmed,true);
-  const receipts=new Map([['A',{...evidence('A',0),progressChanges:p.progressChanges}]]),current=final(s,p),undo=prepareChanges(current,550,remove('A'),receipts);assert.deepEqual(undo.payload.stats,[{stat_id:7,stat_value:0},{stat_id:9,stat_value:floatBits(1.25)}]);assert.equal(verifyChanges(current,final(current,undo),undo,ack).confirmed,true);
-  assert.throws(()=>prepareChanges(snapshot({bits,type:'FLOAT',value:11,mask:1}),550,remove('A'),receipts),/Progress changed/);
+  const receipts=new Map([['A',{...evidence('A',0),progressChanges:p.progressChanges}]]),current=final(s,p),undo=prepareChanges(current,550,remove('A'),receipts);assert.deepEqual(undo.payload.stats,[{stat_id:7,stat_value:0}]);assert.equal(undo.expectedValues.get(9),floatBits(10.5));assert.equal(verifyChanges(current,final(current,undo),undo,ack).confirmed,true);
+  assert.equal(prepareChanges(snapshot({bits,type:'FLOAT',value:11,mask:1}),550,remove('A'),receipts).expectedValues.get(9),floatBits(11));
 });
 test('invalid selections, ambiguous bits and restricted or complex dependencies cannot write',()=>{
   for(const input of [[],Array.from({length:33},(_,i)=>({apiname:String(i),action:'unlock'})),[...choose('A'),...remove('A')],[{apiname:'A',action:'reset'}],[{apiname:'A',action:'unlock',all:true}]])assert.throws(()=>selection(input));
@@ -51,6 +54,12 @@ test('every reviewed raw value, achievement state, schema and clean acknowledgem
   const s=snapshot(),p=prepareChanges(s,550,choose('A','B')),good=final(s,p);
   for(const bad of [{...good,crc_stats:undefined},{...good,schema:snapshot({bits:{0:{name:'A'},1:{name:'B'},3:{name:'OTHER'}}}).schema},{...good,stats:good.stats.map(v=>v.stat_id===7?{...v,stat_value:15}:v)},{...good,stats:[...good.stats,good.stats[2]]},{...good,stats:good.stats.map(v=>v.stat_id===20?{...v,stat_value:124}:v)}])assert.equal(verifyChanges(s,bad,p,ack).confirmed,false);
   for(const bad of [null,{...ack,stale:true},{...ack,rejectedStats:[{statId:7}]},{...ack,gameId:'440'},{...ack,result:2}])assert.equal(verifyChanges(s,good,p,bad).confirmed,false);
+});
+
+test('removal fails closed on missing versions, ambiguous raw stats and protected bits; mixed shared-counter removal is separate',()=>{
+  const s=snapshot({mask:7});for(const bad of [{...s,crc_stats:undefined},{...s,stats:[...s.stats,s.stats[0]]},snapshot({mask:7,block:{permission:'2'}}),snapshot({mask:7,block:{bSetByTrustedGS:'1'}})])assert.throws(()=>prepareChanges(bad,550,remove('A')));
+  const bits={0:{name:'A',progress:progress(10)},1:{name:'B',progress:progress(20)}};assert.throws(()=>prepareChanges(snapshot({bits,mask:1}),550,[...remove('A'),...choose('B')]),/separately/);
+  const initial=snapshot({bits,mask:3,value:20}),p=prepareChanges(initial,550,remove('A')),changed=final(initial,p);changed.stats=changed.stats.map(v=>v.stat_id===9?{...v,stat_value:0}:v);assert.equal(verifyChanges(initial,changed,p,ack).confirmed,false);
 });
 test('reviews bind both current Steam data and persistent history independently of JSONB key order',()=>{
   const s=snapshot(),r=evidence('A',0),reversed=Object.fromEntries(Object.entries(r).reverse());assert.equal(historyRevision(new Map([['A',r]]),['A']),historyRevision(new Map([['A',reversed]]),['A']));

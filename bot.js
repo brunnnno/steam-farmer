@@ -20,7 +20,7 @@ const {sharedPreview,floatPreview}=require('./lib/achievement-progress');
 const {ownedFloatLibrary,scanFloatBatch}=require('./lib/float-discovery');
 const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
-const {globalPercentages}=require('./lib/steam-percentages');
+const {createPercentageReader}=require('./lib/rarity-history');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
@@ -80,7 +80,7 @@ function createApp(options = {}) {
   const individualWrite = options.individualWriter || unlockAchievement;
   const changesWrite=options.changesWriter||applyChanges;
   const requirementsRead = options.requirementsReader || gameRequirements;
-  const percentagesRead=options.percentagesReader||((id,options)=>globalPercentages(id,undefined,options));
+  const percentagesRead=options.percentagesReader||createPercentageReader();
   const requirementsCache = new ResultCache({maxEntries:32,maxBytes:128*1024,ttl:3600000}),requirementsPending=new Map();
   const experimentBusy = new Set();
   const achievementCache = new ResultCache({maxBytes:2*1024*1024,maxEntries:24}), achievementPending = new Map();
@@ -153,6 +153,7 @@ function createApp(options = {}) {
     client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
+      if(st.reconnectTimer){clearTimeout(st.reconnectTimer);st.reconnectTimer=null;}
       st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.achievementPersistence = null; st.candidateScanStarted = false; st.steamId64 = client.steamID.toString();
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
@@ -192,7 +193,7 @@ budget.run(()=>runReadOnlyProbes(client)).then(result=>{if(isCurrent()&&st.conne
       const needsLogin = [5, 15, 27, 63, 65, 85, 88].includes(err?.eresult);
       console.warn(`[Steam] ${acc.id}: disconnected; result code: ${Number(err?.eresult)||0}`);
       st.error = needsLogin ? 'Steam rejected the session. Please sign in again.' : 'Steam disconnected; reconnecting…';
-      if (needsLogin) { if (isEnvironmentAccount(acc)) st.error = 'Update STEAM_REFRESH_TOKEN in Render: Steam rejected the session.'; else vault.remove(acc.id); return; }
+      if (needsLogin) { if(st.reconnectTimer){clearTimeout(st.reconnectTimer);st.reconnectTimer=null;} if (isEnvironmentAccount(acc)) st.error = 'Update STEAM_REFRESH_TOKEN in Render: Steam rejected the session.'; else vault.remove(acc.id); return; }
       if (!st.reconnectTimer) st.reconnectTimer = setTimeout(() => {
         st.reconnectTimer = null; if (!isCurrent()) return;
         clients.delete(acc.id); client.removeAllListeners(); client.on('error', () => {}); try { client.logOff(); } catch {} connect(acc);
@@ -258,7 +259,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
   }
   async function json(res, status, body) {
     res.setHeader('Cache-Control','no-store');
-    if(body?.achievementHistoryStorage){body.applicationStorage=persistence?.status()||{mode:'local',persistent:false,available:true};const mem=process.memoryUsage();body.resources={rssBytes:mem.rss,heapUsedBytes:mem.heapUsed,externalBytes:mem.external,...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes+percentageCache.bytes};}
+    if(body?.achievementHistoryStorage){body.applicationStorage=persistence?.status()||{mode:'local',persistent:false,available:true};const mem=process.memoryUsage();body.resources={rssBytes:mem.rss,heapUsedBytes:mem.heapUsed,externalBytes:mem.external,...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes+percentageCache.bytes+(percentagesRead.bytes?.()||0)};}
     if(status<400 && persistence && (body?.success===true || body?.phase==='authenticated')){
       try{await persistence.flush();}catch{status=503;body={error:'Persistent storage failed. The change was not confirmed as saved. Restart after checking Neon.'};}
     }
@@ -453,9 +454,10 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             if(method==='protocol') for(const row of result.achievements||[]) {
               const receipt=receipts.get(row.apiname);
               const removed=receipt?.outcome==='confirmed'&&receipt.action==='remove'&&receipt.after===false;
-              row.batchSupport={canRemove:!historyUnavailable&&row.unlocked===true&&receipt?.outcome==='confirmed'&&receipt.before===false&&receipt.after===true&&(!receipt.action||receipt.action==='unlock')&&receipt.statId===row.statId&&receipt.bitIndex===row.bitIndex,canReactivate:!historyUnavailable&&removed};
+              const removalReason=historyUnavailable?'Recorded history could not be verified. Restore the history connection and refresh.':receipt&&receipt.outcome!=='confirmed'?'A previous attempt needs review before another change.':row.removalSupport?.reason;
+              row.batchSupport={canRemove:!historyUnavailable&&row.removalSupport?.canRemove===true&&(!receipt||receipt.outcome==='confirmed'),removalReason,canReactivate:!historyUnavailable&&removed};
               if(receipt) row.lastWriteOutcome=receipt.outcome;
-              if(receipt?.outcome==='confirmed'&&row.unlocked===true){row.panelOperationAt=receipt.checkedAt;row.panelVerifiedAt=receipt.verifiedAt||null;}
+              if(receipt?.outcome==='confirmed'&&row.unlocked===true&&receipt.after===true&&receipt.before===false&&(!receipt.action||receipt.action==='unlock')){row.panelOperationAt=receipt.checkedAt;row.panelVerifiedAt=receipt.verifiedAt||null;}
               if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
               if(receipt && !removed && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,status:receipt.outcome==='rejected'?'steam_rejected':receipt.outcome==='unknown'||receipt.outcome==='requested'?'pending_verification':'attempted',canUnlock:false,reason:receipt.message||'A write was already attempted for this achievement. The result must be checked; automatic retries are disabled.',code:receipt.diagnostic?.code||'previous_attempt',action:receipt.diagnostic?.action||'Refresh to verify the actual Steam state. A repeated write requires review.'};
               if(receipt&&!removed&&row.unlocked!==true&&row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,reason:row.compatibility.reason};
@@ -682,16 +684,16 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
   const timers = [setInterval(() => { if (!closing) cfg.accounts.forEach(farming); }, 30000), setInterval(() => { if (!closing) for (const acc of cfg.accounts) if (acc.cardFarming) scan(acc).catch(() => {}); }, 10 * 60000), setInterval(() => {
     for (const [token, s] of sessions) if (s.expires <= Date.now()) sessions.delete(token);
     for (const [id, a] of attempts) if (Date.now() - a.created > 5 * 60000 || !sessions.has(a.owner)) cancelAttempt(id);
-    achievementCache.prune();requirementsCache.prune();percentageCache.prune();
+    achievementCache.prune();requirementsCache.prune();percentageCache.prune();percentagesRead.prune?.();
     for (const [key, r] of rates) if (r.until <= Date.now()) rates.delete(key);
   }, 30000)];
-  if(!options.silent)timers.push(setInterval(()=>{const m=process.memoryUsage();console.log('[Resources] '+JSON.stringify({rssMiB:Number((m.rss/1048576).toFixed(1)),heapMiB:Number((m.heapUsed/1048576).toFixed(1)),externalMiB:Number((m.external/1048576).toFixed(1)),...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes+percentageCache.bytes}));},60000));
+  if(!options.silent)timers.push(setInterval(()=>{const m=process.memoryUsage();console.log('[Resources] '+JSON.stringify({rssMiB:Number((m.rss/1048576).toFixed(1)),heapMiB:Number((m.heapUsed/1048576).toFixed(1)),externalMiB:Number((m.external/1048576).toFixed(1)),...budget.status(),steamConnections:clients.size,cacheBytes:achievementCache.bytes+requirementsCache.bytes+percentageCache.bytes+(percentagesRead.bytes?.()||0)}));},60000));
   timers.forEach(t => t.unref());
   if(!options.silent)console.log('[Resource budget] '+JSON.stringify({...budget.status(),heapLimitMiB:Math.round(require('node:v8').getHeapStatistics().heap_size_limit/1048576),startupDiagnostics,steamConnectionLimit:3}));
   for(const acc of cfg.accounts)stateFor(acc.id).isPaused=Boolean(acc.paused);
   if(persistence)persistence.onFailure=()=>{for(const id of clients.keys())disconnect(id);};
   if (options.connect !== false) cfg.accounts.forEach(connect);
-  return { server, cfg, vault, clients, states, attempts, sessions, journal, persistence, startConnections:()=>{persistence?.assert();cfg.accounts.forEach(connect);}, close: async () => { closing = true; timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear();requirementsCache.clear();percentageCache.clear(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); await journal.close(); } };
+  return { server, cfg, vault, clients, states, attempts, sessions, journal, persistence, startConnections:()=>{persistence?.assert();cfg.accounts.forEach(connect);}, close: async () => { closing = true; timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear();requirementsCache.clear();percentageCache.clear(); percentagesRead.clear?.(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); await journal.close(); } };
 }
 if (require.main === module) {
   const port = Number(process.env.PORT || 8000);
