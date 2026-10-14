@@ -31,7 +31,7 @@ The account advisory lock serializes reservation checks across instances. The tr
 
 Desktop and mobile browser tests used a localhost fixture with no Steam transport. Remote multi-target writes and removal remain provisional until the user confirms a concrete live review. [Steamworks ClearAchievement](https://partner.steamgames.com/doc/api/ISteamUserStats?l=english) describes the native API; it does not certify this remote protobuf writer.
 
-Pending prepared Neon migration context (no credentials):
+Completed Neon migration context (audit only; do not reuse):
 - migration_id: ac00c935-0532-4395-8c6a-aece4a540027
 - project_id: wispy-dew-70605445
 - temporary_branch_id: br-old-waterfall-b8obanj5
@@ -39,4 +39,4 @@ Pending prepared Neon migration context (no credentials):
 - database_name: neondb
 - migration_sql: exact contents of migrations/003-achievement-operations.sql
 
-The production schema has not been changed. Completing or discarding this prepared migration requires explicit user approval through the Neon connector.
+The user explicitly approved publication and migration. The Neon connector applied the exact migration SQL to the parent production branch on 2026-10-14 UTC and deleted the temporary test branch. Production legacy history count and fingerprint remained unchanged across application. New operation tables contain no synthetic records.
