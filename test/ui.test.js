@@ -269,6 +269,13 @@ test('normaliza rareza ausente o texto y conserva estado sin verificar',async t=
   const w=ui(t,()=>response([{name:'Unknown',unlocked:null},{name:'String percent',unlocked:false,percent:'0.0'}]));await w.testUI.open(240,'One');
   assert.equal(w.document.querySelectorAll('.ach-item').length,2);assert.match(w.document.getElementById('achListContainer').textContent,/Unknown rarity/);assert.match(w.document.getElementById('achListContainer').textContent,/0.0%/);assert.match(w.document.getElementById('achProgressText').textContent,/1 not verified/);
 });
+test('one pending removal keeps the total, other status filters and eligible selections usable',async t=>{
+  const rows=[{name:'Unlocked',apiname:'A',unlocked:true,percent:10,batchSupport:{canRemove:true}},{name:'Locked',apiname:'B',unlocked:false,percent:2,compatibility:{status:'provisional',canUnlock:true}},{name:'Pending removal',apiname:'C',unlocked:null,percent:4,compatibility:{status:'insufficient_data',code:'removal_library_pending',canUnlock:false,reason:'Awaiting removal confirmation.'},batchSupport:{canRemove:false,canReactivate:false}}];
+  const w=ui(t,()=>({...response(rows),readingMethod:'protocol'}));w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'L4D2',false,'protocol');
+  assert.match(w.document.getElementById('achProgressText').textContent,/1\/3 verified.*1 not verified/);assert.equal(w.document.querySelectorAll('.ach-select').length,2);
+  w.testUI.filter('status','unlocked');assert.equal(w.document.querySelector('.ach-title').textContent,'Unlocked');w.testUI.filter('status','locked');assert.equal(w.document.querySelector('.ach-title').textContent,'Locked');
+  w.testUI.filter('status','all');w.testUI.search('Pending removal');assert.equal(w.document.querySelectorAll('.ach-select').length,0);assert.equal(w.document.querySelectorAll('.ach-item button').length,0);
+});
 test('modal permite cerrar con Escape y restaura scroll del documento',async t=>{
   const w=ui(t,()=>response(Array.from({length:200},(_,i)=>({name:`Achievement ${i}`,unlocked:false,percent:null}))));await w.testUI.open(240,'Many');assert.equal(w.document.querySelectorAll('.ach-item').length,200);assert.ok(w.document.body.classList.contains('achievement-open'));
   w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape'}));assert.equal(w.document.getElementById('achModal').style.display,'none');assert.ok(!w.document.body.classList.contains('achievement-open'));

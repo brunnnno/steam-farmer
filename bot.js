@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const SteamUser = require('steam-user');
 const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require('steam-session');
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
-const { readProtocol,requestSnapshot } = require('./lib/steam-protocol');
+const { readProtocol,requestSnapshot,libraryCorroborates } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement,prepare,prepareShared,prepareFloat,applyChanges } = require('./lib/achievement-writer');
 const {AchievementOperations,cleanOperation}=require('./lib/achievement-operations');
@@ -454,8 +454,10 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             if(method==='protocol') for(const row of result.achievements||[]) {
               const receipt=receipts.get(row.apiname);
               const removed=receipt?.outcome==='confirmed'&&receipt.action==='remove'&&receipt.after===false;
+              const pendingRemoval=removed&&!libraryCorroborates(result.diagnostics?.librarySummary,result.diagnostics?.statsUnlocked,result.achievements.length,receipt.verifiedAt||receipt.checkedAt);
+              if(pendingRemoval){row.unlocked=null;row.unlockTimestamp=0;row.compatibility={status:'insufficient_data',code:'removal_library_pending',canUnlock:false,reason:'This removal is awaiting an updated Steam library reading.',action:'Check this achievement in Steam and refresh. No automatic retry is sent.'};if(row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,canPreviewFloat:false,canPreviewShared:false};}
               const removalReason=historyUnavailable?'Recorded history could not be verified. Restore the history connection and refresh.':receipt&&receipt.outcome!=='confirmed'?'A previous attempt needs review before another change.':row.removalSupport?.reason;
-              row.batchSupport={canRemove:!historyUnavailable&&row.removalSupport?.canRemove===true&&(!receipt||receipt.outcome==='confirmed'),removalReason,canReactivate:!historyUnavailable&&removed};
+              row.batchSupport={canRemove:!pendingRemoval&&!historyUnavailable&&row.removalSupport?.canRemove===true&&(!receipt||receipt.outcome==='confirmed'),removalReason,canReactivate:!pendingRemoval&&!historyUnavailable&&removed};
               if(receipt) row.lastWriteOutcome=receipt.outcome;
               if(receipt?.outcome==='confirmed'&&row.unlocked===true&&receipt.after===true&&receipt.before===false&&(!receipt.action||receipt.action==='unlock')){row.panelOperationAt=receipt.checkedAt;row.panelVerifiedAt=receipt.verifiedAt||null;}
               if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
@@ -463,6 +465,8 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
               if(receipt&&!removed&&row.unlocked!==true&&row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,reason:row.compatibility.reason};
               if(historyUnavailable&&row.unlocked!==true){row.compatibility={status:'insufficient_data',code:'history_unavailable',canUnlock:false,reason:result.historyWarning,action:'Restore the persistent history connection before activating achievements.'};if(row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false};}
             }
+            const pendingRemovals=(result.achievements||[]).filter(r=>r.compatibility?.code==='removal_library_pending').length;
+            if(pendingRemovals&&!result.stateConflict){result.verified=false;result.message=`${pendingRemovals} achievement${pendingRemovals===1?' is':'s are'} awaiting removal confirmation. The other achievements remain available. Check Steam and refresh after making changes there.`;}
             achievementCache.set(key, result);
             result.readDurationMs=Date.now()-readStarted;
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} durationMs=${result.readDurationMs} webSession=${Boolean(st.webCookies)}`);
@@ -586,6 +590,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             assertPanelSession();
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused||mode==='float'&&(!st.tokenAccountMatches||st.steamId64!==identity))throw fail('The Steam session changed.',409);
             if(await journal.get(st.steamId64,id,apiName))throw fail('A write was already attempted for this achievement. Automatic retries are disabled.',409);
+            if((await operations.latest(st.steamId64,id)).get(apiName)?.action==='remove')throw fail('Use the reviewed selection to change an achievement with a previous removal. Its Steam library state must be checked first.',409);
             if(st.lastAchievementWrite && Date.now()-st.lastAchievementWrite<60000)throw fail('Wait one minute between achievement writes.',429);
             if(mode==='shared')await journal.reserveShared(st.steamId64,id,apiName,evidence);else await journal.reserve(st.steamId64,id,apiName,evidence);
             reserved=true;st.lastAchievementWrite=Date.now();
