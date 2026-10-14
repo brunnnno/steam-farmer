@@ -46,12 +46,16 @@ let filterStatus = 'all', filterRarity = 'all', currentSort = 'default', searchQ
 let filterCompatibility='all';
 let loginAttempt = null, loginTimer = null, loginTarget = null, loginSerial = 0, noticeTimer, statusBusy = false,statusQueued=false, searchSerial = 0, achSerial = 0;
 function notice(message) { $('notice').textContent = message; $('notice').hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').hidden = true, 10000); }
-async function api(endpoint, body, {signal}={}) {
+async function api(endpoint, body, {signal,retries=2}={}) {
   const authAtStart=loginSerial,csrfAtStart=csrf;
   const headers = {}; const options = { headers, signal: signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000) };
   if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['X-CSRF-Token'] = csrf; options.method = 'POST'; options.body = JSON.stringify(body); }
   const response = await fetch(endpoint, options); const data = await response.json();
   if (!response.ok) {
+    if (response.status === 429 && retries > 0 && endpoint !== '/api/panel/login' && !signal?.aborted) {
+      await new Promise(r => setTimeout(r, 350));
+      return api(endpoint, body, {signal, retries: retries - 1});
+    }
     if (response.status === 401 && authAtStart===loginSerial&&csrfAtStart===csrf&&endpoint !== '/api/panel/login' && endpoint !== '/api/panel/password') showLock();
     throw Object.assign(new Error(data.error || 'The operation failed.'),{diagnostic:data.diagnostic,status:response.status});
   }
@@ -275,10 +279,9 @@ async function pollAchievements(context,{signal}){
   const changes=data.observedChanges;if(changes?.total&&Number.isFinite(Date.parse(changes.observedAt))){for(const change of [...changes.changes].reverse())observedAchievementChanges.unshift({...change,observedAt:changes.observedAt});observedAchievementChanges.splice(20);renderObservedChanges();}
   if(currentAchList.some(a=>a.percent===null))loadAchievementPercentages();return data;
 }
-const achievementLive=AchievementLive.create({canRun:liveAllowed,poll:pollAchievements,onStatus:(state,{context,error}={})=>{
+const achievementLive=AchievementLive.create({canRun:liveAllowed,poll:pollAchievements,onStatus:(state,{context}={})=>{
   if(!liveMatches(context))return;
   $('achievementLiveStatus').textContent=state==='paused'||state==='live'&&!liveAllowed(context)?'Auto update paused while unavailable or reviewing':state==='checking'?'Checking Steam…':state==='live'?'Auto update · every 10 s':'Auto update unavailable · retrying';
-  if(state==='retrying'&&error&&currentAchMethod!=='cached'){currentAchMethod='cached';clearAchievementSelection();renderAchModal();}
 }});
 function forceRefreshAchievements() { if(currentAchAppId) return openAchModal(currentAchAppId,currentAchGameName,true,$('achReadMode').value); }
 function setFilter(type,val) {
@@ -403,7 +406,10 @@ function renderReviewedChangesPanel(preview,context){
 }
 async function reviewChangeSelection(input=[...achievementSelection.values()],options={}){
   if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||!input.length||active?.tokenSource!=='environment')return;
-  const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=selectionVersion,bulk=Boolean(options.bulk);experimentBusy=true;renderAchModal();
+  const id=currentAchAppId,account=activeAccountId,serial=achSerial,version=selectionVersion;
+  const selectedRows=input.map(item=>currentAchList.find(a=>a.apiname===item.apiname)).filter(Boolean);
+  const bulk=Boolean(options.bulk||selectedRows.some(r=>Number.isInteger(r.statId)||r.hasProgressDependency||r.batchSupport?.canReactivate));
+  experimentBusy=true;renderAchModal();
   try{
     const preview=await api('/api/achievement/change-preview',{accountId:account,appid:id,selection:input,...(bulk?{bulk:true}:{})});
     if(serial!==achSerial||version!==selectionVersion||account!==activeAccountId||id!==currentAchAppId||currentAchMethod!=='protocol')return;

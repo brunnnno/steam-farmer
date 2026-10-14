@@ -149,3 +149,59 @@ test('bulk unlock_all and lock_all handle >32 achievements, mixed FLOAT/bit bloc
   assert.equal(cleaned.totalEffects,500);
   assert.equal(cleaned.effects.length,64);
 });
+
+test('Sniper Ghost Warrior 24-achievement scenario: unlocks remaining 10 progress achievements of all types and locks all 24 even when librarySummary lags',()=>{
+  const {buildBulkSelection}=require('../lib/achievement-changes');
+  const bits={};
+  for(let i=0;i<14;i++)bits[i]={name:'ACT_'+(i+1)};
+  bits[14]={name:'ELECTRICIAN',progress:{max_val:'5',value:{operation:'statvalue',operand1:'CABLES'}}};
+  bits[15]={name:'FALLEN_EAGLE',progress:{max_val:'10.000000',value:{operation:'statvalue',operand1:'BIRDS'}}};
+  bits[16]={name:'CLOSE_RANGE',progress:{max_val:'250',value:{operation:'statvalue',operand1:'PISTOL_KILLS'}}};
+  bits[17]={name:'SNIPER_EXPERT',progress:{max_val:'250',value:{operation:'statvalue',operand1:'SNIPER_KILLS'}}};
+  bits[18]={name:'SNIPER_MASTER',progress:{max_val:'500',value:{operation:'statvalue',operand1:'SNIPER_KILLS'}}};
+  bits[19]={name:'COMPLEX_PROG',progress:{max_val:'50',value:{operation:'add',operand1:'CABLES',operand2:'BIRDS'}}};
+  bits[20]={name:'FLOAT_UNBOUNDED',progress:{max_val:'100.5',value:{operation:'statvalue',operand1:'HEADSHOT_DIST'}}};
+  bits[21]={name:'AGGREGATED_PROG',progress:{max_val:'25',value:{operation:'statvalue',operand1:'AGG_STAT'}}};
+  bits[22]={name:'PERMISSION_ONE',permission:'1'};
+  bits[23]={name:'TRUSTED_UNKNOWN',bSetByTrustedGS:'maybe'};
+
+  const s={
+    game_id:'34830',eresult:1,crc_stats:77,
+    schema:kv({'34830':{stats:{
+      1:{type:'4',bits},
+      2:{type:'INT',name:'CABLES',min:'0',max:'0',maxchange:'1'},
+      3:{type:'INT',name:'BIRDS',min:'0',max:'0'},
+      4:{type:'INT',name:'PISTOL_KILLS',min:'0',max:'0'},
+      5:{type:'INT',name:'SNIPER_KILLS',min:'0',max:'0',maxchange:'5'},
+      6:{type:'FLOAT',name:'HEADSHOT_DIST',min:'0.000000',max:'0.000000'},
+      7:{type:'INT',name:'AGG_STAT',aggregated:'1'}
+    }}}),
+    // First 14 bits are already unlocked (0x3fff), PISTOL_KILLS (stat 4) omitted by Steam
+    stats:[{stat_id:1,stat_value:0x3fff},{stat_id:2,stat_value:0},{stat_id:3,stat_value:0},{stat_id:5,stat_value:0},{stat_id:6,stat_value:0},{stat_id:7,stat_value:0}],
+    librarySummary:{total:24,unlocked:14,cacheTime:Math.floor(Date.now()/1000)}
+  };
+
+  // Unlock all remaining 10 achievements (indices 14..23)
+  const unlockSel=buildBulkSelection(s,34830,'unlock_all');
+  assert.equal(unlockSel.length,10);
+  const unlockPlan=prepareChanges(s,34830,unlockSel,new Map(),undefined,{bulk:true});
+  assert.equal(unlockPlan.effects.length,10);
+  const allUnlockedSnap={
+    ...final(s,unlockPlan),
+    // Simulate lagging Steam librarySummary still reporting 14/24
+    librarySummary:{total:24,unlocked:14,cacheTime:100}
+  };
+  assert.equal(verifyChanges(s,allUnlockedSnap,unlockPlan,{...ack,gameId:'34830'}).confirmed,true);
+
+  // Lock all 24 unlocked achievements even while librarySummary lags at 14/24
+  const lockSel=buildBulkSelection(allUnlockedSnap,34830,'lock_all');
+  assert.equal(lockSel.length,24);
+  const lockPlan=prepareChanges(allUnlockedSnap,34830,lockSel,new Map(),undefined,{bulk:true,resetCounters:true});
+  assert.equal(lockPlan.effects.length,24);
+  const allLockedSnap={
+    ...final(allUnlockedSnap,lockPlan),
+    // Simulate lagging Steam librarySummary still reporting 14/24
+    librarySummary:{total:24,unlocked:14,cacheTime:100}
+  };
+  assert.equal(verifyChanges(allUnlockedSnap,allLockedSnap,lockPlan,{...ack,gameId:'34830'}).confirmed,true);
+});
