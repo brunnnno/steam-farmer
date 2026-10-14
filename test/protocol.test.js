@@ -54,11 +54,17 @@ test('library corroboration is read-only, validates identity/game/count and clea
   c._send=()=>{};assert.equal(await readLibrarySummary(c,550,{timeoutMs:5}),null);assert.equal(c.listenerCount('error'),0);assert.equal(c.listenerCount('disconnected'),0);
 });
 test('a library/statistics disagreement exposes unknown state and prevents write eligibility',()=>{
-  const r=parseSnapshot(snap({librarySummary:{unlocked:2,total:2,cacheTime:123}}),550);
+  const r=parseSnapshot(snap({librarySummary:{unlocked:2,total:2,cacheTime:Math.floor(Date.now()/1000)}}),550);
   assert.equal(r.stateConflict,true);assert.equal(r.verified,false);assert.match(r.message,/statistics report 1\/2/);
   assert.ok(r.achievements.every(a=>a.unlocked===null&&!a.removalSupport.canRemove&&!a.compatibility.canUnlock));
   assert.equal(r.achievements[0].stateEvidence.bitUnlocked,false);
   assert.equal(r.achievements[0].compatibility.code,'library_state_conflict');assert.doesNotMatch(r.achievements[0].compatibility.action,/open it normally|publisher sign-in/);
+});
+test('an older disagreeing library cache does not erase current personal states or eligibility',()=>{
+  const r=parseSnapshot(snap({crc_stats:12,librarySummary:{unlocked:2,total:2,cacheTime:123}}),550);
+  assert.equal(r.staleLibrarySummary,true);assert.equal(r.stateConflict,false);assert.equal(r.verified,true);
+  assert.deepEqual(r.achievements.map(a=>a.unlocked),[false,true]);assert.equal(r.achievements[0].compatibility.canUnlock,true);
+  assert.doesNotMatch(r.message,/statistics report|conflict|blocked/);
 });
 test('direct transport sends only read message and cleans callbacks after completion',async()=>{
   const messages=[];const c=client((header,body,cb)=>{messages.push(header.msg);if(header.msg===EMsg.ServiceMethodCallFromClient)return queueMicrotask(()=>cb(Buffer.from(Schema.CPlayer_GetAchievementsProgress_Response.encode({achievement_progress:[{appid:550,total:2,unlocked:1,cache_time:123}]}).finish()),{msg:EMsg.ServiceMethodResponse,proto:{target_job_name:'Player.GetAchievementsProgress#1',eresult:1}}));assert.equal(header.msg,EMsg.ClientGetUserStats);const req=Schema.CMsgClientGetUserStats.decode(body);assert.equal(req.game_id.toString(),'550');assert.equal(req.steam_id_for_user.toString(),c.steamID.toString());queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode(snap()).finish()),{msg:EMsg.ClientGetUserStatsResponse}));});

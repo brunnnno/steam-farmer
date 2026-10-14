@@ -15,7 +15,7 @@ test('a cleared bit cannot confirm removal with missing, older or conflicting St
   const s=snapshot({mask:7}),p=prepareChanges(s,550,remove('A')),good=final(s,p);
   for(const librarySummary of [null,{...good.librarySummary,cacheTime:1},{...good.librarySummary,unlocked:3},{...good.librarySummary,total:4}])assert.equal(verifyChanges(s,{...good,librarySummary},p,ack).confirmed,false);
   assert.equal(verifyChanges(s,good,p,ack).confirmed,true);
-  assert.throws(()=>prepareChanges({...s,librarySummary:{total:3,unlocked:2,cacheTime:1}},550,remove('A')),/complete/);
+  assert.throws(()=>prepareChanges({...s,librarySummary:{total:3,unlocked:2,cacheTime:Math.floor(Date.now()/1000)}},550,remove('A')),/complete/);
 });
 test('multiple selected bits combine into one mask while preserving every unrelated bit/statistic',()=>{
   const s=snapshot(),plan=prepareChanges(s,550,choose('B','A'));assert.deepEqual(plan.selection,choose('A','B'));assert.deepEqual(plan.payload.stats,[{stat_id:7,stat_value:7}]);assert.equal(s.stats[0].stat_value,4);assert.equal(verifyChanges(s,final(s,plan),plan,ack).confirmed,true);
@@ -28,7 +28,9 @@ test('any verified unrestricted unlock can be removed while unresolved attempts 
 });
 
 test('confirmed removal allows a separately reviewed new activation while unresolved history blocks it',()=>{
-  const s=snapshot(),removed={...evidence('A',0),action:'remove',before:true,after:false};assert.ok(prepareChanges(s,550,choose('A'),new Map([['A',removed]])).payload);
+  const s=snapshot(),removed={...evidence('A',0),action:'remove',before:true,after:false};assert.throws(()=>prepareChanges(s,550,choose('A'),new Map([['A',removed]])),/awaiting/);s.librarySummary={total:3,unlocked:1,cacheTime:Math.floor(Date.now()/1000)};assert.ok(prepareChanges(s,550,choose('A'),new Map([['A',removed]])).payload);
+  for(const librarySummary of [null,{...s.librarySummary,cacheTime:1},{...s.librarySummary,unlocked:2}])assert.throws(()=>prepareChanges({...s,librarySummary},550,choose('A'),new Map([['A',removed]])));
+  assert.ok(prepareChanges({...s,librarySummary:{total:3,unlocked:2,cacheTime:1}},550,choose('B'),new Map([['A',removed]])).payload);
   for(const receipt of [evidence('A',0),{...removed,outcome:'requested'},{...removed,outcome:'unknown'}])assert.throws(()=>prepareChanges(s,550,choose('A'),new Map([['A',receipt]])));
 });
 test('a shared counter requires selecting all newly crossed unlocks and reviews still-locked progress',()=>{
