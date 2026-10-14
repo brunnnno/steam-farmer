@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=31">
+  <link rel="stylesheet" href="/style.css?v=32">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
@@ -84,12 +84,13 @@
 
       <div class="ach-source">
         <strong>Read from Steam</strong>
-        <span id="achievementSource"></span><button id="retryAchievementRarity" class="btn-action-sm" hidden>Retry rarity</button>
+        <span id="achievementSource"></span><small id="achievementLiveStatus">Auto update · every 10 s</small><button id="retryAchievementRarity" class="btn-action-sm" hidden>Retry rarity</button>
       </div>
       <div id="achievementSelectionBar" class="achievement-selection" hidden><div class="achievement-selection-copy"><strong id="achievementSelectionSummary" aria-live="polite">Unlock or remove achievements</strong><small id="achievementSelectionHint"></small></div><div class="achievement-selection-actions"><button id="verifyAchievementChanges" class="btn-main">Enable achievement changes</button><button id="reviewAchievementSelection" class="btn-main" disabled>Review selected changes</button><button id="clearAchievementSelection" class="btn-action-sm" hidden>Clear selection</button></div></div>
       <p id="achCompatibilitySummary" class="ach-availability-summary" aria-live="polite"></p>
       <p id="achRarityMessage" class="ach-availability-summary" aria-live="polite" hidden></p>
 
+      <details id="achievementObservedChanges" class="game-requirements" hidden><summary id="achievementObservedSummary">Changes observed</summary><small>Detected while this list is open. These are observation times, not Steam unlock dates. The latest eight of up to twenty observations are shown.</small><div id="achievementObservedList"></div></details>
       <details id="gameRequirements" class="game-requirements" hidden>
         <summary>Game integration &amp; activation limits</summary>
         <div id="gameRequirementsContent"></div>
@@ -211,11 +212,13 @@
     </section>
 
     <section class="library-section" aria-label="Game library"><div class="section-heading"><div><span class="eyebrow">YOUR COLLECTION</span><h2>Game library</h2></div><span class="section-note">Open a game to verify its achievements</span></div><div class="grid" id="gamesGrid"></div></section>
-    <footer>SteamFarmer <span>Personal dashboard · Steam session manager · v2.1.5</span></footer>
+    <footer>SteamFarmer <span>Personal dashboard · Steam session manager · v2.2.0</span></footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=31" defer></script>
-  <script src="/achievement-availability.js?v=31" defer></script>
-  <script src="/app.js?v=31" defer></script>
+  <script src="/achievement-rarity.js?v=32" defer></script>
+  <script src="/achievement-availability.js?v=32" defer></script>
+  <script src="/draft-settings.js?v=32" defer></script>
+  <script src="/achievement-live.js?v=32" defer></script>
+  <script src="/app.js?v=32" defer></script>
 </body>
 </html>

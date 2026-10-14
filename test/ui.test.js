@@ -1,15 +1,57 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const {JSDOM}=require('jsdom');
-function ui(t, responder) {
+function ui(t, responder,initialSession=()=>new Promise(()=>{})) {
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8'),{url:'https://panel.example',runScripts:'outside-only'});t.after(()=>dom.window.close());
-  const w=dom.window;w.AbortSignal=AbortSignal;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
-  w.fetch=async(url)=>url==='/api/panel/session'?new Promise(()=>{}):({ok:true,status:200,json:async()=>responder(url)});
+  const w=dom.window;w.AbortSignal=AbortSignal;w.AbortController=AbortController;w.intervals=[];w.setInterval=(callback,delay)=>{w.intervals.push({callback,delay});return w.intervals.length;};
+  w.fetch=async(url)=>url==='/api/panel/session'?initialSession():({ok:true,status:200,json:async()=>responder(url)});
   w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-rarity.js'),'utf8'));
   w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-availability.js'),'utf8'));
-  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},lock:showLock,open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory};`);
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/draft-settings.js'),'utf8'));
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/achievement-live.js'),'utf8'));
+  w.eval(fs.readFileSync(path.join(__dirname,'../public/app.js'),'utf8')+`\nwindow.testUI={load:loadStatus,authenticate:()=>{csrf='test';},lock:showLock,open:openAchModal,close:closeAchModal,filter:setFilter,search:onSearchInput,refresh:forceRefreshAchievements,select:id=>{activeAccountId=id;},activate:a=>{active=a;},unlock:unlockIndividualAchievement,completeProgress:completeAchievementProgress,reviewShared:reviewSharedProgress,history:refreshWriteHistory,live:achievementLive,saveSleep,saveCustomStatus,api,checkAuth,panelUnlock:unlock,csrf:()=>csrf};`);
   w.testUI.select('a');return w;
 }
 const response=rows=>({achievements:rows,source:'Steam test',checkedAt:new Date().toISOString()});
+
+test('a late startup session success or 401 cannot replace a subsequent panel sign-in',async t=>{
+  for(const success of [true,false])await t.test(success?'old successful session':'old expired session',async t=>{
+    let resolveInitial,logins=0;const initial=new Promise(resolve=>resolveInitial=resolve),account={id:'a',name:'Synthetic account',games:[],sleepMode:{}};
+    const w=ui(t,url=>{
+      if(url==='/api/panel/login'){logins++;return {csrf:'new-panel-session'};}
+      if(url==='/api/status')return {accounts:[account],presets:[],timezone:'UTC'};
+      return response([]);
+    },()=>initial);
+    w.document.getElementById('pinInput').value='synthetic-panel-password';await w.testUI.panelUnlock();
+    assert.equal(logins,1);assert.equal(w.testUI.csrf(),'new-panel-session');assert.equal(w.document.getElementById('lockModal').style.display,'none');
+    resolveInitial({ok:success,status:success?200:401,json:async()=>success?{csrf:'old-startup-session'}:{error:'Expired startup session'}});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(w.testUI.csrf(),'new-panel-session');assert.equal(w.document.getElementById('lockModal').style.display,'none');assert.match(w.document.getElementById('userLabel').textContent,/Synthetic account/);
+  });
+});
+test('live read detects external unlocks and removals, retains rarity and never calls a write',async t=>{
+  let stage=0;const urls=[];const row=()=>({apiname:'A',name:'One',unlocked:stage===1,percent:stage?null:10,compatibility:{status:'provisional',canUnlock:stage!==1},batchSupport:{canRemove:stage===1}});
+  const w=ui(t,url=>{urls.push(url);return {...response([row()]),readingMethod:'protocol',stateRevision:String(stage+1).repeat(64),...(stage?{observedChanges:{changes:[{apiname:'A',name:'One',kind:stage===1?'unlock':'remove',before:stage!==1,after:stage===1}],total:1,observedAt:new Date().toISOString()}}:{})};});
+  Object.defineProperty(w.document,'hidden',{value:false,configurable:true});w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
+  stage=1;await w.testUI.live.tick();assert.match(w.document.getElementById('achProgressText').textContent,/1\/1/);assert.match(w.document.getElementById('achListContainer').textContent,/Epic · 10.0%/);assert.match(w.document.getElementById('achievementObservedList').textContent,/Unlocked/);
+  stage=2;await w.testUI.live.tick();assert.match(w.document.getElementById('achProgressText').textContent,/0\/1/);assert.match(w.document.getElementById('achievementObservedList').textContent,/Locked/);assert.ok(urls.slice(1).every(url=>url.includes('revision=')));
+  const requests=urls.length,check=w.document.querySelector('.ach-select');check.checked=true;check.dispatchEvent(new w.Event('change'));await w.testUI.live.tick();assert.equal(urls.length,requests);assert.ok(!urls.some(url=>url.includes('/unlock')||url.includes('/change')));
+});
+test('unchanged live results retain DOM, position and filter while a late read cannot reopen a closed game',async t=>{
+  let next,resolve;const rows=[{apiname:'A',name:'One',unlocked:false,percent:2}],w=ui(t,()=>next||{...response(rows),readingMethod:'protocol',stateRevision:'a'.repeat(64)});
+  Object.defineProperty(w.document,'hidden',{value:false,configurable:true});w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');w.testUI.filter('rarity','mythic');const item=w.document.querySelector('.ach-item');w.document.getElementById('achListContainer').scrollTop=67;
+  next={unchanged:true,checkedAt:new Date().toISOString(),source:'Steam test',readingMethod:'protocol',stateRevision:'a'.repeat(64)};await w.testUI.live.tick();assert.equal(w.document.querySelector('.ach-item'),item);assert.equal(w.document.getElementById('achListContainer').scrollTop,67);
+  next=new Promise(r=>resolve=r);const pending=w.testUI.live.tick();w.testUI.close();resolve({...response([{...rows[0],unlocked:true}]),stateRevision:'b'.repeat(64)});await pending;assert.equal(w.document.getElementById('achModal').style.display,'none');assert.equal(w.document.querySelectorAll('.ach-item').length,0);
+});
+test('status polling preserves unfocused drafts and an old 401 does not lock the new session',async t=>{
+  const account={id:'a',name:'A',connected:true,games:[],sleepMode:{enabled:false,start:3,end:8},customStatus:''};const w=ui(t,()=>({accounts:[account],presets:[],timezone:'America/Montevideo'}));w.testUI.authenticate();w.testUI.activate(account);await w.testUI.load();
+  for(const [id,value]of [['sleepStart','22'],['timezoneInput','UTC'],['customStatusInput','Draft']]){const input=w.document.getElementById(id);input.value=value;input.dispatchEvent(new w.Event('input'));}
+  w.document.getElementById('sleepEnabled').checked=true;w.document.getElementById('sleepEnabled').dispatchEvent(new w.Event('change'));await w.testUI.load();assert.equal(w.document.getElementById('sleepStart').value,'22');assert.equal(w.document.getElementById('timezoneInput').value,'UTC');assert.equal(w.document.getElementById('customStatusInput').value,'Draft');assert.equal(w.document.getElementById('sleepEnabled').checked,true);
+  let resolve;w.fetch=()=>new Promise(r=>resolve=r);const old=w.testUI.api('/api/status');w.testUI.lock();w.testUI.authenticate();w.document.getElementById('lockModal').style.display='none';resolve({ok:false,status:401,json:async()=>({error:'Expired old session'})});await assert.rejects(old);assert.equal(w.document.getElementById('lockModal').style.display,'none');
+});
+test('late rarity enrichment keeps the current page and explicit search resets it',async t=>{
+  let resolve;const rows=Array.from({length:201},(_,i)=>({apiname:'A'+i,name:'Achievement '+i,unlocked:false,percent:null}));const w=ui(t,url=>url.includes('/percentages?')?new Promise(r=>resolve=r):{...response(rows),readingMethod:'protocol'});await w.testUI.open(550,'Game',false,'protocol');
+  await new Promise(r=>setImmediate(r));[...w.document.querySelectorAll('.ach-pagination button')].find(b=>b.textContent==='Next').click();assert.equal(w.document.querySelector('.ach-title').textContent,'Achievement 200');resolve({percentages:Object.fromEntries(rows.map(r=>[r.apiname,2]))});await new Promise(r=>setImmediate(r));assert.equal(w.document.querySelector('.ach-title').textContent,'Achievement 200');w.testUI.search('Achievement 0');assert.equal(w.document.querySelector('.ach-title').textContent,'Achievement 0');
+});
 
 test('a pending or failed new game never displays the previous game rarity or reading message',async t=>{
   let reject;const pending=new Promise((_,r)=>{reject=r;});const w=ui(t,url=>url.includes('appid=240')?pending:{...response([{name:'Previous',apiname:'P',unlocked:true,percent:10}]),rarityMessage:'Historical L4D2 message',message:'Previous private reading'});
@@ -31,7 +73,7 @@ test('selection spans filters, reviews mixed unlocks/removals and sends only aft
   w.document.getElementById('reviewAchievementSelection').click();await new Promise(r=>setImmediate(r));assert.match(w.document.getElementById('sharedProgressReview').textContent,/Will unlock/);assert.match(w.document.getElementById('sharedProgressReview').textContent,/Will remove/);
   let submitted;w.fetch=async(url,options)=>{if(url==='/api/achievement/change')submitted=JSON.parse(options.body);return {ok:true,json:async()=>url==='/api/achievement/change'?{message:'Confirmed.'}:response(rows)};};
   let confirmation;w.confirm=text=>{confirmation=text;return false;};w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(submitted,undefined);assert.match(confirmation,/New: unlock/);assert.match(confirmation,/Panel granted: remove/);
-  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:550,selection:selected,revision:'a'.repeat(64),confirmed:true});assert.equal(w.document.getElementById('achievementSelectionBar').hidden,false);assert.equal(w.document.getElementById('reviewAchievementSelection').disabled,true);
+  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{confirmed:true,accountId:'a',appid:550,selection:selected,revision:'a'.repeat(64),confirmed:true});assert.equal(w.document.getElementById('achievementSelectionBar').hidden,false);assert.equal(w.document.getElementById('reviewAchievementSelection').disabled,true);
 });
 test('selection is capped, invalidated by edits or refresh, and absent from cached readings',async t=>{
   const rows=Array.from({length:40},(_,i)=>({name:'Target '+i,apiname:'A'+i,unlocked:false,compatibility:{status:'provisional',canUnlock:true}})),w=ui(t,()=>response(rows));w.testUI.activate({tokenSource:'environment',connected:true});await w.testUI.open(550,'Game',false,'protocol');
@@ -174,7 +216,7 @@ test('shared update submission uses only the reviewed revision and requires expl
   const preview={appid:440,apiname:'DOCTOR',canActivate:true,revision:'a'.repeat(64),counter:{statName:'HEALED',before:0,after:25000},effects:[{name:'Doctor',goal:25000,effect:'would_unlock'},{name:'Chief',goal:1000000,effect:'progress_only'}],message:'Reviewed.'};
   const w=ui(t,url=>url.includes('shared-progress-preview')?preview:response([row]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});await w.testUI.open(440,'TF2',false,'protocol');await w.testUI.reviewShared(row);w.confirm=()=>true;
   let submitted;w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock')submitted=JSON.parse(options.body);return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
-  w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{accountId:'a',appid:440,apiname:'DOCTOR',mode:'shared',revision:'a'.repeat(64)});
+  w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.deepEqual(submitted,{confirmed:true,accountId:'a',appid:440,apiname:'DOCTOR',mode:'shared',revision:'a'.repeat(64)});
 });
 test('decimal update requires an exact review, respects cancellation and posts only the reviewed revision',async t=>{
   const row={name:'Distance',apiname:'DECIMAL',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewFloat:true}};
@@ -183,7 +225,7 @@ test('decimal update requires an exact review, respects cancellation and posts o
   const review=w.document.querySelector('#achListContainer button');assert.equal(review.textContent,'Review progress');review.click();await new Promise(r=>setImmediate(r));
   let submitted,count=0,confirmation='';w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock'){submitted=JSON.parse(options.body);count++;}return {ok:true,json:async()=>url==='/api/achievement/unlock'?{message:'Confirmed.'}:response([row])};};
   w.confirm=text=>{confirmation=text;return false;};w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,0);assert.match(confirmation,/DISTANCE: 1.25 → 10.5/);assert.match(confirmation,/Only this counter will be sent/);assert.match(confirmation,/Steam may unlock this linked achievement/);
-  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,1);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'DECIMAL',mode:'float',revision:'b'.repeat(64)});
+  w.confirm=()=>true;w.document.querySelector('#sharedProgressActions button').click();await new Promise(r=>setImmediate(r));assert.equal(count,1);assert.deepEqual(submitted,{confirmed:true,accountId:'a',appid:550,apiname:'DECIMAL',mode:'float',revision:'b'.repeat(64)});
 });
 test('decimal confirmation cannot submit after account or reading context changes',async t=>{
   const row={name:'Distance',apiname:'DECIMAL',unlocked:false,hasProgressDependency:true,compatibility:{status:'dependency'},progressSupport:{canPreviewFloat:true}};
@@ -325,7 +367,7 @@ test('individual activation submits only the chosen account, game and API name',
   const w=ui(t,()=>response([target]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});w.confirm=()=>true;
   await w.testUI.open(550,'Game',true,'protocol');let submitted;
   w.fetch=async(url,options)=>{if(url==='/api/achievement/unlock'){submitted=JSON.parse(options.body);return {ok:true,json:async()=>({outcome:'unknown',message:'Not confirmed'})};}return {ok:true,json:async()=>response([target])};};
-  await w.testUI.unlock(target);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'FIRST'});assert.equal(w.document.querySelector('.ach-item').textContent.includes('Locked'),true);
+  await w.testUI.unlock(target);assert.deepEqual(submitted,{confirmed:true,accountId:'a',appid:550,apiname:'FIRST'});assert.equal(w.document.querySelector('.ach-item').textContent.includes('Locked'),true);
 });
 test('publisher requirements show explanatory context as text without inventing an activation restriction',async t=>{
   const w=ui(t,url=>url.startsWith('/api/game-requirements')?{facts:['<b>Publisher account</b>'],explanation:'An external launcher alone does not establish writability.',action:'Check the official game.',metadataAvailable:true,externalAccountOrSoftware:true,sourceUrl:'https://store.steampowered.com/app/123/'}:response([{name:'One',unlocked:false}]));
@@ -345,7 +387,7 @@ test('confirmed progress completion submits the selected target and reviewed rev
   const target={name:'Progress',apiname:'TARGET',unlocked:false,hasProgressDependency:true,compatibility:{canUnlock:false,status:'dependency'},progressSupport:{canComplete:true}};
   const w=ui(t,()=>response([target]));w.testUI.authenticate();w.testUI.activate({tokenSource:'environment'});w.confirm=()=>true;await w.testUI.open(550,'Game',true,'protocol');let submitted;
   w.fetch=async(url,options)=>({ok:true,json:async()=>url.startsWith('/api/achievement/progress-preview')?{name:'Progress',revision:'b'.repeat(64),progressChanges:[{statName:'COUNT',before:3,after:10}],message:'Changes Steam stats.'}:url==='/api/achievement/unlock'?(submitted=JSON.parse(options.body),{message:'Verified'}):response([target])});
-  await w.testUI.completeProgress(target);assert.deepEqual(submitted,{accountId:'a',appid:550,apiname:'TARGET',mode:'progress',revision:'b'.repeat(64)});
+  await w.testUI.completeProgress(target);assert.deepEqual(submitted,{confirmed:true,accountId:'a',appid:550,apiname:'TARGET',mode:'progress',revision:'b'.repeat(64)});
 });
 test('shared impact review displays all effect types as text and never submits an activation',async t=>{
   const urls=[];const row={name:'Shared',apiname:'TARGET',unlocked:false,hasProgressDependency:true,compatibility:{canUnlock:false},progressSupport:{canPreviewShared:true,canComplete:false}};
