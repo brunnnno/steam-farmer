@@ -21,6 +21,7 @@ const {ownedFloatLibrary,scanFloatBatch}=require('./lib/float-discovery');
 const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
 const {createPercentageReader}=require('./lib/rarity-history');
+const {revisionFor,changesBetween}=require('./lib/achievement-sync');
 const { remote, achievements, parseCards } = require('./lib/steam-data');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
@@ -89,7 +90,7 @@ function createApp(options = {}) {
   const startupDiagnostics=options.startupDiagnostics??(process.env.STEAM_STARTUP_DIAGNOSTICS==='1');
   const namePending=new Map();
   const percentageCache=new ResultCache({maxBytes:256*1024,maxEntries:16,ttl:3600000}),percentagePending=new Map();
-  const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/achievement-rarity.js': ['achievement-rarity.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
+const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-live.js': ['achievement-live.js','text/javascript'], '/draft-settings.js': ['draft-settings.js','text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/achievement-rarity.js': ['achievement-rarity.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
   }));
@@ -431,7 +432,17 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (method === 'protocol' && !st.connected) throw fail('Connect to Steam before using direct verification.', 409);
         const key = `${acc.id}:${id}:${st.steamId64 || acc.mySteamID || ''}:${st.webSessionVersion}:${method}`;
         const cached = achievementCache.get(key);
-        if (url.searchParams.get('refresh') !== '1' && cached) return json(res, 200, cached);
+        const live=url.searchParams.get('live')==='1',known=url.searchParams.get('revision');
+        if(known!==null&&!/^[a-f0-9]{64}$/.test(known))throw fail('Invalid achievement reading revision.');
+        const readingRevision=result=>crypto.createHash('sha256').update(JSON.stringify([acc.id,id,st.steamId64||acc.mySteamID||'',revisionFor(result)])).digest('hex');
+        const reply=result=>{
+          const stateRevision=result.stateRevision||readingRevision(result),metadata={stateRevision,checkedAt:result.checkedAt,source:result.source,readingMethod:result.readingMethod,readDurationMs:result.readDurationMs,message:result.message||'',verified:result.verified};
+          if(known===stateRevision)return {unchanged:true,...metadata};
+          const delta=known&&cached?.stateRevision===known?changesBetween(cached.achievements,result.achievements):null;
+          return {...result,stateRevision,...(delta?{observedChanges:{...delta,observedAt:result.checkedAt}}:{})};
+        };
+        const freshLive=url.searchParams.get('refresh')!=='1'&&cached&&Date.now()-Date.parse(cached.checkedAt)<5000;
+        if(cached&&(live?freshLive:url.searchParams.get('refresh')!=='1'))return json(res,200,reply(cached));
         if (!achievementPending.has(key)) {
           releaseResource=budget.acquire('heavy');
           const readClient=clients.get(acc.id),readVersion=st.webSessionVersion;
@@ -467,8 +478,8 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             }
             const pendingRemovals=(result.achievements||[]).filter(r=>r.compatibility?.code==='removal_library_pending').length;
             if(pendingRemovals&&!result.stateConflict){result.verified=false;result.message=`${pendingRemovals} achievement${pendingRemovals===1?' is':'s are'} awaiting removal confirmation. The other achievements remain available. Check Steam and refresh after making changes there.`;}
-            achievementCache.set(key, result);
             result.readDurationMs=Date.now()-readStarted;
+            result.stateRevision=readingRevision(result);achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} durationMs=${result.readDurationMs} webSession=${Boolean(st.webCookies)}`);
             if(result.diagnostics?.retainedUnlockDateCount)console.log('[Achievement state evidence]',JSON.stringify({appid:id,count:result.diagnostics.retainedUnlockDateCount,rows:result.diagnostics.retainedUnlockDates}));
             if(result.diagnostics?.librarySummary)console.log('[Achievement library summary]',JSON.stringify({appid:id,statistics:result.diagnostics.statsUnlocked,summary:result.diagnostics.librarySummary,conflict:result.stateConflict}));
@@ -477,7 +488,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           }).finally(() => achievementPending.delete(key));
           achievementPending.set(key, task);
         }
-        return json(res, 200, await achievementPending.get(key));
+        return json(res, 200, reply(await achievementPending.get(key)));
       }
       if(url.pathname==='/api/achievement/shared-progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
@@ -569,6 +580,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         return json(res,200,{appid:id,apiname:apiName,name:plan.target.name,revision:plan.revision,progressChanges:plan.progressChanges,message:'This operation changes the selected Steam achievement and its linked counter. Game saves and publisher progress are not verified.'});
       }
       if (url.pathname === '/api/achievement/unlock' && req.method === 'POST') {
+        if(data.confirmed!==true)throw fail('Confirm the concrete achievement change before sending.');
         const acc=getAccount(req,url,data),st=stateFor(acc.id);
         if(!isEnvironmentAccount(acc)||!st.connected||!st.tokenAccountMatches)throw fail('Individual activation requires the connected main account managed by Render.',409);
         if(st.isCollisionPaused)throw fail('Stop playing on the other device before unlocking an achievement.',409);
@@ -604,6 +616,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();}
       }
       if (url.pathname === '/api/achievement-experiment' && req.method === 'POST') {
+        if(data.confirmed!==true)throw fail('Confirm the concrete achievement change before sending.');
         rate(`experiment:${token}`, 3, 60000);
         const acc = getAccount(req,url,data), st = stateFor(acc.id);
         if (!isEnvironmentAccount(acc) || !st.connected || !st.tokenAccountMatches) throw fail('The experiment requires the connected main account managed by Render.',409);
@@ -616,13 +629,16 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         try {
           const result=await experimentWrite(client,{expectedApiname:data.apiname,beforeSend:async evidence=>{
             await persistence?.flush();
+            assertPanelSession();
             if(clients.get(acc.id)!==client || !st.connected || st.isCollisionPaused) throw fail('The Steam session changed.',409);
             const key=st.steamId64+':'+TARGET.appid;
             cfg.achievementExperiments ||= {};
             if(cfg.achievementExperiments[key]) throw fail('One write was already attempted for this account. Refresh to verify; retries require a new review.',409);
             await journal.reserve(st.steamId64,TARGET.appid,data.apiname,evidence);reserved=true;
+            assertPanelSession();
             if(clients.get(acc.id)!==client||!st.connected||st.isCollisionPaused)throw fail('Steam changed while the write intent was being recorded. No write was sent.',409);
             cfg.achievementExperiments[key]={...evidence,outcome:'requested'};save();await persistence?.flush();
+            assertPanelSession();
             console.log('[Achievement experiment requested] '+JSON.stringify(evidence));
           }});
           if(reserved)try{await journal.finish(st.steamId64,TARGET.appid,data.apiname,result);}catch{result.historyPersisted=false;result.message=(result.message||'Steam returned a result.')+' The result could not be saved to history; the intent remains pending. Do not retry.';}

@@ -9,6 +9,18 @@ const { createApp } = require('../bot');
 const { atomicWrite, Vault, appId, hour, sleepNow } = require('../lib/core');
 const { parseXml, parseHtml, parseCards } = require('../lib/steam-data');
 const PASSWORD = 'panel-test-password-123';
+test('live readings coalesce, use scoped revisions, detect external changes and never send writes',async t=>{
+  let reads=0,unlocked=false,progress=1,writes=0;
+  const f=await fixture(t,{accounts:[{id:'a',name:'A',games:[]}]},{protocolReader:async()=>{reads++;return {source:'Steam synthetic',verified:true,checkedAt:new Date().toISOString(),achievements:[{apiname:'A',name:'A',unlocked,compatibility:{status:'provisional',canUnlock:!unlocked},progressDetails:{statName:'COUNT',type:'1',maximum:10,currentValue:progress}}]};},individualWriter:async()=>{writes++;},changesWriter:async()=>{writes++;}});
+  await f.login();await f.request('/api/status');f.app.states.get('a').connected=true;f.app.clients.set('a',new FakeUser({}));
+  const path='/api/achievements?accountId=a&appid=550&method=protocol',first=await f.request(path+'&live=1');assert.match(first.data.stateRevision,/^[a-f0-9]{64}$/);assert.equal(reads,1);
+  const same=await f.request(path+'&live=1&revision='+first.data.stateRevision);assert.equal(same.data.unchanged,true);assert.equal(same.data.achievements,undefined);assert.equal(reads,1);
+  const forced=await f.request(path+'&live=1&refresh=1&revision='+first.data.stateRevision);assert.equal(forced.data.unchanged,true);assert.equal(reads,2);
+  unlocked=true;progress=2;const changed=await f.request(path+'&refresh=1&revision='+first.data.stateRevision);assert.notEqual(changed.data.stateRevision,first.data.stateRevision);assert.equal(changed.data.achievements[0].unlocked,true);assert.equal(changed.data.observedChanges.counts.unlock,1);assert.equal(changed.data.observedChanges.counts.progress,1);
+  unlocked=false;const removed=await f.request(path+'&refresh=1&revision='+changed.data.stateRevision);assert.equal(removed.data.observedChanges.counts.remove,1);
+  const other=await f.request(path.replace('550','240')+'&live=1&revision='+removed.data.stateRevision);assert.notEqual(other.data.stateRevision,removed.data.stateRevision);assert.equal(other.data.unchanged,undefined);
+  assert.equal((await f.request(path+'&revision=not-a-revision')).response.status,400);assert.equal(writes,0);
+});
 
 test('real-format unrecorded unlocked bits expose removal and preview without reservations or Steam writes',async t=>{
   function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));a.push(Buffer.from([8]));return Buffer.concat(a);}
@@ -27,7 +39,7 @@ test('real-format unrecorded unlocked bits expose removal and preview without re
   const stale=await f.request('/api/achievements?accountId=main&appid=550&method=auto&refresh=1');assert.equal(stale.data.staleLibrarySummary,true);assert.equal(stale.data.stateConflict,false);assert.doesNotMatch(stale.data.message,/70|71|conflict/);assert.equal(stale.data.achievements[0].unlocked,null);assert.equal(stale.data.achievements[0].batchSupport.canReactivate,false);assert.equal(stale.data.achievements[1].unlocked,true);assert.equal(stale.data.achievements[1].batchSupport.canRemove,true);
   const unaffected=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,selection:[{apiname:'NATURAL_BIT',action:'remove'}]});assert.equal(unaffected.response.status,200);
   const pending=await f.request('/api/achievement/change-preview',{accountId:'main',appid:550,selection:[{apiname:'NATURAL',action:'remove'}]});assert.equal(pending.response.status,409);
-  const bypass=await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'NATURAL'});assert.equal(bypass.response.status,409);assert.match(bypass.data.error,/reviewed selection/);
+  const bypass=await f.request('/api/achievement/unlock',{confirmed:true,accountId:'main',appid:550,apiname:'NATURAL'});assert.equal(bypass.response.status,409);assert.match(bypass.data.error,/reviewed selection/);
 });
 
 test('a successful Steam login cancels stale reconnect work; rejected credentials cancel any earlier transient retry',async t=>{
@@ -49,8 +61,8 @@ test('shared API stays read-only without persistent reservations and never bypas
   const route='/api/achievement/shared-progress-preview?accountId=main&appid=440&apiname=DOCTOR';assert.equal((await f.request(route)).response.status,401);
   await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
   const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.canActivate,false);assert.equal(preview.data.effects.length,2);
-  const body={accountId:'main',appid:440,apiname:'DOCTOR',mode:'shared'};assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);
-  assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
+  const body={accountId:'main',appid:440,apiname:'DOCTOR',mode:'shared'};assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true})).response.status,400);
+  assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);
 });
 const TOKEN_EXPIRY=Math.floor(Date.now()/1000)+3600;
 test('reviewed selections require authentication, CSRF, main identity, migration and exact confirmation',async t=>{
@@ -108,7 +120,7 @@ test('decimal preview requires the connected main account, rejects session chang
   const route='/api/achievement/float-progress-preview?accountId=main&appid=550&apiname=DECIMAL';assert.equal((await f.request(route)).response.status,401);await f.login();await f.request('/api/status');assert.equal((await f.request(route)).response.status,409);
   Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true});f.app.clients.set('main',new FakeUser({}));
   const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.counter.before,1.25);assert.equal(preview.data.counter.after,10.5);assert.equal(preview.data.canActivate,false);
-  assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'DECIMAL',mode:'float',revision:preview.data.revision})).response.status,503);
+  assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,accountId:'main',appid:550,apiname:'DECIMAL',mode:'float',revision:preview.data.revision})).response.status,503);
   change=true;assert.equal((await f.request(route)).response.status,409);assert.equal(writes,0);
 });
 test('persistent history starts concurrently with Steam reading and failures still block activation',async t=>{
@@ -135,10 +147,10 @@ test('decimal API binds the review to fresh data and reserves persistent evidenc
   }});}finally{if(previous===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=previous;}
   await f.login();await f.request('/api/status');const client=new FakeUser({});client._send=()=>{};f.app.clients.set('main',client);Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});
   const route='/api/achievement/float-progress-preview?accountId=main&appid=550&apiname=DECIMAL';let preview=await f.request(route);assert.equal(preview.data.canActivate,true);assert.equal(writes,0);
-  const body={accountId:'main',appid:550,apiname:'DECIMAL',mode:'float'};assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);
-  assert.equal((await f.request('/api/achievement/unlock',{...body,revision:'b'.repeat(64)})).response.status,409);assert.equal(writes,0);order.length=0;
-  failHistory=true;assert.equal((await f.request(route)).data.canActivate,false);assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);assert.equal(intent,undefined);order.length=0;
-  failHistory=false;const write=await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision});assert.equal(write.response.status,200);assert.equal(write.data.outcome,'confirmed');assert.equal(result.progressVerification[0].observedRaw,0x41280000);assert.equal(writes,1);assert.deepEqual(order,['read','reserve','send','read','finish']);assert.equal((await f.request(route)).data.canActivate,false);
+  const body={accountId:'main',appid:550,apiname:'DECIMAL',mode:'float'};assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true})).response.status,400);
+  assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,...body,revision:'b'.repeat(64)})).response.status,409);assert.equal(writes,0);order.length=0;
+  failHistory=true;assert.equal((await f.request(route)).data.canActivate,false);assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,...body,revision:preview.data.revision})).response.status,503);assert.equal(writes,0);assert.equal(intent,undefined);order.length=0;
+  failHistory=false;const write=await f.request('/api/achievement/unlock',{confirmed:true,...body,revision:preview.data.revision});assert.equal(write.response.status,200);assert.equal(write.data.outcome,'confirmed');assert.equal(result.progressVerification[0].observedRaw,0x41280000);assert.equal(writes,1);assert.deepEqual(order,['read','reserve','send','read','finish']);assert.equal((await f.request(route)).data.canActivate,false);
 });
 function token() { return `test.${Buffer.from(JSON.stringify({iss:'steam',sub:'76561198000000001',aud:['client','web'],exp:TOKEN_EXPIRY})).toString('base64url')}.signature`; }
 test('hours reject coercible values and cached time-zone formatters preserve cross-midnight schedules',()=>{
@@ -321,12 +333,12 @@ test('single achievement experiment requires auth, CSRF, exact target and the ve
   let calls=0;
   let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{experimentWriter:async(_,options)=>{calls++;await options.beforeSend({appid:3764200,apiname:'MODEL_API',name:'Model Mania',before:false});return {outcome:'confirmed',appid:3764200,apiname:'MODEL_API',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   const body={accountId:'main',appid:3764200,name:'Model Mania',apiname:'MODEL_API'};
-  assert.equal((await f.request('/api/achievement-experiment',body,{auth:false})).response.status,401);
-  await f.login();assert.equal((await f.request('/api/achievement-experiment',body,{csrf:false})).response.status,403);
+  assert.equal((await f.request('/api/achievement-experiment',{...body,confirmed:true},{auth:false})).response.status,401);
+  await f.login();assert.equal((await f.request('/api/achievement-experiment',{...body,confirmed:true},{csrf:false})).response.status,403);
   await f.request('/api/status');const st=f.app.states.get('main');st.connected=true;st.tokenAccountMatches=true;st.steamId64='76561198000000001';f.app.clients.set('main',new FakeUser({}));
-  assert.equal((await f.request('/api/achievement-experiment',{...body,appid:550})).response.status,400);assert.equal(calls,0);
-  const first=await f.request('/api/achievement-experiment',body);assert.equal(first.data.outcome,'confirmed');assert.equal(calls,1);
-  assert.equal((await f.request('/api/achievement-experiment',body)).response.status,409);
+  assert.equal((await f.request('/api/achievement-experiment',{confirmed:true,...body,appid:550})).response.status,400);assert.equal(calls,0);
+  const first=await f.request('/api/achievement-experiment',{...body,confirmed:true});assert.equal(first.data.outcome,'confirmed');assert.equal(calls,1);
+  assert.equal((await f.request('/api/achievement-experiment',{...body,confirmed:true})).response.status,409);
   assert.equal(f.app.cfg.achievementExperiments['76561198000000001:3764200'].outcome,'confirmed');
 });
 test('individual unlock API preserves authentication, one-target validation, journal and cooldown',async t=>{
@@ -335,13 +347,13 @@ test('individual unlock API preserves authentication, one-target validation, jou
     calls++;await options.beforeSend({appid:id,apiname,name:'Chosen',before:false});return {appid:id,apiname,outcome:'confirmed',after:true};
   },protocolReader:async()=>({achievements:[{apiname:'FIRST',unlocked:true,compatibility:{status:'provisional',canUnlock:false}}],verified:true})});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   const body={accountId:'main',appid:550,apiname:'FIRST'};
-  assert.equal((await f.request('/api/achievement/unlock',body,{auth:false})).response.status,401);await f.login();
-  assert.equal((await f.request('/api/achievement/unlock',body,{csrf:false})).response.status,403);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true},{auth:false})).response.status,401);await f.login();
+  assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true},{csrf:false})).response.status,403);
   await f.request('/api/status');const st=f.app.states.get('main');Object.assign(st,{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
-  assert.equal((await f.request('/api/achievement/unlock',{...body,achievements:['FIRST','SECOND']})).response.status,400);assert.equal(calls,0);
-  assert.equal((await f.request('/api/achievement/unlock',body)).data.outcome,'confirmed');
-  assert.equal((await f.request('/api/achievement/unlock',body)).response.status,409);
-  assert.equal((await f.request('/api/achievement/unlock',{...body,apiname:'SECOND'})).response.status,429);
+  assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,...body,achievements:['FIRST','SECOND']})).response.status,400);assert.equal(calls,0);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true})).data.outcome,'confirmed');
+  assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true})).response.status,409);
+  assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,...body,apiname:'SECOND'})).response.status,429);
   assert.ok(!f.app.cfg.achievementWrites['76561198000000001:550:SECOND']);
   const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.data.achievements[0].compatibility.validatedOnAccount,true);
 });
@@ -352,8 +364,8 @@ test('progress preview is authenticated and read-only; activation requires its r
   let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{progressSnapshotReader:async()=>snapshot,individualWriter:async(_,id,apiname,options)=>{writes++;received=options;await options.beforeSend({appid:id,apiname,progressChanges:[{statName:'COUNT',before:0,after:1}]});return {outcome:'confirmed',after:true};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   const route='/api/achievement/progress-preview?accountId=main&appid=550&apiname=TARGET';assert.equal((await f.request(route)).response.status,401);await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
   const preview=await f.request(route);assert.equal(preview.response.status,200);assert.equal(preview.data.progressChanges[0].after,1);assert.equal(writes,0);const body={accountId:'main',appid:550,apiname:'TARGET',mode:'progress'};
-  assert.equal((await f.request('/api/achievement/unlock',body)).response.status,400);assert.equal(writes,0);
-  assert.equal((await f.request('/api/achievement/unlock',{...body,revision:preview.data.revision})).response.status,200);assert.equal(received.allowProgress,true);assert.equal(received.expectedRevision,preview.data.revision);assert.equal(writes,1);assert.equal((await f.request(route)).response.status,409);
+  assert.equal((await f.request('/api/achievement/unlock',{...body,confirmed:true})).response.status,400);assert.equal(writes,0);
+  assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,...body,revision:preview.data.revision})).response.status,200);assert.equal(received.allowProgress,true);assert.equal(received.expectedRevision,preview.data.revision);assert.equal(writes,1);assert.equal((await f.request(route)).response.status,409);
 });
 test('post-reconnect persistence check reads Model Mania and sends no achievement write',async t=>{
   const prev=process.env.STEAM_REFRESH_TOKEN;process.env.STEAM_REFRESH_TOKEN=token();let writes=0;
@@ -378,7 +390,7 @@ test('unavailable persistent history does not hide real Steam states and blocks 
   const journal={ready:async()=>{},status:()=>({persistent:true,available:false}),get:async()=>unavailable(),forGame:async()=>unavailable(),reserve:async()=>unavailable(),finish:async()=>{},close:async()=>{}};
   let f;try{f=await fixture(t,{accounts:[{id:'main',name:'Main',games:[]}]},{achievementJournal:journal,protocolReader:async()=>({achievements:[{apiname:'ONE',unlocked:false,compatibility:{status:'provisional',canUnlock:true}}],verified:true}),individualWriter:async(_,id,name,options)=>{await options.beforeSend({appid:id,apiname:name});writes++;return {outcome:'confirmed'};}});}finally{if(prev===undefined)delete process.env.STEAM_REFRESH_TOKEN;else process.env.STEAM_REFRESH_TOKEN=prev;}
   await f.login();await f.request('/api/status');Object.assign(f.app.states.get('main'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});f.app.clients.set('main',new FakeUser({}));
-  const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.response.status,200);assert.equal(view.data.achievements[0].unlocked,false);assert.equal(view.data.achievements[0].compatibility.canUnlock,false);assert.equal((await f.request('/api/achievement/unlock',{accountId:'main',appid:550,apiname:'ONE'})).response.status,503);assert.equal(writes,0);
+  const view=await f.request('/api/achievements?accountId=main&appid=550&method=protocol');assert.equal(view.response.status,200);assert.equal(view.data.achievements[0].unlocked,false);assert.equal(view.data.achievements[0].compatibility.canUnlock,false);assert.equal((await f.request('/api/achievement/unlock',{confirmed:true,accountId:'main',appid:550,apiname:'ONE'})).response.status,503);assert.equal(writes,0);
 });
 
 test('revoking the panel session during durable reservation blocks the Steam transport',async t=>{

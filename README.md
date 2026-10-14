@@ -128,3 +128,9 @@ The main Steam session retrieves its owned library and sequentially inspects up 
 ## 2.1.2: rarity and regression audit
 
 Direct achievement lists now load global percentages automatically without delaying personal verification. Invalid or complete uniform 100% responses remain unverified; a unique Community-title fallback and read-only Retry rarity are available. Mythic/Epic filters use validated percentages and preserve personal states. See [rarity and regression audit](docs/rarity-and-regression-audit-2026-10-14.md) for reproduced live-source results, broad checks and memory evidence. 271 regression tests pass, and dependencies/resource budgets remain unchanged.
+
+## Automatic achievement updates (2.2.0)
+
+Open a game to keep its achievements and linked progress synchronized with Steam every ten seconds while the list is visible. Updates pause during selections/reviews, offline periods and hidden tabs. Unchanged reads keep the existing list and position; observed unlock/removal/progress changes appear in a small collapsed activity section. This is read-only and never grants or removes achievements automatically. Steam availability and source caching can delay updates. See [the synchronization design and test workflow](docs/live-achievements.md).
+
+Run `npm run check`, `npm test`, `npm run test:memory` and `npm audit --omit=dev`. GitHub Quality checks repeats the same checks without Steam credentials.
