@@ -119,7 +119,26 @@ async function loadStatus() {
     $('resourceUsage').textContent=data.resources?`Process RAM: ${(data.resources.rssBytes/1048576).toFixed(1)} MiB · Heap: ${(data.resources.heapUsedBytes/1048576).toFixed(1)} MiB · ${data.resources.steamConnections}/3 Steam connections · ${data.resources.activeHeavy}/1 heavy operations`:'Server resource data unavailable.';
     $('historyStorage').textContent=storage?.persistent?(storage.available?(memory?.persistent&&memory.available?'Persistent memory connected: write history and encrypted configuration saved.':'Persistent write history connected; configuration is still local.'):'Persistent history unavailable. Achievement activation is blocked.'):'Local history only. Records can be lost when the host restarts or redeploys.';
     renderCardFarming(active);
-    if (!active) { $('connectionDetails').textContent=''; $('userLabel').textContent = 'Add your Steam account to get started'; $('statusText').textContent = 'No account'; $('badgeStatus').className = 'badge-status paused'; $('gamesGrid').replaceChildren(); gamesSnapshot=''; $('timerVal').textContent = '00h 00m 00s'; $('hoursVal').textContent = '0.0 estimated hrs'; $('gamesCountVal').textContent = '0 / 32'; $('capacityPercent').textContent = '0%'; $('capacityFill').style.width = '0%'; return; }
+    if (!active) {
+      $('connectionDetails').textContent = 'Sign in with your Steam account and Steam Guard to manage games, achievements and statistics.';
+      $('userLabel').textContent = 'Add your Steam account to get started';
+      $('statusText').textContent = 'No account';
+      $('badgeStatus').className = 'badge-status paused';
+      const emptyCard = element('div', undefined, 'empty-onboarding-card');
+      emptyCard.append(
+        element('h3', 'Connect your Steam account'),
+        element('p', 'Sign in with your own Steam account and Steam Guard code. Your credentials are never exposed to other users, and you can sign out or delete your profile at any time.'),
+        button('+ Add Steam Account', () => openAddAccModal(), 'btn-main')
+      );
+      $('gamesGrid').replaceChildren(emptyCard);
+      gamesSnapshot = '';
+      $('timerVal').textContent = '00h 00m 00s';
+      $('hoursVal').textContent = '0.0 estimated hrs';
+      $('gamesCountVal').textContent = '0 / 32';
+      $('capacityPercent').textContent = '0%';
+      $('capacityFill').style.width = '0%';
+      return;
+    }
     $('userLabel').textContent = [active.name,active.profileName || active.user].filter(Boolean).join(' · ');
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${active.linkedSteamId?' · Steam ID: '+active.linkedSteamId:''}`;
     $('statusText').textContent = !active.connected ? (active.error || 'Disconnected') : active.isCollisionPaused ? 'Playing on another device' : active.isSleepPaused ? 'Sleep schedule active' : active.isPaused ? 'Paused' : active.cardFarming && !active.cardsReady ? 'Checking card drops' : active.isFarming ? 'Activity sent to Steam' : 'No active games';
@@ -171,7 +190,15 @@ function renderGames(games) {
   const runningSet=new Set(active?.isFarming?(active.runningGames||[]):[]);
   const snapshot=JSON.stringify([activeAccountId,games,active.gameNames,[...runningSet],Boolean(active?.isPaused)]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
   const grid = $('gamesGrid');
-  if (!games.length) { grid.replaceChildren(element('p','Add up to 32 games by title or AppID (you can paste multiple AppIDs separated by commas).')); return; }
+  if (!games.length) {
+    const box = element('div', undefined, 'empty-onboarding-card');
+    box.append(
+      element('p', 'Add up to 32 games by title or AppID (you can paste multiple AppIDs separated by commas), or load your owned Steam library automatically.'),
+      button('Load my Steam games', () => loadOwnedSteamGames(), 'btn-main')
+    );
+    grid.replaceChildren(box);
+    return;
+  }
   const cards = [];
   for (const id of games) {
     const isRunning=runningSet.has(id);
@@ -403,13 +430,15 @@ function renderAchModal(page=achievementPage) {
     if(liveProto){
       if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
       if(a.serverControlled)info.append(element('small',' · Server-controlled'));
+      const actionWrap=element('div',undefined,'sam-row-actions');
       if(a.unlocked===true&&selectEligible&&a.batchSupport?.canRemove){
-        const remove=button(experimentBusy?'Applying…':'Lock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'remove'}],resetCounters:true}),'btn-action-sm');
-        remove.disabled=experimentBusy;info.append(remove);
+        const remove=button(experimentBusy?'Applying…':'Lock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'remove'}],resetCounters:true}),'btn-clear sam-quick-btn');
+        remove.disabled=experimentBusy;actionWrap.append(remove);
       }else if(a.unlocked===false&&selectEligible){
-        const unlock=button(experimentBusy?'Applying…':'Unlock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'unlock'}]}),'btn-action-sm');
-        unlock.disabled=experimentBusy;info.append(unlock);
+        const unlock=button(experimentBusy?'Applying…':'Unlock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'unlock'}]}),'btn-main sam-quick-btn');
+        unlock.disabled=experimentBusy;actionWrap.append(unlock);
       }
+      if(actionWrap.childNodes.length)info.append(actionWrap);
     }else{
       if(a.unlocked===true&&currentAchMethod==='protocol'){if(selectEligible&&a.batchSupport?.canRemove){const remove=button('Review removal',()=>reviewChangeSelection([{apiname:a.apiname,action:'remove'}]),'btn-action-sm');remove.disabled=experimentBusy;info.append(remove);}else info.append(element('small','Removal unavailable: '+(a.batchSupport?.removalReason||a.removalSupport?.reason||'Refresh direct verification to check the current state and permissions.'),'ach-write-reason'));}
       const recordedAt=a.panelVerifiedAt||a.panelOperationAt;
@@ -718,6 +747,11 @@ async function copyUserTimings(){
     notice(e.message);
   }
 }
+async function loadOwnedSteamGames(){
+  if(!activeAccountId)return openAddAccModal();
+  const res=await action('/api/load-owned',{});
+  if(res?.message)notice(res.message);
+}
 async function bulkModifyListedGames(bulkAction){
   if(experimentBusy||!activeAccountId||!isAuthorizedAccount(active))return;
   if(!active?.games?.length)return notice('Add at least one game to your list first.');
@@ -828,6 +862,7 @@ if($('copyTimingsBtn'))$('copyTimingsBtn').addEventListener('click',()=>copyUser
 if($('exportJsonBtn'))$('exportJsonBtn').addEventListener('click',()=>exportGameJson(false));
 if($('copyJsonBtn'))$('copyJsonBtn').addEventListener('click',()=>exportGameJson(true));
 if($('importJsonBtn'))$('importJsonBtn').addEventListener('click',()=>importGameJson());
+if($('loadOwnedGamesBtn'))$('loadOwnedGamesBtn').addEventListener('click',()=>loadOwnedSteamGames());
 if($('bulkUnlockAllGamesBtn'))$('bulkUnlockAllGamesBtn').addEventListener('click',()=>bulkModifyListedGames('unlock_all'));
 if($('bulkLockAllGamesBtn'))$('bulkLockAllGamesBtn').addEventListener('click',()=>bulkModifyListedGames('lock_all'));
 

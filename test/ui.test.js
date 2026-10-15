@@ -553,4 +553,12 @@ test('SamRewritten tabs, live 1-click controls, Invert page, Statistics editor, 
   w.document.getElementById('undoLastOperationBtn').click();
   await new Promise(r=>setImmediate(r));
   assert.ok(calls.some(c=>c.url==='/api/achievement/undo'&&c.method==='POST'));
+
+  // Verify mobile responsive CSS and clean onboarding state with zero pre-loaded accounts
+  const cssText=fs.readFileSync(path.join(__dirname,'../public/style.css'),'utf8');
+  assert.match(cssText,/@media\s*\(max-width:\s*768px\)/);
+  assert.match(cssText,/@media\s*\(max-width:\s*600px\)/);
+  assert.match(cssText,/#lockModal\s*\{[^}]*display:\s*none\s*!important/);
+  const cfgJson=JSON.parse(fs.readFileSync(path.join(__dirname,'../config.json'),'utf8'));
+  assert.deepEqual(cfgJson.accounts,[]);
 });

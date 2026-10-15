@@ -946,7 +946,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (target && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(target)) throw fail('Enter an official HTTPS Discord webhook URL.');
         cfg.discordWebhook = target; save(); if (target) await webhook('SteamFarmer connected', 'Webhook configured directly with Discord.'); return json(res, 200, { success: true });
       }
-      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
+      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/load-owned', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
       if (req.method !== 'POST' || !routes.includes(url.pathname)) throw fail('Route not found.', 404);
       const acc = getAccount(req, url, data); const st = stateFor(acc.id);
       if (isEnvironmentAccount(acc) && ['/api/account/remove', '/api/steam/logout'].includes(url.pathname)) throw fail('To forget this account, remove STEAM_REFRESH_TOKEN in Render and redeploy. Use Pause to stop activity.', 409);
@@ -971,6 +971,23 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             if (rawIds.length === 1 && data.name) acc.gameNames[id] = text(data.name, 256);
           }
           save(); farming(acc, true); resolveNames(acc).catch(() => {}); break;
+        }
+        case '/api/load-owned': {
+          if (!st.connected) throw fail('Connect your Steam account first.', 409);
+          const client = clients.get(acc.id);
+          if (!client) throw fail('Steam is not connected.', 409);
+          const lib = await ownedFloatLibrary(client);
+          let added = 0;
+          for (const g of lib.games) {
+            if (acc.games.length >= 32) break;
+            if (!acc.games.includes(g.appid)) {
+              acc.games.push(g.appid);
+              added++;
+            }
+            if (g.name) acc.gameNames[g.appid] = text(g.name, 256);
+          }
+          save(); farming(acc, true);
+          return json(res, 200, { success: true, added, totalGames: acc.games.length, ownedCount: lib.games.length, message: `Loaded ${added} game${added===1?'':'s'} from your Steam library (${acc.games.length}/32 slots).` });
         }
         case '/api/remove': { const id = appId(data.appid); acc.games = acc.games.filter(g => g !== id); delete acc.gameNames[id]; save(); farming(acc); break; }
         case '/api/clear-all': acc.games = []; acc.gameNames = {}; save(); farming(acc); break;
@@ -1019,6 +1036,11 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
   return { server, cfg, vault, clients, states, attempts, sessions, journal, persistence, timedManager, startConnections:()=>{persistence?.assert();cfg.accounts.forEach(connect);}, close: async () => { closing = true; timedManager.cancelAll(); timers.forEach(clearInterval); for (const id of attempts.keys()) cancelAttempt(id); for (const id of clients.keys()) disconnect(id); sessions.clear(); achievementCache.clear();requirementsCache.clear();percentageCache.clear(); percentagesRead.clear?.(); if (server.listening) await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); await journal.close(); } };
 }
 if (require.main === module) {
+  if (process.env.ENABLE_ENV_AUTOLOGIN !== '1') {
+    delete process.env.STEAM_REFRESH_TOKEN;
+    delete process.env.STEAM_ACCOUNT_ID;
+    delete process.env.APP_DATABASE_URL;
+  }
   const port = Number(process.env.PORT || 8000);
   const host = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
   const publicOrigin = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';

@@ -509,53 +509,181 @@ body {
 }
 
 
-/* SamRewritten Tabs & Simplified Achievement/Stats UI */
+/* SamRewritten Tabs, Simplified Achievement/Stats UI & Full Mobile Responsive Polish */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#lockModal {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.empty-onboarding-card {
+  grid-column: 1 / -1;
+  background: linear-gradient(145deg, rgba(19, 29, 46, 0.92), rgba(11, 18, 30, 0.95));
+  border: 1px dashed rgba(52, 211, 153, 0.38);
+  border-radius: 18px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.empty-onboarding-card h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+}
+.empty-onboarding-card p {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 680px;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  align-items: stretch;
+}
+.btn-card-ach,
+.btn-card-stats {
+  flex: 1 1 auto;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-card-stats {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+}
+.btn-card-stats:hover {
+  background: #38bdf8;
+  color: #04111d;
+}
+.card .control-menu[open] {
+  flex: 1 1 100%;
+}
+.card .control-menu[open] .control-menu-content {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.card .control-menu[open] .control-menu-content button {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+#achMainPanel:not([hidden]),
+#achStatsPanel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+#achToolsPanel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 24px;
+}
+
 .sam-tabs-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 8px 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 12px;
+  padding: 12px 24px;
+  background: rgba(15, 23, 38, 0.92);
+  border-bottom: 1px solid var(--card-border);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .sam-tabs-left {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .sam-tab-btn {
-  padding: 7px 14px;
+  padding: 8px 16px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-muted);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 .sam-tab-btn.active,
 .sam-tab-btn:hover {
-  background: rgba(56, 189, 248, 0.16);
-  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(52, 211, 153, 0.16);
+  border-color: rgba(52, 211, 153, 0.5);
   color: #fff;
 }
 .sam-stealth-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 7px;
+  font-size: 0.78rem;
   color: var(--text-muted);
   cursor: pointer;
+  user-select: none;
 }
+.sam-stealth-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.sam-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.sam-quick-btn {
+  margin-top: 0 !important;
+  padding: 6px 14px !important;
+  font-size: 11px !important;
+  border-radius: 8px !important;
+  min-height: 32px;
+}
+
 .sam-stats-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0;
+  gap: 12px;
+  padding: 14px 24px;
+  background: rgba(16, 27, 39, 0.9);
+  border-bottom: 1px solid var(--card-border);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .sam-stat-row {
   display: flex;
@@ -564,31 +692,268 @@ body {
   gap: 14px;
   padding: 12px 16px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  margin-bottom: 8px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  flex-shrink: 0;
 }
 .sam-stat-row.modified {
-  border-color: rgba(56, 189, 248, 0.55);
-  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(52, 211, 153, 0.6);
+  background: rgba(52, 211, 153, 0.09);
 }
 .sam-stat-meta {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.sam-stat-meta strong {
+  font-size: 0.88rem;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+.sam-stat-meta small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 .sam-stat-input {
-  width: 150px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #0b1120;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-size: 0.9rem;
+  width: 150px !important;
+  padding: 9px 12px !important;
+  border-radius: 9px !important;
+  background: #09101b !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+  color: #fff !important;
+  font-size: 0.9rem !important;
   text-align: right;
-}
-.sam-tools-grid {
-  padding: 8px 0;
+  flex-shrink: 0;
 }
 
-#lockModal { display: none !important; visibility: hidden !important; pointer-events: none !important; }
+.sam-tools-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sam-tools-grid .ach-impact-review {
+  margin: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 18px;
+}
+
+/* Mobile & Tablet Responsive Overrides */
+@media (max-width: 768px) {
+  body {
+    padding: 16px 12px 28px;
+  }
+  .container {
+    gap: 18px;
+  }
+  .accounts-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 10px;
+  }
+  .accounts-bar > div {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .accounts-list {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .acc-pill {
+    flex-shrink: 0;
+    min-height: 38px;
+    justify-content: center;
+  }
+  header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .header-actions {
+    width: 100%;
+    max-width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .header-actions .session-play {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+    min-height: 42px;
+  }
+  .header-actions button {
+    width: 100%;
+    min-height: 40px;
+    justify-content: center;
+  }
+  .badge-status {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding: 4px 0 0;
+  }
+  .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .input-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .input-row > .control-menu {
+    width: 100%;
+  }
+  .input-row > .control-menu > summary {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 42px;
+  }
+  .input-row > .control-menu .control-menu-content {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  #achModal.modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .ach-modal-card {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #achMainPanel:not([hidden]),
+  #achStatsPanel:not([hidden]),
+  #achToolsPanel:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+  }
+  #achToolsPanel:not([hidden]) {
+    padding: 12px 14px 24px;
+  }
+  .ach-header {
+    padding: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 6;
+  }
+  .ach-header > div:last-child {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+  .ach-header > div:last-child > button,
+  .ach-header > div:last-child > details {
+    flex: 1 1 auto;
+  }
+  .ach-header > div:last-child > details > summary {
+    text-align: center;
+  }
+  .sam-tabs-bar {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .sam-tabs-left {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .sam-tab-btn {
+    padding: 9px 6px;
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .achievement-selection {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .achievement-selection .achievement-selection-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+  .achievement-selection .achievement-selection-actions button {
+    width: 100%;
+    min-height: 38px;
+    justify-content: center;
+  }
+  .sam-stats-toolbar {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sam-stats-toolbar > div {
+    width: 100%;
+  }
+  .sam-stats-toolbar > div:first-child input[type="text"] {
+    max-width: 100% !important;
+    width: 100%;
+  }
+  .sam-stats-toolbar > div:last-child {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .sam-stats-toolbar > div:last-child button {
+    width: 100%;
+    padding: 9px 6px;
+    font-size: 11px;
+  }
+  .sam-stat-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px;
+  }
+  .sam-stat-input {
+    width: 100% !important;
+    text-align: left;
+    min-height: 40px;
+  }
+  .sam-tools-grid .ach-impact-review > div {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .sam-tools-grid .ach-impact-review select,
+  .sam-tools-grid .ach-impact-review input,
+  .sam-tools-grid .ach-impact-review button {
+    width: 100% !important;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 380px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+  .sam-tabs-left {
+    grid-template-columns: 1fr;
+  }
+}

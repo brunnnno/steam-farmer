@@ -694,4 +694,11 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(bulkAppsLock.response.status,200);
   assert.equal(bulkAppsLock.data.updatedGames,1);
   assert.equal(stateStats.get(1),0);
+
+  // 7. Load owned Steam games in 1 click (/api/load-owned)
+  client.getUserOwnedApps=async()=>({apps:[{appid:550,name:'Left 4 Dead 2',playtime_forever:120},{appid:730,name:'Counter-Strike 2',playtime_forever:500}]});
+  const loadOwned=await f.request('/api/load-owned',{accountId:'user2'});
+  assert.equal(loadOwned.response.status,200);
+  assert.equal(loadOwned.data.added,2);
+  assert.deepEqual(f.app.cfg.accounts[0].games,[550,730]);
 });
