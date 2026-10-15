@@ -221,6 +221,7 @@ function switchSamTab(tab='achievements'){
   }
   if(tab==='tools'&&currentAchAppId){
     refreshTimedStatus();
+    refreshAchievementAnalytics();
   }
 }
 
@@ -268,6 +269,7 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
     $('achievementSource').textContent=`${data.source || 'Steam'} · ${new Date(data.checkedAt).toLocaleTimeString('en-US')} · Read: ${((performance.now()-readStarted)/1000).toFixed(2)} s`;
     renderAchModal();
     if(currentSamTab==='stats')renderStatsModal();
+    if(currentSamTab==='tools')refreshAchievementAnalytics();
     if((currentAchMethod==='protocol'||rarityWarning||filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
   } catch(e) { if(serial===achSerial&&account===activeAccountId) { if(currentAchMethod==='cached'){$('achReadMessage').textContent='Previous reading only. Current verification failed: '+e.message;$('achievementSource').textContent='Previous reading · Verification failed';}else{$('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[]));} } }
   finally{if(serial===achSerial&&account===activeAccountId&&currentAchAppId===id){liveContext={serial,account,id,method:currentAchMethod==='protocol'?'protocol':method};achievementLive.start(liveContext);}}
@@ -442,6 +444,7 @@ async function directApplyChanges({selection,bulkAction,resetCounters}={}){
     };
     const result=await api('/api/achievement/change',payload);
     clearAchievementSelection();
+    if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=false;
     notice(result.message||'Steam confirmed the achievement changes.');
   }catch(e){
     notice(e.message);
@@ -646,7 +649,7 @@ async function resetAllGameStats(){
   }
 }
 
-/* SamRewritten Timed Modifications & JSON Import/Export */
+/* SamRewritten Timed Modifications, Copy User Timings, Undo, Bulk Apps & JSON Import/Export */
 async function refreshTimedStatus(){
   if(!currentAchAppId||!activeAccountId||!$('timedStatusText'))return;
   try{
@@ -656,6 +659,61 @@ async function refreshTimedStatus(){
       ?`Active schedule: ${st.completedCount}/${st.totalCount} completed (${st.failedCount||0} failed) · Next run: ${st.nextRunAt?new Date(st.nextRunAt).toLocaleTimeString('en-US'):'pending'}`
       :'No active timed schedule for this game.';
   }catch{}
+}
+async function refreshAchievementAnalytics(){
+  if(!currentAchAppId||!activeAccountId||!$('analyticsSummaryBox'))return;
+  try{
+    const data=await api(`/api/achievement/analytics?accountId=${encodeURIComponent(activeAccountId)}&appid=${currentAchAppId}`);
+    if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=!data.canUndo;
+    const box=$('analyticsSummaryBox');box.replaceChildren();
+    box.append(element('p',`Completion: ${data.unlockedCount}/${data.totalAchievements} (${data.completionPercent}%)${data.isPerfectGame?' · Perfect Game ★':''} · ${data.totalStats} statistics · ${data.protectedCount} protected · ${data.hiddenCount} hidden`));
+    if(data.irregularBursts?.length){
+      for(const b of data.irregularBursts.slice(0,5)){
+        box.append(element('p',`Irregular burst detected (${new Date(b.startedAt).toLocaleString('en-US')}): ${b.note} — ${b.achievements.join(', ')}`));
+      }
+    }else{
+      box.append(element('p','No irregular unlock bursts detected in Steam timestamps.'));
+    }
+  }catch{}
+}
+async function undoLastAchievementChange(){
+  if(experimentBusy||!currentAchAppId||!activeAccountId||!isAuthorizedAccount(active))return;
+  const id=currentAchAppId,title=currentAchGameName,stealth=Boolean($('stealthModeToggle')?.checked);
+  experimentBusy=true;renderAchModal();
+  try{
+    const res=await api('/api/achievement/undo',{accountId:activeAccountId,appid:id,stealth});
+    if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=true;
+    notice(res.message||'Last achievement operation reverted.');
+    await openAchModal(id,title,true,'protocol');
+  }catch(e){
+    notice(e.message);
+  }finally{
+    experimentBusy=false;renderAchModal();
+  }
+}
+async function copyUserTimings(){
+  if(!currentAchAppId||!activeAccountId||!isAuthorizedAccount(active))return;
+  const source=($('copyTimingsSourceInput')?.value||'').trim();
+  if(!source)return notice('Enter a SteamID64, Steam profile URL, or paste XML/JSON achievement data.');
+  const maxMinutes=Number($('copyTimingsMaxMinutesInput')?.value||60);
+  const stealth=Boolean($('stealthModeToggle')?.checked);
+  try{
+    const res=await api('/api/achievement/copy-timings',{accountId:activeAccountId,appid:currentAchAppId,source,maxMinutes,stealth});
+    notice(res.message||'User timings copied and scheduled.');
+    await refreshTimedStatus();
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function bulkModifyListedGames(bulkAction){
+  if(experimentBusy||!activeAccountId||!isAuthorizedAccount(active))return;
+  if(!active?.games?.length)return notice('Add at least one game to your list first.');
+  try{
+    const res=await api('/api/achievement/bulk-apps',{accountId:activeAccountId,bulkAction});
+    notice(res.message||'Bulk operation completed across listed games.');
+  }catch(e){
+    notice(e.message);
+  }
 }
 async function startTimedModifications(){
   if(!currentAchAppId||!activeAccountId||!isAuthorizedAccount(active))return;
@@ -745,6 +803,7 @@ $('clearAchievementSelection').addEventListener('click',()=>{clearAchievementSel
 if($('tabAchievementsBtn'))$('tabAchievementsBtn').addEventListener('click',()=>switchSamTab('achievements'));
 if($('tabStatsBtn'))$('tabStatsBtn').addEventListener('click',()=>switchSamTab('stats'));
 if($('tabToolsBtn'))$('tabToolsBtn').addEventListener('click',()=>switchSamTab('tools'));
+if($('undoLastOperationBtn'))$('undoLastOperationBtn').addEventListener('click',()=>undoLastAchievementChange());
 if($('statsSearchInput'))$('statsSearchInput').addEventListener('input',()=>renderStatsModal());
 if($('hideProtectedStats'))$('hideProtectedStats').addEventListener('change',()=>renderStatsModal());
 if($('refreshStatsBtn'))$('refreshStatsBtn').addEventListener('click',()=>loadGameStats());
@@ -752,9 +811,12 @@ if($('saveStatsBtn'))$('saveStatsBtn').addEventListener('click',()=>commitModifi
 if($('resetAllStatsBtn'))$('resetAllStatsBtn').addEventListener('click',()=>resetAllGameStats());
 if($('startTimedBtn'))$('startTimedBtn').addEventListener('click',()=>startTimedModifications());
 if($('stopTimedBtn'))$('stopTimedBtn').addEventListener('click',()=>stopTimedModifications());
+if($('copyTimingsBtn'))$('copyTimingsBtn').addEventListener('click',()=>copyUserTimings());
 if($('exportJsonBtn'))$('exportJsonBtn').addEventListener('click',()=>exportGameJson(false));
 if($('copyJsonBtn'))$('copyJsonBtn').addEventListener('click',()=>exportGameJson(true));
 if($('importJsonBtn'))$('importJsonBtn').addEventListener('click',()=>importGameJson());
+if($('bulkUnlockAllGamesBtn'))$('bulkUnlockAllGamesBtn').addEventListener('click',()=>bulkModifyListedGames('unlock_all'));
+if($('bulkLockAllGamesBtn'))$('bulkLockAllGamesBtn').addEventListener('click',()=>bulkModifyListedGames('lock_all'));
 
 function reviewAchievementProgress(row){
   if(row.batchSupport?.canReactivate)return reviewChangeSelection([{apiname:row.apiname,action:'unlock'}]);

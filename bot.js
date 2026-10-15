@@ -6,10 +6,20 @@ const crypto = require('node:crypto');
 const SteamUser = require('steam-user');
 const { LoginSession, EAuthTokenPlatformType, EAuthSessionGuardType } = require('steam-session');
 const { atomicWrite, appId, hour, sleepNow, hashPassword, verifyPassword, Vault, validClientToken } = require('./lib/core');
-const { readProtocol, parseSnapshot, requestSnapshot, libraryCorroborates } = require('./lib/steam-protocol');
+const {
+  readProtocol,
+  parseSnapshot,
+  requestSnapshot,
+  libraryCorroborates,
+  parseGameStats,
+  writeGameStats,
+  exportGameData,
+  computeAchievementAnalytics,
+  parseExternalUserTimings,
+  TimedModificationManager
+} = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement, prepare, prepareShared, prepareFloat, applyChanges, store } = require('./lib/achievement-writer');
-const { parseGameStats, writeGameStats, exportGameData, TimedModificationManager } = require('./lib/steam-stats');
 const {AchievementOperations,cleanOperation}=require('./lib/achievement-operations');
 const {selection:changeSelection,buildBulkSelection,prepareChanges}=require('./lib/achievement-changes');
 const { gameRequirements } = require('./lib/game-requirements');
@@ -73,7 +83,7 @@ function createApp(options = {}) {
   const journal=options.achievementJournal || new AchievementJournal({cfg,save,url:process.env.ACHIEVEMENT_DATABASE_URL||''});
   const operations=options.operationsJournal||new AchievementOperations(journal);
   journal.ready().then(()=>{if(!options.silent)console.log('[Achievement journal] '+JSON.stringify(journal.status()));}).catch(()=>{if(!options.silent)console.log('[Achievement journal] Persistent history unavailable; activation is blocked.');});
-  const sessions = new Map(), attempts = new Map(), rates = new Map(), clients = new Map(), states = new Map();
+  const sessions = new Map(), attempts = new Map(), rates = new Map(), clients = new Map(), states = new Map(), lastOperations = new Map();
   const User = options.SteamUser || SteamUser;
   const Session = options.LoginSession || LoginSession;
   const steamRead = options.achievements || achievements;
@@ -82,7 +92,7 @@ function createApp(options = {}) {
   const experimentWrite = options.experimentWriter || unlockModelMania;
   const individualWrite = options.individualWriter || unlockAchievement;
   const changesWrite=options.changesWriter||applyChanges;
-  const statsWrite = options.statsWriter || ((client, id, changes, opts) => writeGameStats(client, id, changes, { read: progressSnapshotRead, send: store, parseSnapshot, ...opts }));
+  const statsWrite = options.statsWriter || ((client, id, changes, opts) => writeGameStats(client, id, changes, { read: progressSnapshotRead, send: store, ...opts }));
   const timedManager = new TimedModificationManager();
   const requirementsRead = options.requirementsReader || gameRequirements;
   const percentagesRead=options.percentagesReader||createPercentageReader();
@@ -400,8 +410,8 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Invalid session. Reload the dashboard.', 403);
         data = await readBody(req);
       }
-      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement-experiment','/api/stats','/api/achievement/import'].includes(url.pathname))releaseResource=budget.acquire('heavy');
-      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export'].includes(url.pathname))releaseResource=budget.acquire('small');
+      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
+      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
@@ -413,7 +423,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:8192,achievementBulkUnlockAll:true,achievementBulkLockAll:true,achievementBulkLimit:8192,sharedCounterPreview:true,sharedCounterWrite:true,statisticsRead:true,statisticsWrite:true,timedModifications:true,jsonImportExport:true } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:8192,achievementBulkUnlockAll:true,achievementBulkLockAll:true,achievementBulkLimit:8192,sharedCounterPreview:true,sharedCounterWrite:true,statisticsRead:true,statisticsWrite:true,timedModifications:true,copyUserTimings:true,jsonImportExport:true,analyticsAndUndo:true,multiGameBulk:true } });
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }
@@ -549,13 +559,132 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           return json(res,200,result);
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }
+      if(url.pathname==='/api/achievement/analytics'&&req.method==='GET'){
+        const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||!identity)throw fail('Analytics requires the connected main Steam account.',409);
+        rate(`ach-analytics:${acc.id}`,20,60000);
+        const id=appId(url.searchParams.get('appid'));
+        const snapshot=await progressSnapshotRead(client,id);
+        const view=parseSnapshot(snapshot,id);
+        return json(res,200,{appid:id,checkedAt:new Date().toISOString(),canUndo:lastOperations.has(`${acc.id}:${id}`),...computeAchievementAnalytics(view.achievements,view.statistics)});
+      }
+      if(url.pathname==='/api/achievement/undo'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Undo requires the available connected main Steam account.',409);
+        rate(`ach-undo:${acc.id}`,15,60000);
+        const id=appId(data.appid),stealth=Boolean(data.stealth);
+        const last=lastOperations.get(`${acc.id}:${id}`);
+        if(!last||!Array.isArray(last.selection)||!last.selection.length)throw fail('No recent operation is recorded to undo for this game.',404);
+        if(experimentBusy.has(acc.id))throw fail('An operation is already running.',409);
+        experimentBusy.add(acc.id);
+        try{
+          const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);
+          const view=parseSnapshot(snapshot,id);
+          const byApi=new Map(view.achievements.map(a=>[a.apiname,a]));
+          const invertSel=last.selection
+            .map(s=>({apiname:s.apiname,action:s.action==='unlock'?'remove':'unlock'}))
+            .filter(s=>{const row=byApi.get(s.apiname);return row&&row.unlocked===(s.action==='remove');});
+          if(!invertSel.length)throw fail('The achievements from the last operation are already in their previous state.',409);
+          const resetCounters=invertSel.some(s=>s.action==='remove');
+          const plan=prepareChanges(snapshot,id,invertSel,receipts,undefined,{bulk:true,resetCounters,allowRetoggle:true});
+          const hasSchema=await operations.schema();
+          const result=await changesWrite(client,id,invertSel,{expectedRevision:plan.revision,bulk:true,resetCounters,allowRetoggle:true,overrideCooldown:true,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async p=>hasSchema?operations.reserve(identity,p,{overrideCooldown:true}):cleanOperation({...p,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'})});
+          if(hasSchema)try{await operations.finish(identity,result);}catch{}
+          lastOperations.delete(`${acc.id}:${id}`);
+          return json(res,200,{...result,undoneCount:invertSel.length,message:`Undid ${invertSel.length} achievement change${invertSel.length===1?'':'s'}.`});
+        }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
+      }
+      if(url.pathname==='/api/achievement/copy-timings'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Copying user timings requires the available connected main Steam account.',409);
+        rate(`copy-timings:${acc.id}`,10,60000);
+        const id=appId(data.appid),stealth=Boolean(data.stealth);
+        const sourceInput=String(data.source||'').trim();
+        if(!sourceInput||sourceInput.length>262144)throw fail('Provide a SteamID64, Steam profile URL, or XML/JSON achievement data.',400);
+        let rawPayload=sourceInput;
+        if(!sourceInput.startsWith('<')&&!sourceInput.startsWith('{')&&!sourceInput.startsWith('[')){
+          let targetUrl;
+          if(/^\d{17}$/.test(sourceInput)){
+            targetUrl=`https://steamcommunity.com/profiles/${sourceInput}/stats/${id}/?xml=1`;
+          }else if(/^https:\/\/steamcommunity\.com\/(id|profiles)\/[^/?#]+/i.test(sourceInput)){
+            const baseMatch=sourceInput.match(/^https:\/\/steamcommunity\.com\/(id|profiles)\/([^/?#]+)/i);
+            targetUrl=`https://steamcommunity.com/${baseMatch[1]}/${baseMatch[2]}/stats/${id}/?xml=1`;
+          }else if(/^[a-zA-Z0-9_-]{2,64}$/.test(sourceInput)){
+            targetUrl=`https://steamcommunity.com/id/${encodeURIComponent(sourceInput)}/stats/${id}/?xml=1`;
+          }else{
+            throw fail('Enter a valid 17-digit SteamID64, Steam profile URL, vanity ID, or paste XML/JSON.',400);
+          }
+          const fetched=await remote(targetUrl,{maxBytes:512*1024});
+          rawPayload=fetched.body;
+        }
+        const snapshot=await progressSnapshotRead(client,id);
+        const view=parseSnapshot(snapshot,id);
+        const timings=parseExternalUserTimings(rawPayload,view.achievements);
+        if(!timings.length)throw fail('No matching locked achievements with unlock timestamps were found in the target profile.',409);
+        const minTs=timings[0].unlockTimestamp,maxTs=timings[timings.length-1].unlockTimestamp;
+        const rawSpanMs=Math.max(0,(maxTs-minTs)*1000);
+        const maxWindowMinutes=Math.max(1,Math.min(1440,Number(data.maxMinutes||60)));
+        const maxWindowMs=maxWindowMinutes*60000;
+        const scale=rawSpanMs>maxWindowMs?maxWindowMs/rawSpanMs:1;
+        const customDelaysMs=timings.map(t=>Math.trunc((t.unlockTimestamp-minTs)*1000*scale));
+        const items=timings.map(t=>({apiname:t.apiname,action:'unlock'}));
+        const status=timedManager.start({
+          accountId:acc.id,
+          appid:id,
+          items,
+          customDelaysMs,
+          spacing:'copied',
+          order:'copied',
+          executeItem:async item=>{
+            if(!st.connected||clients.get(acc.id)!==client)throw fail('Steam disconnected.');
+            const [snap,recs]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);
+            const singleSel=[{apiname:item.apiname,action:'unlock'}];
+            const plan=prepareChanges(snap,id,singleSel,recs,undefined,{bulk:true,resetCounters:false,allowRetoggle:true});
+            const hasSchema=await operations.schema();
+            const r=await changesWrite(client,id,singleSel,{expectedRevision:plan.revision,bulk:true,resetCounters:false,allowRetoggle:true,overrideCooldown:true,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async p=>hasSchema?operations.reserve(identity,p,{overrideCooldown:true}):cleanOperation({...p,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'})});
+            if(hasSchema)try{await operations.finish(identity,r);}catch{}
+            st.webSessionVersion++;achievementCache.clear();farming(acc,true);
+          }
+        });
+        return json(res,200,{...status,copiedCount:items.length,message:`Copied unlock timings for ${items.length} achievement${items.length===1?'':'s'} and started replay schedule.`});
+      }
+      if(url.pathname==='/api/achievement/bulk-apps'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Multi-app bulk operations require the available connected main Steam account.',409);
+        rate(`bulk-apps:${acc.id}`,6,60000);
+        const mode=data.bulkAction==='lock_all'?'lock_all':'unlock_all';
+        const stealth=Boolean(data.stealth);
+        const targetApps=(Array.isArray(data.appids)&&data.appids.length?data.appids.map(appId):acc.games).slice(0,32);
+        if(!targetApps.length)throw fail('Add at least one game to your list first.',400);
+        if(experimentBusy.has(acc.id))throw fail('An operation is already running.',409);
+        experimentBusy.add(acc.id);
+        const results=[];
+        try{
+          const hasSchema=await operations.schema();
+          for(const id of targetApps){
+            try{
+              const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id,{timeoutMs:6000}),operations.latest(identity,id)]);
+              const sel=buildBulkSelection(snapshot,id,mode,receipts,{allowRetoggle:true});
+              const resetCounters=mode==='lock_all';
+              const plan=prepareChanges(snapshot,id,sel,receipts,undefined,{bulk:true,resetCounters,allowRetoggle:true});
+              const r=await changesWrite(client,id,sel,{expectedRevision:plan.revision,bulk:true,resetCounters,allowRetoggle:true,overrideCooldown:true,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async p=>hasSchema?operations.reserve(identity,p,{overrideCooldown:true}):cleanOperation({...p,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'})});
+              if(hasSchema)try{await operations.finish(identity,r);}catch{}
+              results.push({appid:id,outcome:r.outcome,count:sel.length});
+            }catch(e){
+              results.push({appid:id,outcome:'skipped',reason:e.message});
+            }
+          }
+          const updatedGames=results.filter(r=>r.outcome==='confirmed').length;
+          return json(res,200,{mode,updatedGames,totalGames:targetApps.length,results,message:`Processed ${targetApps.length} game${targetApps.length===1?'':'s'}: ${updatedGames} updated on Steam.`});
+        }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
+      }
       if(url.pathname==='/api/achievement/export'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||!identity)throw fail('Exporting requires the connected main Steam account.',409);
         rate(`ach-export:${acc.id}`,20,60000);
         const id=appId(url.searchParams.get('appid'));
         const snapshot=await progressSnapshotRead(client,id);
-        return json(res,200,exportGameData(snapshot,id,parseSnapshot));
+        return json(res,200,exportGameData(snapshot,id));
       }
       if(url.pathname==='/api/achievement/import'&&req.method==='POST'){
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
@@ -584,6 +713,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
               const hasSchema=await operations.schema();
               const resAch=await changesWrite(client,id,toChange,{expectedRevision:plan.revision,bulk:true,resetCounters:true,allowRetoggle:true,overrideCooldown:true,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async p=>hasSchema?operations.reserve(identity,p,{overrideCooldown:true}):cleanOperation({...p,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'})});
               if(hasSchema)try{await operations.finish(identity,resAch);}catch{}
+              lastOperations.set(`${acc.id}:${id}`,{selection:toChange,at:new Date().toISOString()});
               achievementsApplied=toChange.length;
             }
           }
@@ -694,6 +824,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           }
           const result=await changesWrite(client,id,writeSelection,{expectedRevision,bulk,resetCounters,allowRetoggle,overrideCooldown,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=hasSchema?await operations.reserve(identity,plan,{overrideCooldown}):cleanOperation({...plan,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'});current();st.lastAchievementWrite=Date.now();if(!stealth){try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed([id]);st.playedGames=[id];}}catch{}}return intent;}});
           if(hasSchema){try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}}
+          lastOperations.set(`${acc.id}:${id}`,{selection:writeSelection,at:new Date().toISOString()});
           return json(res,200,result);
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }

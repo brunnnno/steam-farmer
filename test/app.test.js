@@ -666,4 +666,32 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const timedCancel=await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,action:'cancel'});
   assert.equal(timedCancel.response.status,200);
   assert.equal(timedCancel.data.active,false);
+
+  // 6. SamRewritten Analytics, 1-click Undo, Copy User Timings, and Multi-Game Bulk
+  const analyticsRes=await f.request('/api/achievement/analytics?accountId=user2&appid=34830');
+  assert.equal(analyticsRes.response.status,200);
+  assert.equal(analyticsRes.data.totalAchievements,3);
+  assert.equal(analyticsRes.data.unlockedCount,1);
+
+  const undoRes=await f.request('/api/achievement/undo',{accountId:'user2',appid:34830});
+  assert.equal(undoRes.response.status,200);
+  assert.equal(undoRes.data.outcome,'confirmed');
+
+  // Lock all first so ACT_1 and ACT_2 are locked before copying user timings
+  await f.request('/api/achievement/change',{accountId:'user2',appid:34830,confirmed:true,directApply:true,bulk:true,bulkAction:'lock_all',resetCounters:true});
+  const copyXml='<playerstats><achievements><achievement closed="1"><apiname>ACT_1</apiname><unlockTimestamp>1700000100</unlockTimestamp></achievement><achievement closed="1"><apiname>ACT_2</apiname><unlockTimestamp>1700000200</unlockTimestamp></achievement></achievements></playerstats>';
+  const copyRes=await f.request('/api/achievement/copy-timings',{accountId:'user2',appid:34830,source:copyXml,maxMinutes:1});
+  assert.equal(copyRes.response.status,200);
+  assert.equal(copyRes.data.copiedCount,2);
+  await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,action:'cancel'});
+
+  const bulkAppsUnlock=await f.request('/api/achievement/bulk-apps',{accountId:'user2',appids:[34830],bulkAction:'unlock_all'});
+  assert.equal(bulkAppsUnlock.response.status,200);
+  assert.equal(bulkAppsUnlock.data.updatedGames,1);
+  assert.equal(stateStats.get(1),7);
+
+  const bulkAppsLock=await f.request('/api/achievement/bulk-apps',{accountId:'user2',appids:[34830],bulkAction:'lock_all'});
+  assert.equal(bulkAppsLock.response.status,200);
+  assert.equal(bulkAppsLock.data.updatedGames,1);
+  assert.equal(stateStats.get(1),0);
 });

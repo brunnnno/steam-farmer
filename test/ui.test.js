@@ -489,3 +489,68 @@ test('Unlock all, Lock all with counter reset toggle, and Select page buttons re
   assert.equal(lastPayload.resetCounters,true);
   assert.equal(lastPayload.revision,'d'.repeat(64));
 });
+
+test('SamRewritten tabs, live 1-click controls, Invert page, Statistics editor, Timed schedule, Copy Timings, Undo, and Multi-Game bulk buttons work end-to-end',async t=>{
+  const liveRows=[
+    {name:'First',apiname:'A1',unlocked:false,statId:1,bitIndex:0,compatibility:{status:'provisional',canUnlock:true}},
+    {name:'Second',apiname:'A2',unlocked:true,statId:1,bitIndex:1,batchSupport:{canRemove:true},removalSupport:{canRemove:true}}
+  ];
+  const calls=[];
+  const w=ui(t,url=>({...response(liveRows),readingMethod:'protocol',statistics:[{statId:2,name:'KILLS',type:'INT',value:15,min:0,max:100,incrementOnly:false,permission:0,writable:true}]}));
+  w.testUI.authenticate();w.testUI.activate({tokenSource:'environment',connected:true});
+  w.fetch=async(url,options)=>{
+    const body=options?.body?JSON.parse(options.body):undefined;
+    calls.push({url,method:options?.method||'GET',body});
+    if(url.startsWith('/api/stats')&&(!options?.method||options.method==='GET'))return {ok:true,status:200,json:async()=>({stats:[{statId:2,name:'KILLS',type:'INT',value:15,min:0,max:100,incrementOnly:false,permission:0,writable:true}]})};
+    if(url==='/api/stats'&&options?.method==='POST')return {ok:true,status:200,json:async()=>({outcome:'confirmed',message:'Updated 1 statistic.',stats:[{statId:2,name:'KILLS',type:'INT',value:99,min:0,max:100,incrementOnly:false,permission:0,writable:true}]})};
+    if(url.startsWith('/api/achievement/timed')&&(!options?.method||options.method==='GET'))return {ok:true,status:200,json:async()=>({active:false})};
+    if(url==='/api/achievement/timed'&&options?.method==='POST')return {ok:true,status:200,json:async()=>({active:body.action!=='cancel',completedCount:0,totalCount:2,bulkAction:'unlock_all',nextAt:new Date().toISOString()})};
+    if(url.startsWith('/api/achievement/analytics'))return {ok:true,status:200,json:async()=>({analytics:{total:2,unlocked:1,locked:1,completionPercent:50,datedUnlockedCount:1,undatedUnlockedCount:0,firstUnlockTimestamp:1700000000,lastUnlockTimestamp:1700000000,averageHoursBetweenUnlocks:0,bursts:[],timeline:[{date:'2023-11-14',count:1}]}})};
+    if(url==='/api/achievement/undo')return {ok:true,status:200,json:async()=>({outcome:'confirmed',message:'Last operation reverted.'})};
+    if(url==='/api/achievement/copy-timings')return {ok:true,status:200,json:async()=>({outcome:'confirmed',matchedCount:2,message:'Unlocked 2 achievements.'})};
+    if(url==='/api/achievement/change')return {ok:true,status:200,json:async()=>({outcome:'confirmed',message:'Applied.'})};
+    if(url==='/api/achievement/bulk-apps')return {ok:true,status:200,json:async()=>({succeeded:1,total:1,message:'Completed.'})};
+    return {ok:true,status:200,json:async()=>({...response(liveRows),readingMethod:'protocol',statistics:[{statId:2,name:'KILLS',type:'INT',value:15,min:0,max:100,incrementOnly:false,permission:0,writable:true}]})};
+  };
+  await w.testUI.open(550,'Game',false,'protocol');
+
+  // Verify live protocol mode renders simplified 1-click Unlock & Lock buttons
+  const rowButtons=[...w.document.querySelectorAll('#achListContainer .ach-item button')].map(b=>b.textContent);
+  assert.ok(rowButtons.includes('Unlock'));
+  assert.ok(rowButtons.includes('Lock'));
+
+  // Invert page selects all eligible rows (both locked and unlocked)
+  const invertBtn=w.document.getElementById('invertPageAchievements');
+  assert.equal(invertBtn.hidden,false);
+  invertBtn.click();
+  assert.equal(w.document.querySelectorAll('.ach-select:checked').length,2);
+
+  // Switch to Statistics tab and save edited stat
+  w.document.getElementById('tabStatsBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(w.document.getElementById('achStatsPanel').hidden,false);
+  const statInput=w.document.querySelector('.sam-stat-input');
+  assert.ok(statInput);
+  statInput.value='99';
+  statInput.dispatchEvent(new w.Event('input'));
+  w.document.getElementById('saveStatsBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.ok(calls.some(c=>c.url==='/api/stats'&&c.method==='POST'&&c.body?.changes?.[0]?.value===99));
+
+  // Switch to Tools & Timed tab and trigger Timed schedule, Copy Timings, and Undo
+  w.document.getElementById('tabToolsBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.equal(w.document.getElementById('achToolsPanel').hidden,false);
+  w.document.getElementById('startTimedBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.ok(calls.some(c=>c.url==='/api/achievement/timed'&&c.method==='POST'));
+
+  w.document.getElementById('copyTimingsSourceInput').value='https://steamcommunity.com/id/example';
+  w.document.getElementById('copyTimingsBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.ok(calls.some(c=>c.url==='/api/achievement/copy-timings'&&c.method==='POST'));
+
+  w.document.getElementById('undoLastOperationBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.ok(calls.some(c=>c.url==='/api/achievement/undo'&&c.method==='POST'));
+});

@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=38">
+  <link rel="stylesheet" href="/style.css?v=39">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -56,11 +56,14 @@
         <div class="sam-tabs-left">
           <button id="tabAchievementsBtn" type="button" class="sam-tab-btn active">Achievements</button>
           <button id="tabStatsBtn" type="button" class="sam-tab-btn">Statistics</button>
-          <button id="tabToolsBtn" type="button" class="sam-tab-btn">Timed &amp; JSON</button>
+          <button id="tabToolsBtn" type="button" class="sam-tab-btn">Timed, Timings &amp; Tools</button>
         </div>
-        <label class="sam-stealth-toggle" title="Modify achievements and stats without leaving the game displayed as In-Game">
-          <input type="checkbox" id="stealthModeToggle"> Silent mode (no In-Game status)
-        </label>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button id="undoLastOperationBtn" type="button" class="btn-action-sm" hidden>Undo last change</button>
+          <label class="sam-stealth-toggle" title="Modify achievements and stats without leaving the game displayed as In-Game">
+            <input type="checkbox" id="stealthModeToggle"> Silent mode (no In-Game status)
+          </label>
+        </div>
       </div>
 
       <section id="sharedProgressReview" class="shared-review" hidden aria-live="polite"><div class="shared-review-header"><div><span class="eyebrow">REVIEW BEFORE CONFIRMING</span><h3>Shared progress update</h3></div><button id="closeSharedReview" class="btn-action-sm">Hide review</button></div><div id="sharedProgressSummary" class="shared-counter"></div><div id="sharedProgressEffects" class="shared-effects"></div><div class="shared-review-footer"><p id="sharedProgressMessage"></p><div id="sharedProgressActions"></div></div></section>
@@ -162,14 +165,29 @@
           </section>
 
           <section class="ach-impact-review" style="margin-top:14px;">
+            <h3>Copy User Unlock Timings</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Replay another Steam user's achievement unlock order and relative timing intervals on your account.</p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+              <input type="text" id="copyTimingsSourceInput" placeholder="SteamID64, profile URL, or XML/JSON..." style="flex:1; min-width:220px; padding:8px 12px;">
+              <input type="number" id="copyTimingsMaxMinutesInput" value="60" min="1" max="1440" style="width:110px; padding:8px 12px;" title="Maximum replay window in minutes">
+              <button id="copyTimingsBtn" type="button" class="btn-main">Copy &amp; replay timings</button>
+            </div>
+          </section>
+
+          <section class="ach-impact-review" style="margin-top:14px;">
             <h3>Import / Export JSON</h3>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Export or import achievements and statistics in JSON format.</p>
             <div style="display:flex; gap:10px; margin-bottom:10px;">
               <button id="exportJsonBtn" type="button" class="btn-action-sm">Download JSON export</button>
               <button id="copyJsonBtn" type="button" class="btn-action-sm">Copy JSON to clipboard</button>
             </div>
-            <textarea id="importJsonInput" rows="5" placeholder='Paste JSON export here: {"achievements":[{"apiname":"...","unlocked":true}],"stats":[{"name":"...","value":10}]}' style="width:100%; padding:10px; border-radius:10px; background:#0d1424; border:1px solid var(--card-border); color:#fff; font-family:monospace; font-size:0.8rem; margin-bottom:10px;"></textarea>
+            <textarea id="importJsonInput" rows="4" placeholder='Paste JSON export here: {"achievements":[{"apiname":"...","unlocked":true}],"stats":[{"name":"...","value":10}]}' style="width:100%; padding:10px; border-radius:10px; background:#0d1424; border:1px solid var(--card-border); color:#fff; font-family:monospace; font-size:0.8rem; margin-bottom:10px;"></textarea>
             <button id="importJsonBtn" type="button" class="btn-main">Import &amp; apply JSON</button>
+          </section>
+
+          <section class="ach-impact-review" style="margin-top:14px;">
+            <h3>Advanced Activity &amp; Burst Review</h3>
+            <div id="analyticsSummaryBox" style="font-size:0.84rem; color:var(--text-muted);"></div>
           </section>
         </div>
       </div>
@@ -247,7 +265,7 @@
           <input type="text" id="searchInput" placeholder="Search game title or enter AppID..." autocomplete="off">
           <div class="search-results" id="searchResults"></div>
         </div>
-        <details class="control-menu"><summary>List options</summary><div class="control-menu-content"><button class="btn-clear" data-event-25="">Clear All Games</button></div></details>
+        <details class="control-menu"><summary>List options</summary><div class="control-menu-content"><button id="bulkUnlockAllGamesBtn" type="button" class="btn-action-sm">Unlock all in listed games</button><button id="bulkLockAllGamesBtn" type="button" class="btn-action-sm">Lock all in listed games</button><button class="btn-clear" data-event-25="">Clear All Games</button></div></details>
       </div>
 
       <details class="quick-presets"><summary>Quick presets</summary><div class="presets-row" id="presetsContainer">
@@ -292,10 +310,10 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager · v2.3.0</span></footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=38" defer></script>
-  <script src="/achievement-availability.js?v=38" defer></script>
-  <script src="/draft-settings.js?v=38" defer></script>
-  <script src="/achievement-live.js?v=38" defer></script>
-  <script src="/app.js?v=38" defer></script>
+  <script src="/achievement-rarity.js?v=39" defer></script>
+  <script src="/achievement-availability.js?v=39" defer></script>
+  <script src="/draft-settings.js?v=39" defer></script>
+  <script src="/achievement-live.js?v=39" defer></script>
+  <script src="/app.js?v=39" defer></script>
 </body>
 </html>
