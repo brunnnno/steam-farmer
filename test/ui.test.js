@@ -185,7 +185,7 @@ test('rarity buttons fetch missing direct-read percentages once and use the late
   const w=ui(t,url=>{calls.push(url);return url.includes('/percentages?')?lookup:response(rows);});await w.testUI.open(440,'TF2',false,'protocol');
   w.document.querySelector('[data-val="epic"]').click();assert.match(w.document.getElementById('achListContainer').textContent,/Loading rarity/);
   w.document.querySelector('[data-val="rare"]').click();await new Promise(r=>setImmediate(r));assert.equal(calls.filter(url=>url.includes('/percentages?')).length,1);
-  resolveLookup({percentages:{A0:0,A1:5,A2:14.999,A3:15,A4:39.999,A5:40}});await new Promise(r=>setImmediate(r));
+  resolveLookup({percentages:{A0:0,A1:5,A2:19.999,A3:20,A4:50,A5:50.1}});await new Promise(r=>setImmediate(r));
   const names=()=>[...w.document.querySelectorAll('.ach-title')].map(el=>el.textContent);
   assert.deepEqual(names(),['Rare','Rare upper']);w.document.querySelector('[data-val="epic"]').click();assert.deepEqual(names(),['Epic','Epic upper']);
   w.document.querySelector('[data-val="mythic"]').click();assert.deepEqual(names(),['Zero']);assert.equal(w.document.querySelectorAll('.verified').length,1);

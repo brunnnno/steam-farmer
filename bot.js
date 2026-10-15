@@ -33,7 +33,7 @@ const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
 const {createPercentageReader}=require('./lib/rarity-history');
 const {revisionFor,changesBetween}=require('./lib/achievement-sync');
-const { remote, achievements, parseCards } = require('./lib/steam-data');
+const { remote, achievements, parseCards, exploreDiscoveryQueue } = require('./lib/steam-data');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -93,7 +93,29 @@ function createApp(options = {}) {
   const individualWrite = options.individualWriter || unlockAchievement;
   const changesWrite=options.changesWriter||applyChanges;
   const statsWrite = options.statsWriter || ((client, id, changes, opts) => writeGameStats(client, id, changes, { read: progressSnapshotRead, send: store, ...opts }));
-  const timedManager = new TimedModificationManager();
+  const discoveryRun = options.discoveryQueueRunner || exploreDiscoveryQueue;
+  const timedManager = new TimedModificationManager({ pool: options.timedPool || journal.pool || null, file: path.join(directory, 'timed-jobs.json') });
+  function makeTimedItemExecutor(accountId, id, stealth = false) {
+    return async item => {
+      const acc = cfg.accounts.find(a => a.id === accountId);
+      const st = stateFor(accountId), client = clients.get(accountId), identity = client?.steamID?.toString();
+      if (!acc || !st.connected || !client || !identity) throw fail('Steam disconnected.');
+      const [snap, recs] = await Promise.all([progressSnapshotRead(client, id), operations.latest(identity, id)]);
+      const singleSel = [{ apiname: item.apiname, action: item.action }];
+      const plan = prepareChanges(snap, id, singleSel, recs, undefined, { bulk: true, resetCounters: item.action === 'remove', allowRetoggle: true });
+      const hasSchema = await operations.schema();
+      const r = await changesWrite(client, id, singleSel, { expectedRevision: plan.revision, bulk: true, resetCounters: item.action === 'remove', allowRetoggle: true, overrideCooldown: true, stealth: Boolean(stealth), readHistory: () => operations.latest(identity, id), beforeSend: async p => hasSchema ? operations.reserve(identity, p, { overrideCooldown: true }) : cleanOperation({ ...p, operationId: crypto.randomUUID(), checkedAt: new Date().toISOString(), outcome: 'requested' }) });
+      if (hasSchema) try { await operations.finish(identity, r); } catch {}
+      st.webSessionVersion++; achievementCache.clear(); farming(acc, true);
+    };
+  }
+  journal.ready().then(() => {
+    if (journal.pool && !timedManager.pool) timedManager.setPool(journal.pool);
+    return timedManager.rehydrate({
+      executeItemFactory: (accId, appid, jobCfg) => makeTimedItemExecutor(accId, appid, Boolean(jobCfg?.stealth)),
+      isCollisionPaused: accId => Boolean(stateFor(accId).isCollisionPaused)
+    });
+  }).catch(() => {});
   const requirementsRead = options.requirementsReader || gameRequirements;
   const percentagesRead=options.percentagesReader||createPercentageReader();
   const requirementsCache = new ResultCache({maxEntries:32,maxBytes:128*1024,ttl:3600000}),requirementsPending=new Map();
@@ -176,6 +198,12 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
       acc.mySteamID = st.steamId64;try{save();}catch{disconnect(acc.id);return;}
       st.isCollisionPaused = Boolean(client.playingState?.blocked);
+      if (st.isCollisionPaused) timedManager.pauseAccount(acc.id); else timedManager.resumeAccount(acc.id);
+      timedManager.rehydrate({
+        accountId: acc.id,
+        executeItemFactory: (accId, appid, jobCfg) => makeTimedItemExecutor(accId, appid, Boolean(jobCfg?.stealth)),
+        isCollisionPaused: accId => Boolean(stateFor(accId).isCollisionPaused)
+      }).catch(() => {});
       client.setPersona(acc.personaState ?? SteamUser.EPersonaState.Online); farming(acc);
       notify(`${acc.name} connected`, 'Steam session connected.');
       resolveNames(acc).catch(() => {});
@@ -202,6 +230,8 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     client.on('playingState', blocked => {
       if (!isCurrent()) return;
       const changed = st.isCollisionPaused !== blocked; st.isCollisionPaused = blocked;
+      if (blocked) timedManager.pauseAccount(acc.id);
+      else timedManager.resumeAccount(acc.id);
       if (changed) farming(acc);
     });
     function offline(err) {
@@ -252,7 +282,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
   }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
-return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, gameCount: acc.games.length };
+return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
@@ -749,18 +779,11 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           items,
           amount:Number(data.amount)||5,
           units:['seconds','minutes','hours'].includes(data.units)?data.units:'minutes',
-          spacing:data.spacing==='random'?'random':'even',
+          spacing:['even','random','natural'].includes(data.spacing)?data.spacing:'even',
           order:data.order==='random'?'random':'selection',
-          executeItem:async item=>{
-            if(!st.connected||clients.get(acc.id)!==client)throw fail('Steam disconnected.');
-            const [snap,recs]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);
-            const singleSel=[{apiname:item.apiname,action:item.action}];
-            const plan=prepareChanges(snap,id,singleSel,recs,undefined,{bulk:true,resetCounters:item.action==='remove',allowRetoggle:true});
-            const hasSchema=await operations.schema();
-            const r=await changesWrite(client,id,singleSel,{expectedRevision:plan.revision,bulk:true,resetCounters:item.action==='remove',allowRetoggle:true,overrideCooldown:true,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async p=>hasSchema?operations.reserve(identity,p,{overrideCooldown:true}):cleanOperation({...p,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'})});
-            if(hasSchema)try{await operations.finish(identity,r);}catch{}
-            st.webSessionVersion++;achievementCache.clear();farming(acc,true);
-          }
+          stealth,
+          pausedByCollision:Boolean(st.isCollisionPaused),
+          executeItem:makeTimedItemExecutor(acc.id,id,stealth)
         });
         return json(res,200,{...status,message:`Scheduled ${items.length} achievement${items.length===1?'':'s'} (${status.order} order, ${status.spacing} spacing).`});
       }
@@ -946,7 +969,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if (target && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(target)) throw fail('Enter an official HTTPS Discord webhook URL.');
         cfg.discordWebhook = target; save(); if (target) await webhook('SteamFarmer connected', 'Webhook configured directly with Discord.'); return json(res, 200, { success: true });
       }
-      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/load-owned', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
+      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/load-owned', '/api/discovery-queue', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
       if (req.method !== 'POST' || !routes.includes(url.pathname)) throw fail('Route not found.', 404);
       const acc = getAccount(req, url, data); const st = stateFor(acc.id);
       if (isEnvironmentAccount(acc) && ['/api/account/remove', '/api/steam/logout'].includes(url.pathname)) throw fail('To forget this account, remove STEAM_REFRESH_TOKEN in Render and redeploy. Use Pause to stop activity.', 409);
@@ -1005,6 +1028,22 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           if (!Array.isArray(data.steamids) || data.steamids.length > 20 || data.steamids.some(id => typeof id !== 'string' || !/^7656119\d{10}$/.test(id))) throw fail('Enter valid SteamID64s.');
           acc.chatAdmins = [...new Set(data.steamids)]; save(); break;
         }
+        case '/api/discovery-queue': {
+          if (typeof data.auto === 'boolean') {
+            acc.autoDiscoveryQueue = data.auto;
+            save();
+            if (!data.runNow) {
+              return json(res, 200, { success: true, autoDiscoveryQueue: acc.autoDiscoveryQueue, message: acc.autoDiscoveryQueue ? 'Daily Auto Discovery Queue enabled.' : 'Daily Auto Discovery Queue disabled.' });
+            }
+          }
+          if (!st.connected || !st.webCookies) throw fail('An active Steam web session is required to explore the Discovery Queue.', 409);
+          rate(`discovery-queue:${acc.id}`, 5, 60000);
+          const result = await discoveryRun(st.webCookies, { queues: Number(data.queues) || 3 });
+          st.lastDiscoveryQueueAt = result.checkedAt;
+          acc.lastDiscoveryQueueAt = result.checkedAt;
+          save();
+          return json(res, 200, { success: true, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), ...result, message: `Explored ${result.completedQueues} Discovery Queue${result.completedQueues === 1 ? '' : 's'} (${result.totalCleared} apps cleared).` });
+        }
         case '/api/claim-free': {
           if (!st.connected) throw fail('Steam is not connected.', 409);
           if(st.claimPending)throw fail('A license request is already running.',429);rate(`claim-free:${acc.id}`,1,60000);
@@ -1021,7 +1060,17 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
   });
   server.requestTimeout = 20000; server.headersTimeout = 10000;
   server.maxConnections=64;server.keepAliveTimeout=5000;server.maxRequestsPerSocket=100;
-  const timers = [setInterval(() => { if (!closing) cfg.accounts.forEach(farming); }, 30000), setInterval(() => { if (!closing) for (const acc of cfg.accounts) if (acc.cardFarming) scan(acc).catch(() => {}); }, 10 * 60000), setInterval(() => {
+  const timers = [setInterval(() => { if (!closing) cfg.accounts.forEach(farming); }, 30000), setInterval(() => {
+    if (closing) return;
+    for (const acc of cfg.accounts) {
+      if (acc.cardFarming) scan(acc).catch(() => {});
+      const st = stateFor(acc.id);
+      const lastDq = Date.parse(st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || '');
+      if (acc.autoDiscoveryQueue && st.connected && st.webCookies && (!Number.isFinite(lastDq) || Date.now() - lastDq >= 24 * 3600000)) {
+        discoveryRun(st.webCookies, { queues: 3 }).then(r => { st.lastDiscoveryQueueAt = r.checkedAt; acc.lastDiscoveryQueueAt = r.checkedAt; save(); }).catch(() => {});
+      }
+    }
+  }, 10 * 60000), setInterval(() => {
     for (const [token, s] of sessions) if (s.expires <= Date.now()) sessions.delete(token);
     for (const [id, a] of attempts) if (Date.now() - a.created > 5 * 60000 || !sessions.has(a.owner)) cancelAttempt(id);
     achievementCache.prune();requirementsCache.prune();percentageCache.prune();percentagesRead.prune?.();

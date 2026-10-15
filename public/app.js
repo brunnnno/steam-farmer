@@ -407,7 +407,7 @@ function renderAchModal(page=achievementPage) {
   const remaining=[...availability.values()].filter((v,i)=>currentAchList[i].unlocked!==true),count=status=>remaining.filter(v=>v.status===status).length;
   $('achCompatibilitySummary').textContent=liveProto?'':(currentAchList.length?(remaining.length===0?'All achievements are already unlocked.':`Pending: ${remaining.filter(v=>v.canAttempt).length} eligible to attempt · ${count('protected')} protected · ${count('unsupported')} unsupported · ${count('unknown')} unknown · ${count('rejected')+count('review')} need review. Eligibility is provisional; only a fresh Steam read can confirm a write.`):'');
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
-  let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<15||filterRarity==='rare'&&a.percent>=15&&a.percent<40)));
+  let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<20||filterRarity==='rare'&&a.percent>=20&&a.percent<=50||filterRarity==='common'&&a.percent>50)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
   list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&!['unknown','review'].includes(v.status)&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
@@ -417,7 +417,8 @@ function renderAchModal(page=achievementPage) {
   achievementPage=page;
   const renderedNodes=[];
   for(const a of list.slice(page*200,(page+1)*200)) {
-    const row=element('div',undefined,'ach-item '+(a.unlocked===true?'unlocked-item':'locked-item'));
+    const tierColor=a.tier==='Mythic'?' gold':a.tier==='Epic'?' purple':a.tier==='Rare'?' blue':a.tier==='Common'?' gray':'';
+    const row=element('div',undefined,'ach-item '+(a.unlocked===true?'unlocked-item':'locked-item')+tierColor);
     const selectEligible=currentAchMethod==='protocol'&&allowActivation&&(a.batchSupport?.canRemove===true||a.unlocked===false&&!['steam_rejected','pending_verification','attempted'].includes(a.compatibility?.status)&&(a.compatibility?.status!=='insufficient_data'||a.batchSupport?.canReactivate===true)&&(a.compatibility?.canUnlock||a.progressSupport?.canComplete||a.progressSupport?.canPreviewFloat||a.progressSupport?.canPreviewShared||a.batchSupport?.canReactivate));
     if(selectEligible&&a.apiname){row.classList.add('selectable');const label=element('label',undefined,'ach-selector'),check=element('input',undefined,'ach-select');check.type='checkbox';check.checked=achievementSelection.has(a.apiname);check.setAttribute('aria-label',(a.unlocked?'Select removal of ':'Select unlock of ')+a.name);label.title=check.getAttribute('aria-label');check.addEventListener('change',()=>{
       if(experimentBusy||currentAchMethod!=='protocol')return;
@@ -698,7 +699,9 @@ async function refreshTimedStatus(){
     const st=await api(`/api/achievement/timed?accountId=${encodeURIComponent(activeAccountId)}&appid=${currentAchAppId}`);
     if($('stopTimedBtn'))$('stopTimedBtn').hidden=!st.active;
     $('timedStatusText').textContent=st.active
-      ?`Active schedule: ${st.completedCount}/${st.totalCount} completed (${st.failedCount||0} failed) · Next run: ${st.nextRunAt?new Date(st.nextRunAt).toLocaleTimeString('en-US'):'pending'}`
+      ?(st.pausedByCollision
+        ?`Paused (playing on PC): ${st.completedCount}/${st.totalCount} completed · Will auto-resume with shifted timings when you close the game.`
+        :`Active schedule (${st.spacing||'even'}): ${st.completedCount}/${st.totalCount} completed (${st.failedCount||0} failed) · Next run: ${st.nextRunAt?new Date(st.nextRunAt).toLocaleTimeString('en-US'):'pending'}`)
       :'No active timed schedule for this game.';
   }catch{}
 }
@@ -988,6 +991,14 @@ function togglePause(){return action('/api/toggle');}
 function togglePersona(){return action('/api/persona');}
 function toggleCards(){return action('/api/toggle-cards');}
 async function claimFreeGames(){const r=await action('/api/claim-free');if(r)notice(`Steam granted ${r.granted.apps.length} apps and ${r.granted.packages.length} packages.`);}
+async function runDiscoveryQueue(){
+  const r=await action('/api/discovery-queue',{runNow:true});
+  if(r?.message)notice(r.message);
+}
+async function toggleAutoDiscoveryQueue(enabled){
+  const r=await action('/api/discovery-queue',{auto:Boolean(enabled)});
+  if(r?.message)notice(r.message);
+}
 async function saveSleep(){const fields=['sleepEnabled','sleepStart','sleepEnd','timezoneInput'],versions=draftSettings.snapshot(fields),account=activeAccountId;const saved=await action('/api/set-sleep',{enabled:$('sleepEnabled').checked,start:Number($('sleepStart').value),end:Number($('sleepEnd').value),timezone:$('timezoneInput').value},'Sleep schedule updated. Equal start and end hours disable sleep mode.');if(saved&&account===activeAccountId)draftSettings.commit(fields,versions);return saved;}
 async function saveCustomStatus(){const fields=['customStatusInput'],versions=draftSettings.snapshot(fields),account=activeAccountId;const saved=await action('/api/custom-status',{status:$('customStatusInput').value},'Custom status updated.');if(saved&&account===activeAccountId)draftSettings.commit(fields,versions);return saved;}
 async function saveWebhook(){try{await api('/api/set-webhook',{webhook:$('webhookInput').value.trim()});$('webhookInput').value='';notice('Webhook updated.');await loadStatus();}catch(e){notice(e.message);}}
@@ -1028,6 +1039,9 @@ document.querySelector('[data-event-8]').addEventListener('click', function(even
 document.querySelector('[data-event-9]').addEventListener('click', function(event) { setFilter('rarity', 'mythic'); });
 document.querySelector('[data-event-10]').addEventListener('click', function(event) { setFilter('rarity', 'epic'); });
 document.querySelector('[data-event-11]').addEventListener('click', function(event) { setFilter('rarity', 'rare'); });
+if($('filterRarityCommonBtn'))$('filterRarityCommonBtn').addEventListener('click',()=>setFilter('rarity','common'));
+if($('runDiscoveryQueueBtn'))$('runDiscoveryQueueBtn').addEventListener('click',()=>runDiscoveryQueue());
+if($('autoDiscoveryQueueToggle'))$('autoDiscoveryQueueToggle').addEventListener('change',e=>toggleAutoDiscoveryQueue(e.target.checked));
 document.querySelector('[data-event-12]').addEventListener('change', function(event) { setSort(this.value); });
 document.querySelector('[data-event-13]').addEventListener('input', function(event) { onSearchInput(this.value); });
 document.querySelector('[data-event-15]').addEventListener('click', function(event) { openAddAccModal(); });

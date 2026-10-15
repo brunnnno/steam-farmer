@@ -4,7 +4,7 @@
     if(typeof value==='string'){value=value.trim();if(!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value))return null;value=Number(value);}
     return typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:null;
   }
-  function tier(value){const p=validPercent(value);return p===null?'Unknown':p<5?'Mythic':p<15?'Epic':p<40?'Rare':'Common';}
+  function tier(value){const p=validPercent(value);return p===null?'Unknown':p<5?'Mythic':p<20?'Epic':p<=50?'Rare':'Common';}
   function uniformHundred(values){return values.length>1&&values.every(p=>validPercent(p)===100);}
   function normalizeTitle(name){return String(name).trim().replace(/\s+/g,' ').toLowerCase();}
   function normalizeRows(rows){

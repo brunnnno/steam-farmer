@@ -701,4 +701,64 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(loadOwned.response.status,200);
   assert.equal(loadOwned.data.added,2);
   assert.deepEqual(f.app.cfg.accounts[0].games,[550,730]);
+
+  // 8. Box-Muller randomGaussian, natural spacing, playingState collision pause/resume, and rehydration
+  const {randomGaussian,buildHumanizedOffsets,TimedModificationManager}=require('../lib/steam-protocol');
+  const samples=Array.from({length:50},()=>randomGaussian(100,25));
+  assert.ok(samples.every(x=>typeof x==='number'&&x>=0));
+  const natOffsets=buildHumanizedOffsets(8,60000,'natural');
+  assert.equal(natOffsets.length,8);
+  assert.ok(natOffsets.every((v,i)=>i===0||v>=natOffsets[i-1]));
+
+  const naturalStart=await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,bulkAction:'unlock_all',amount:10,units:'minutes',spacing:'natural',order:'random'});
+  assert.equal(naturalStart.response.status,200);
+  assert.equal(naturalStart.data.spacing,'natural');
+  assert.equal(naturalStart.data.pausedByCollision,false);
+
+  // Simulate playingState collision (user starts playing on PC) -> pauses timed job
+  f.app.timedManager.pauseAccount('user2');
+  const pausedStatus=await f.request('/api/achievement/timed?accountId=user2&appid=34830');
+  assert.equal(pausedStatus.data.pausedByCollision,true);
+
+  // Simulate user closing game on PC -> shifts runAt and resumes timed job
+  f.app.timedManager.resumeAccount('user2');
+  const resumedStatus=await f.request('/api/achievement/timed?accountId=user2&appid=34830');
+  assert.equal(resumedStatus.data.pausedByCollision,false);
+  assert.equal(resumedStatus.data.active,true);
+
+  // Test PostgreSQL + local rehydration of TimedModificationManager
+  const executedItems=[];
+  const rehydratedMgr=new TimedModificationManager({file:f.app.timedManager.file});
+  const restoredCount=await rehydratedMgr.rehydrate({
+    accountId:'user2',
+    executeItemFactory:()=>async item=>{executedItems.push(item.apiname);}
+  });
+  assert.equal(restoredCount,1);
+  assert.equal(rehydratedMgr.status('user2',34830).active,true);
+  rehydratedMgr.cancelAll();
+  await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,action:'cancel'});
+
+  // 9. Auto Discovery Queue (tralph3/Steam-Auto-Queue) & v0002 Rarity Categories
+  const {exploreDiscoveryQueue}=require('../lib/steam-data');
+  const dqCalls=[];
+  const dqResult=await exploreDiscoveryQueue('sessionid=abc123xyz; steamLoginSecure=1',{
+    queues:2,
+    request:async(url,opts)=>{
+      dqCalls.push({url,method:opts.method,body:opts.body});
+      if(url.includes('generatenewdiscoveryqueue'))return {body:JSON.stringify({queue:[550,730]})};
+      return {body:'{}'};
+    }
+  });
+  assert.equal(dqResult.completedQueues,2);
+  assert.equal(dqResult.totalCleared,4);
+  assert.ok(dqCalls.some(c=>c.url==='https://store.steampowered.com/explore/generatenewdiscoveryqueue'&&c.body.includes('sessionid=abc123xyz')));
+  assert.ok(dqCalls.some(c=>c.url==='https://store.steampowered.com/app/550'&&c.body.includes('appid_to_clear_from_queue=550')));
+
+  const {tier}=require('../public/achievement-rarity');
+  assert.equal(tier(4.9),'Mythic');
+  assert.equal(tier(5),'Epic');
+  assert.equal(tier(19.9),'Epic');
+  assert.equal(tier(20),'Rare');
+  assert.equal(tier(50),'Rare');
+  assert.equal(tier(50.1),'Common');
 });

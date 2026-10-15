@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=41">
+  <link rel="stylesheet" href="/style.css?v=42">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -79,8 +79,9 @@
             
             <span style="color:rgba(255,255,255,0.2);">|</span>
             <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9="">🟡 Mythic (&lt;5%)</button>
-            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10="">🟣 Epic (5-15%)</button>
-            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11="">🔵 Rare (15-40%)</button>
+            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10="">🟣 Epic (5-20%)</button>
+            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11="">🔵 Rare (20-50%)</button>
+            <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn">⚪ Common (&gt;50%)</button>
           </div>
           
           <div style="display:flex; gap:10px; align-items:center;">
@@ -149,8 +150,9 @@
                 <option value="hours">Hours</option>
               </select>
               <select id="timedSpacingSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="natural" selected>Natural (Gaussian + breaks)</option>
+                <option value="random">Random (Gaussian)</option>
                 <option value="even">Even spacing</option>
-                <option value="random" selected>Random spacing</option>
               </select>
               <select id="timedOrderSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
                 <option value="selection">In order</option>
@@ -273,7 +275,7 @@
       </div></details>
 
       <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
-        <section class="ach-impact-review"><h3>Panel &amp; licenses</h3><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><p>Requests Steam licenses for five supported free games, not the entire free catalog.</p></section>
+        <section class="ach-impact-review"><h3>Panel, licenses &amp; Sale Discovery Queue</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button">Explore Discovery Queue (3x)</button><label style="font-size:0.82rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Requests Steam licenses for five supported free games, or explores 3 daily Steam Store Discovery Queues for event trading cards.</p></section>
         <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
         <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
       <div class="tools-grid">
@@ -310,10 +312,10 @@
     <footer>SteamFarmer <span>Personal dashboard · Steam session manager · v2.3.0</span></footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=41" defer></script>
-  <script src="/achievement-availability.js?v=41" defer></script>
-  <script src="/draft-settings.js?v=41" defer></script>
-  <script src="/achievement-live.js?v=41" defer></script>
-  <script src="/app.js?v=41" defer></script>
+  <script src="/achievement-rarity.js?v=42" defer></script>
+  <script src="/achievement-availability.js?v=42" defer></script>
+  <script src="/draft-settings.js?v=42" defer></script>
+  <script src="/achievement-live.js?v=42" defer></script>
+  <script src="/app.js?v=42" defer></script>
 </body>
 </html>
