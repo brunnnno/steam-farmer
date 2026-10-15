@@ -8,10 +8,10 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=37">
+  <link rel="stylesheet" href="/style.css?v=38">
 </head>
 <body><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
-  <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay">
+  <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
     <div class="modal-box" style="text-align:center;">
       <span class="eyebrow">PRIVATE ACCESS</span><h2>Welcome back.</h2>
       <p>Use your dashboard password to continue.</p>
@@ -52,50 +52,127 @@
         </div>
       </div>
 
+      <div id="samTabsBar" class="sam-tabs-bar">
+        <div class="sam-tabs-left">
+          <button id="tabAchievementsBtn" type="button" class="sam-tab-btn active">Achievements</button>
+          <button id="tabStatsBtn" type="button" class="sam-tab-btn">Statistics</button>
+          <button id="tabToolsBtn" type="button" class="sam-tab-btn">Timed &amp; JSON</button>
+        </div>
+        <label class="sam-stealth-toggle" title="Modify achievements and stats without leaving the game displayed as In-Game">
+          <input type="checkbox" id="stealthModeToggle"> Silent mode (no In-Game status)
+        </label>
+      </div>
+
       <section id="sharedProgressReview" class="shared-review" hidden aria-live="polite"><div class="shared-review-header"><div><span class="eyebrow">REVIEW BEFORE CONFIRMING</span><h3>Shared progress update</h3></div><button id="closeSharedReview" class="btn-action-sm">Hide review</button></div><div id="sharedProgressSummary" class="shared-counter"></div><div id="sharedProgressEffects" class="shared-effects"></div><div class="shared-review-footer"><p id="sharedProgressMessage"></p><div id="sharedProgressActions"></div></div></section>
       <div class="privacy-banner" id="achPrivacyWarning">
         <span id="achReadMessage"></span></div>
 
-      <div class="ach-toolbar">
-        <div class="ach-filters">
-          <button class="filter-btn active" data-filter="status" data-val="all" data-event-6="">All</button>
-          <button class="filter-btn" data-filter="status" data-val="unlocked" data-event-7="">✓ Unlocked</button>
-          <button class="filter-btn" data-filter="status" data-val="locked" data-event-8="">Locked</button>
+      <div id="achMainPanel">
+        <div class="ach-toolbar">
+          <div class="ach-filters">
+            <button class="filter-btn active" data-filter="status" data-val="all" data-event-6="">All</button>
+            <button class="filter-btn" data-filter="status" data-val="unlocked" data-event-7="">✓ Unlocked</button>
+            <button class="filter-btn" data-filter="status" data-val="locked" data-event-8="">Locked</button>
+            
+            <span style="color:rgba(255,255,255,0.2);">|</span>
+            <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9="">🟡 Mythic (&lt;5%)</button>
+            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10="">🟣 Epic (5-15%)</button>
+            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11="">🔵 Rare (15-40%)</button>
+          </div>
           
-          <span style="color:rgba(255,255,255,0.2);">|</span>
-          <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9="">🟡 Mythic (&lt;5%)</button>
-          <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10="">🟣 Epic (5-15%)</button>
-          <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11="">🔵 Rare (15-40%)</button>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <select id="achCompatibilityFilter" aria-label="Achievement compatibility filter"><option value="all">Compatibility: All</option><option value="attemptable">Can attempt from this panel</option><option value="unavailable">Not available from this panel</option><option value="unknown">Needs verification / data</option></select>
+            <select id="achSortSelect" data-event-12="" style="padding:8px 12px; font-size:0.85rem; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+              <option value="default">Sort: Default</option>
+              <option value="unlocked_first">Unlocked first</option>
+              <option value="locked_first">Locked first</option>
+              <option value="rarity_rare">Rarest first</option>
+              <option value="percentage_desc">Percentage: highest first</option>
+              <option value="alpha">Alphabetical (A-Z)</option>
+            </select>
+            <input type="text" id="achSearchInput" placeholder="Search achievement..." style="max-width:200px; padding:8px 14px; font-size:0.85rem;" data-event-13="">
+          </div>
         </div>
-        
-        <div style="display:flex; gap:10px; align-items:center;">
-          <select id="achCompatibilityFilter" aria-label="Achievement compatibility filter"><option value="all">Compatibility: All</option><option value="attemptable">Can attempt from this panel</option><option value="unavailable">Not available from this panel</option><option value="unknown">Needs verification / data</option></select>
-          <select id="achSortSelect" data-event-12="" style="padding:8px 12px; font-size:0.85rem; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-            <option value="default">Sort: Default</option>
-            <option value="unlocked_first">Unlocked first</option>
-            <option value="locked_first">Locked first</option>
-            <option value="rarity_rare">Rarest first</option>
-            <option value="percentage_desc">Percentage: highest first</option>
-            <option value="alpha">Alphabetical (A-Z)</option>
-          </select>
-          <input type="text" id="achSearchInput" placeholder="Search achievement..." style="max-width:200px; padding:8px 14px; font-size:0.85rem;" data-event-13="">
+
+        <div class="ach-source">
+          <strong>Read from Steam</strong>
+          <span id="achievementSource"></span><small id="achievementLiveStatus">Auto update · every 10 s</small><button id="retryAchievementRarity" class="btn-action-sm" hidden>Retry rarity</button>
         </div>
+        <div id="achievementSelectionBar" class="achievement-selection" hidden><div class="achievement-selection-copy"><strong id="achievementSelectionSummary" aria-live="polite">Unlock or remove achievements</strong><small id="achievementSelectionHint"></small></div><div class="achievement-selection-actions"><button id="verifyAchievementChanges" class="btn-main">Enable achievement changes</button><button id="unlockAllAchievements" class="btn-main" hidden>Unlock all</button><button id="lockAllAchievements" class="btn-clear" hidden>Lock all</button><button id="selectPageAchievements" class="btn-action-sm" hidden>Select page</button><button id="invertPageAchievements" class="btn-action-sm" hidden>Invert</button><button id="reviewAchievementSelection" class="btn-main" disabled>Review selected changes</button><button id="clearAchievementSelection" class="btn-action-sm" hidden>Clear selection</button></div></div>
+        <p id="achCompatibilitySummary" class="ach-availability-summary" aria-live="polite"></p>
+        <p id="achRarityMessage" class="ach-availability-summary" aria-live="polite" hidden></p>
+
+        <details id="achievementObservedChanges" class="game-requirements" hidden><summary id="achievementObservedSummary">Changes observed</summary><small>Detected while this list is open. These are observation times, not Steam unlock dates. The latest eight of up to twenty observations are shown.</small><div id="achievementObservedList"></div></details>
+        <details id="gameRequirements" class="game-requirements" hidden>
+          <summary>Game integration &amp; activation limits</summary>
+          <div id="gameRequirementsContent"></div>
+        </details>
+        <div class="ach-list" id="achListContainer"></div>
       </div>
 
-      <div class="ach-source">
-        <strong>Read from Steam</strong>
-        <span id="achievementSource"></span><small id="achievementLiveStatus">Auto update · every 10 s</small><button id="retryAchievementRarity" class="btn-action-sm" hidden>Retry rarity</button>
+      <div id="achStatsPanel" hidden>
+        <div class="sam-stats-toolbar">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="text" id="statsSearchInput" placeholder="Search statistic..." style="max-width:220px; padding:8px 14px; font-size:0.85rem;">
+            <label style="font-size:0.82rem; display:flex; align-items:center; gap:6px; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="hideProtectedStats"> Hide protected
+            </label>
+            <span id="statsCountLabel" style="font-size:0.82rem; color:var(--text-muted);"></span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button id="refreshStatsBtn" type="button" class="btn-action-sm">Refresh stats</button>
+            <button id="resetAllStatsBtn" type="button" class="btn-clear">Reset all stats</button>
+            <button id="saveStatsBtn" type="button" class="btn-main" disabled>Commit stats</button>
+          </div>
+        </div>
+        <div class="ach-list" id="statsListContainer"></div>
       </div>
-      <div id="achievementSelectionBar" class="achievement-selection" hidden><div class="achievement-selection-copy"><strong id="achievementSelectionSummary" aria-live="polite">Unlock or remove achievements</strong><small id="achievementSelectionHint"></small></div><div class="achievement-selection-actions"><button id="verifyAchievementChanges" class="btn-main">Enable achievement changes</button><button id="unlockAllAchievements" class="btn-main" hidden>Unlock all</button><button id="lockAllAchievements" class="btn-clear" hidden>Lock all</button><button id="selectPageAchievements" class="btn-action-sm" hidden>Select page</button><button id="reviewAchievementSelection" class="btn-main" disabled>Review selected changes</button><button id="clearAchievementSelection" class="btn-action-sm" hidden>Clear selection</button></div></div>
-      <p id="achCompatibilitySummary" class="ach-availability-summary" aria-live="polite"></p>
-      <p id="achRarityMessage" class="ach-availability-summary" aria-live="polite" hidden></p>
 
-      <details id="achievementObservedChanges" class="game-requirements" hidden><summary id="achievementObservedSummary">Changes observed</summary><small>Detected while this list is open. These are observation times, not Steam unlock dates. The latest eight of up to twenty observations are shown.</small><div id="achievementObservedList"></div></details>
-      <details id="gameRequirements" class="game-requirements" hidden>
-        <summary>Game integration &amp; activation limits</summary>
-        <div id="gameRequirementsContent"></div>
-      </details>
-      <div class="ach-list" id="achListContainer"></div>
+      <div id="achToolsPanel" hidden>
+        <div class="sam-tools-grid">
+          <section class="ach-impact-review">
+            <h3>Timed Achievement Modifications</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Unlock or lock achievements gradually across a custom period (runs on the server even if you close this tab).</p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+              <select id="timedActionSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="unlock_all">Unlock all locked</option>
+                <option value="selected">Use current checkbox selection</option>
+                <option value="lock_all">Lock all unlocked</option>
+              </select>
+              <input type="number" id="timedAmountInput" value="30" min="1" max="1440" style="width:90px; padding:8px 12px;">
+              <select id="timedUnitsSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="seconds">Seconds</option>
+                <option value="minutes" selected>Minutes</option>
+                <option value="hours">Hours</option>
+              </select>
+              <select id="timedSpacingSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="even">Even spacing</option>
+                <option value="random" selected>Random spacing</option>
+              </select>
+              <select id="timedOrderSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="selection">In order</option>
+                <option value="random" selected>Random order</option>
+              </select>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <button id="startTimedBtn" type="button" class="btn-main">Start timed schedule</button>
+              <button id="stopTimedBtn" type="button" class="btn-clear" hidden>Stop schedule</button>
+            </div>
+            <p id="timedStatusText" style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"></p>
+          </section>
+
+          <section class="ach-impact-review" style="margin-top:14px;">
+            <h3>Import / Export JSON</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Export or import achievements and statistics in JSON format.</p>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+              <button id="exportJsonBtn" type="button" class="btn-action-sm">Download JSON export</button>
+              <button id="copyJsonBtn" type="button" class="btn-action-sm">Copy JSON to clipboard</button>
+            </div>
+            <textarea id="importJsonInput" rows="5" placeholder='Paste JSON export here: {"achievements":[{"apiname":"...","unlocked":true}],"stats":[{"name":"...","value":10}]}' style="width:100%; padding:10px; border-radius:10px; background:#0d1424; border:1px solid var(--card-border); color:#fff; font-family:monospace; font-size:0.8rem; margin-bottom:10px;"></textarea>
+            <button id="importJsonBtn" type="button" class="btn-main">Import &amp; apply JSON</button>
+          </section>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -120,7 +197,7 @@
         <button class="btn-main session-play" id="playBtn" data-event-24="">Resume / Play Now</button>
         <button class="btn-purple" id="cardsBtn" data-event-19="">Cards: OFF</button>
         <button class="btn-action-sm" id="personaBtn" data-event-21="">Mode: Online</button>
-        <button class="btn-action-sm" data-event-23="">Lock panel</button>
+        <button class="btn-action-sm" data-event-23="" hidden>Lock panel</button>
         <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Active</span></div>
       </div>
     </header>
@@ -178,7 +255,7 @@
       </div></details>
 
       <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
-        <section class="ach-impact-review"><h3>Panel &amp; licenses</h3><button class="btn-action-sm" data-event-22="">Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><p>Requests Steam licenses for five supported free games, not the entire free catalog.</p></section>
+        <section class="ach-impact-review"><h3>Panel &amp; licenses</h3><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><p>Requests Steam licenses for five supported free games, not the entire free catalog.</p></section>
         <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
         <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
       <div class="tools-grid">
@@ -212,13 +289,13 @@
     </section>
 
     <section class="library-section" aria-label="Game library"><div class="section-heading"><div><span class="eyebrow">YOUR COLLECTION</span><h2>Game library</h2></div><span class="section-note">Open a game to verify its achievements</span></div><div class="grid" id="gamesGrid"></div></section>
-    <footer>SteamFarmer <span>Personal dashboard · Steam session manager · v2.2.0</span></footer>
+    <footer>SteamFarmer <span>Personal dashboard · Steam session manager · v2.3.0</span></footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=37" defer></script>
-  <script src="/achievement-availability.js?v=37" defer></script>
-  <script src="/draft-settings.js?v=37" defer></script>
-  <script src="/achievement-live.js?v=37" defer></script>
-  <script src="/app.js?v=37" defer></script>
+  <script src="/achievement-rarity.js?v=38" defer></script>
+  <script src="/achievement-availability.js?v=38" defer></script>
+  <script src="/draft-settings.js?v=38" defer></script>
+  <script src="/achievement-live.js?v=38" defer></script>
+  <script src="/app.js?v=38" defer></script>
 </body>
 </html>

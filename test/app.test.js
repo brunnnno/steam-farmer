@@ -570,3 +570,100 @@ test('encrypted Vault accounts support >32 manual selections, live gamesPlayed e
   assert.equal(f.app.cfg.accounts[0].games.length,32);
   assert.deepEqual(client.calls.at(-1),batch32);
 });
+
+test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statistics editor, JSON export/import, and timed schedule',async t=>{
+  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));a.push(Buffer.from([8]));return Buffer.concat(a);}
+  const {floatBits}=require('../lib/float-progress');
+  const schema=kv({'34830':{stats:{
+    1:{type:'4',bits:{0:{name:'ACT_1'},1:{name:'ACT_2'},2:{name:'SNIPER_KILLER',progress:{max_val:'500',value:{operation:'statvalue',operand1:'SNIPER_KILLS'}}}}},
+    2:{type:'INT',name:'SNIPER_KILLS',min:'0',max:'1000'},
+    3:{type:'FLOAT',name:'HEADSHOT_DIST',min:'0',max:'1000'}
+  }}});
+  const stateStats=new Map([[1,0],[2,0],[3,floatBits(0)]]);
+  let crc=200;
+  const currentSnapshot=()=>({
+    game_id:'34830',eresult:1,crc_stats:crc,schema,
+    stats:[...stateStats].map(([stat_id,stat_value])=>({stat_id,stat_value}))
+  });
+  const f=await fixture(t,{accounts:[{id:'user2',name:'Secondary',user:'user2',games:[],gameNames:{}}]});
+  f.app.vault.set('user2',token());
+
+  // 1. Verify PIN-free auto-session via GET /api/panel/session without calling /api/panel/login
+  const autoSess=await fetch(f.base+'/api/panel/session');
+  assert.equal(autoSess.status,200);
+  const autoCookie=autoSess.headers.get('set-cookie').split(';')[0];
+  const autoCsrf=(await autoSess.json()).csrf;
+  assert.ok(autoCookie.startsWith('sf_session='));
+  assert.equal(typeof autoCsrf,'string');
+  const autoStatus=await fetch(f.base+'/api/status',{headers:{Cookie:autoCookie}});
+  assert.equal(autoStatus.status,200);
+
+  await f.login();
+  const client=new FakeUser({});
+  client._send=(header,body,cb)=>{
+    const Schema=require('steam-user/protobufs/generated/_load.js');
+    const EMsg=require('steam-user/enums/EMsg');
+    if(header.msg===EMsg.ClientGetUserStats){
+      queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode(currentSnapshot()).finish()),{msg:EMsg.ClientGetUserStatsResponse}));
+    }else if(header.msg===EMsg.ClientStoreUserStats2){
+      const decoded=Schema.CMsgClientStoreUserStats2.decode(body);
+      if(decoded.explicit_reset&&(!decoded.stats||!decoded.stats.length)){
+        for(const k of stateStats.keys())stateStats.set(k,0);
+      }
+      for(const s of decoded.stats||[])stateStats.set(Number(s.stat_id),Number(s.stat_value)>>>0);
+      crc++;
+      queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientStoreUserStatsResponse.encode({game_id:'34830',eresult:1,crc_stats:crc,stats_out_of_date:false,stats_failed_validation:[]}).finish()),{msg:EMsg.ClientStoreUserStatsResponse}));
+    }
+  };
+  f.app.clients.set('user2',client);
+  Object.assign(f.app.states.get('user2'),{connected:true,tokenAccountMatches:true,steamId64:'76561198000000001'});
+
+  // 2. Direct 1-click unlock_all and partial removal without preview round-trip
+  const directUnlockAll=await f.request('/api/achievement/change',{accountId:'user2',appid:34830,confirmed:true,directApply:true,bulk:true,bulkAction:'unlock_all'});
+  assert.equal(directUnlockAll.response.status,200);
+  assert.equal(directUnlockAll.data.outcome,'confirmed');
+  assert.equal(stateStats.get(1),7);
+
+  const directRemoveOne=await f.request('/api/achievement/change',{accountId:'user2',appid:34830,confirmed:true,directApply:true,bulk:true,resetCounters:true,selection:[{apiname:'ACT_2',action:'remove'}]});
+  assert.equal(directRemoveOne.response.status,200);
+  assert.equal(directRemoveOne.data.outcome,'confirmed');
+  assert.equal(stateStats.get(1),5); // ACT_1 (bit 0) + SNIPER_KILLER (bit 2) remain unlocked, ACT_2 (bit 1) is locked
+
+  // 3. SamRewritten Statistics read, edit (INT + FLOAT), and resetAll preserving achievement blocks
+  const statsRead=await f.request('/api/stats?accountId=user2&appid=34830');
+  assert.equal(statsRead.response.status,200);
+  assert.equal(statsRead.data.stats.length,2);
+  const statsEdit=await f.request('/api/stats',{accountId:'user2',appid:34830,changes:[{statId:2,value:777},{statId:3,value:42.5}]});
+  assert.equal(statsEdit.response.status,200);
+  assert.equal(statsEdit.data.outcome,'confirmed');
+  assert.equal(statsEdit.data.stats.find(s=>s.statId===2).value,777);
+  assert.equal(statsEdit.data.stats.find(s=>s.statId===3).value,42.5);
+
+  const statsReset=await f.request('/api/stats',{accountId:'user2',appid:34830,resetAll:true});
+  assert.equal(statsReset.response.status,200);
+  assert.equal(statsReset.data.stats.every(s=>s.value===0),true);
+  assert.equal(stateStats.get(1),5); // Achievement bitmask preserved!
+
+  // 4. SamRewritten JSON Export & Import
+  const exported=await f.request('/api/achievement/export?accountId=user2&appid=34830');
+  assert.equal(exported.response.status,200);
+  assert.equal(exported.data.achievements.length,3);
+  const imported=await f.request('/api/achievement/import',{
+    accountId:'user2',
+    appid:34830,
+    achievements:[{apiname:'ACT_1',unlocked:false},{apiname:'ACT_2',unlocked:true},{apiname:'SNIPER_KILLER',unlocked:false}],
+    stats:[{statId:2,value:123}]
+  });
+  assert.equal(imported.response.status,200);
+  assert.equal(stateStats.get(1),2); // Only ACT_2 unlocked
+  assert.equal(stateStats.get(2),123);
+
+  // 5. SamRewritten Timed Modifications schedule start & cancel
+  const timedStart=await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,bulkAction:'unlock_all',amount:10,units:'minutes',spacing:'random',order:'random'});
+  assert.equal(timedStart.response.status,200);
+  assert.equal(timedStart.data.active,true);
+  assert.equal(timedStart.data.totalCount,2);
+  const timedCancel=await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,action:'cancel'});
+  assert.equal(timedCancel.response.status,200);
+  assert.equal(timedCancel.data.active,false);
+});
