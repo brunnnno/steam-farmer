@@ -534,12 +534,12 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Reviewed changes require the available connected main Steam account.',409);
         const id=appId(data.appid),preview=url.pathname.endsWith('change-preview');
-        const bulk=Boolean(data.bulk||data.bulkAction||(Array.isArray(data.selection)&&data.selection.length>32)),resetCounters=Boolean(data.resetCounters),allowRetoggle=Boolean(data.allowRetoggle)||bulk,overrideCooldown=Boolean(data.overrideCooldown)||bulk;
+        const bulk=Boolean(data.bulk||data.bulkAction||(Array.isArray(data.selection)&&data.selection.length>32)),resetCounters=Boolean(data.resetCounters),allowRetoggle=Boolean(data.allowRetoggle)||bulk,overrideCooldown=data.overrideCooldown!==false;
         const bulkAction=data.bulkAction!==undefined?text(String(data.bulkAction),32):undefined;
         if(bulkAction&&!['unlock_all','lock_all'].includes(bulkAction))throw fail('Select unlock_all or lock_all for bulk achievement operations.',400);
         const filterNames=Array.isArray(data.filterNames)?data.filterNames.slice(0,8192).map(v=>text(String(v),256)):undefined;
         const selected=bulkAction&&!Array.isArray(data.selection)?null:changeSelection(data.selection,{bulk});
-        rate(`reviewed-${preview?'preview':'write'}:${acc.id}`,preview?10:5,60000);
+        rate(`reviewed-${preview?'preview':'write'}:${acc.id}`,preview?30:20,60000);
         const current=()=>{assertPanelSession();if(!cfg.accounts.includes(acc)||clients.get(acc.id)!==client||client.steamID?.toString()!==identity||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||st.steamId64!==identity)throw fail('The Steam session changed during the operation.',409);};
         if(preview){
           const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
@@ -558,7 +558,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
             writeSelection=buildBulkSelection(snapshot,id,bulkAction,receipts,{filterNames,allowRetoggle});
           }
-          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();const hasUnlocks=plan.effects.some(e=>e.action==='unlock');try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed(hasUnlocks?[id]:[]);st.playedGames=hasUnlocks?[id]:[];}}catch{}return intent;}});
+          const result=await changesWrite(client,id,writeSelection,{expectedRevision:data.revision,bulk,resetCounters,allowRetoggle,overrideCooldown,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=await operations.reserve(identity,plan,{overrideCooldown});current();st.lastAchievementWrite=Date.now();try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed([id]);st.playedGames=[id];}}catch{}return intent;}});
           try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}
           return json(res,200,result);
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}

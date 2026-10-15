@@ -199,7 +199,8 @@ test('Sniper Ghost Warrior 24-achievement scenario: unlocks remaining 10 progres
   assert.equal(lockSel.length,24);
   const lockPlan=prepareChanges(allUnlockedSnap,34830,lockSel,new Map(),undefined,{bulk:true,resetCounters:true});
   assert.equal(lockPlan.effects.length,24);
-  assert.equal(lockPlan.payload.explicit_reset,true);
+  assert.equal(lockPlan.payload.explicit_reset,false);
+  assert.ok(Array.isArray(lockPlan.resetAllStats));
   assert.ok(lockPlan.progressChanges.every(p=>p.after===0));
   const allLockedSnap={
     ...final(allUnlockedSnap,lockPlan),
@@ -207,4 +208,107 @@ test('Sniper Ghost Warrior 24-achievement scenario: unlocks remaining 10 progres
     librarySummary:{total:24,unlocked:14,cacheTime:100}
   };
   assert.equal(verifyChanges(allUnlockedSnap,allLockedSnap,lockPlan,{...ack,gameId:'34830'}).confirmed,true);
+});
+
+test('real store transport adaptive 3-tier removal falls back cleanly when explicit_reset or incrementonly reset is rejected and never sets 0 bits to 1',async()=>{
+  const Schema=require('steam-user/protobufs/generated/_load.js');
+  const EMsg=require('steam-user/enums/EMsg');
+  const {parseSnapshot}=require('../lib/steam-protocol');
+  const {buildBulkSelection}=require('../lib/achievement-changes');
+  const {AchievementJournal}=require('../lib/achievement-journal');
+  const {AchievementOperations}=require('../lib/achievement-operations');
+  const bits={0:{name:'ACT_1'},1:{name:'ACT_2'},2:{name:'SNIPER_KILLER',progress:{max_val:'500',value:{operation:'statvalue',operand1:'SNIPER_KILLS'}}},3:{name:'HEADSHOT_PRO',progress:{max_val:'250',value:{operation:'statvalue',operand1:'HEADSHOTS'}}}};
+  const gameSchema=kv({'34830':{stats:{
+    1:{type:'4',bits},
+    2:{type:'INT',name:'SNIPER_KILLS',min:'0',max:'1000',incrementonly:'1'},
+    3:{type:'INT',name:'HEADSHOTS',min:'0',max:'1000',incrementonly:'0'}
+  }}});
+  // Verify parseSnapshot never marks locked bits as unlocked even when achievement_blocks has timestamps and librarySummary has advisory=true & unlocked>0
+  const summary={unlocked:2,total:4,cacheTime:Math.floor(Date.now()/1000)};
+  Object.defineProperty(summary,'advisory',{value:true});
+  const partialSnap={
+    game_id:'34830',eresult:1,crc_stats:50,schema:gameSchema,
+    stats:[{stat_id:1,stat_value:3},{stat_id:2,stat_value:10},{stat_id:3,stat_value:5}],
+    achievement_blocks:[{achievement_id:1,unlock_time:[1700000000,1700000000,1700000000,1700000000]}],
+    librarySummary:summary
+  };
+  const parsedPartial=parseSnapshot(partialSnap,34830);
+  assert.deepEqual(parsedPartial.achievements.map(a=>a.unlocked),[true,true,false,false]);
+
+  // Simulate full unlock followed immediately (< 1 minute) by full lock with real AchievementOperations + guardOperations
+  const opsRows=[],targetRows=[],writeRows=[];
+  const pool={
+    on(){},
+    async query(sql,args=[]){return this._exec(sql,args);},
+    async connect(){return {query:(sql,args=[])=>this._exec(sql,args),release(){}};},
+    async _exec(sql,args=[]){
+      if(sql.includes('to_regclass'))return {rows:[{operations:'t',targets:'t',reservations:'t',present:'t'}]};
+      if(sql.startsWith('BEGIN')||sql.startsWith('COMMIT')||sql.startsWith('ROLLBACK')||sql.startsWith('SET LOCAL')||sql.includes('pg_advisory_xact_lock')||sql.startsWith('CREATE'))return {rows:[]};
+      if(sql.startsWith('UPDATE steamfarmer_operation_targets SET reserved=FALSE')){for(const r of targetRows)if(r.account_id===args[0])r.reserved=false;return {rows:[]};}
+      if(sql.startsWith('UPDATE steamfarmer_achievement_operations')){for(const r of opsRows)if(r.account_id===args[0]&&(!args[1]||r.operation_id===args[1]))r.receipt=args[2]||r.receipt;return {rows:[]};}
+      if(sql.startsWith('INSERT INTO steamfarmer_achievement_operations')){opsRows.push({account_id:args[0],operation_id:args[1],appid:args[2],receipt:structuredClone(args[3]),created_at:new Date()});return {rows:[]};}
+      if(sql.startsWith('INSERT INTO steamfarmer_operation_targets')){for(const e of JSON.parse(args[3]))targetRows.push({account_id:args[0],operation_id:args[1],appid:args[2],apiname:e.apiname,receipt:e,reserved:true,created_at:new Date()});return {rows:[]};}
+      if(sql.includes('SELECT receipt FROM steamfarmer_achievement_operations WHERE account_id= AND operation_id=')){const f=opsRows.find(r=>r.account_id===args[0]&&r.operation_id===args[1]);return {rows:f?[{receipt:structuredClone(f.receipt)}]:[]};}
+      if(sql.includes("INTERVAL '1 minute'"))return {rows:opsRows.filter(r=>r.account_id===args[0]).map(()=>({}))};
+      if(sql.includes('WHERE account_id= AND reserved'))return {rows:targetRows.filter(r=>r.account_id===args[0]&&r.reserved)};
+      if(sql.startsWith('SELECT COUNT')||sql.includes('SELECT (SELECT COUNT(*)'))return {rows:[{count:opsRows.length}]};
+      return {rows:[]};
+    }
+  };
+  const journal=new AchievementJournal({cfg:{},save(){},pool});
+  const operations=new AchievementOperations(journal);
+  let serverStats=new Map([[1,15],[2,500],[3,250]]),crc=100;
+  const sentPayloads=[];
+  const client=Object.assign(new EventEmitter(),{
+    steamID:{toString:()=>'76561198000000001'},
+    _currentJobID:0,
+    _jobs:new Map(),
+    gamesPlayed(){},
+    _send(header,body,cb){
+      const job=String(++this._currentJobID);
+      this._jobs.set(job,cb);
+      if(header.msg===EMsg.ClientStoreUserStats2){
+        const decoded=Schema.CMsgClientStoreUserStats2.decode(body);
+        sentPayloads.push(decoded);
+        // Simulate Steam rejecting explicit_reset:true when incrementonly stat (stat_id:2) is decreased to 0
+        if(decoded.explicit_reset||decoded.stats.some(s=>s.stat_id===2&&s.stat_value<500)){
+          queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientStoreUserStatsResponse.encode({
+            game_id:'34830',eresult:1,crc_stats:++crc,stats_out_of_date:false,
+            stats_failed_validation:[{stat_id:2,reverted_stat_value:500}]
+          }).finish()),{msg:EMsg.ClientStoreUserStatsResponse}));
+          return;
+        }
+        for(const s of decoded.stats)serverStats.set(s.stat_id,s.stat_value>>>0);
+        queueMicrotask(()=>cb(Buffer.from(Schema.CMsgClientStoreUserStatsResponse.encode({
+          game_id:'34830',eresult:1,crc_stats:++crc,stats_out_of_date:false,stats_failed_validation:[]
+        }).finish()),{msg:EMsg.ClientStoreUserStatsResponse}));
+      }
+    }
+  });
+  const readSnap=async()=>({
+    game_id:'34830',eresult:1,crc_stats:crc,schema:gameSchema,
+    stats:[...serverStats].map(([stat_id,stat_value])=>({stat_id,stat_value})),
+    achievement_blocks:[{achievement_id:1,unlock_time:[1700000000,1700000000,1700000000,1700000000]}],
+    librarySummary:summary
+  });
+  // First operation: record a recent operation in DB (< 1 minute ago)
+  const initSnap=await readSnap();
+  const lockSel=buildBulkSelection(initSnap,34830,'lock_all');
+  assert.equal(lockSel.length,4);
+  const previewPlan=prepareChanges(initSnap,34830,lockSel,new Map(),undefined,{bulk:true,resetCounters:true});
+  // Seed an existing operation 5 seconds ago to prove guardOperations does not throw 429 when overrideCooldown/bulk is true
+  opsRows.push({account_id:'76561198000000001',operation_id:'11111111-1111-1111-1111-111111111111',appid:34830,receipt:{outcome:'confirmed',checkedAt:new Date().toISOString()},created_at:new Date()});
+  const res=await applyChanges(client,34830,lockSel,{
+    expectedRevision:previewPlan.revision,
+    bulk:true,resetCounters:true,allowRetoggle:true,overrideCooldown:true,
+    read:readSnap,
+    readHistory:()=>operations.latest('76561198000000001',34830),
+    beforeSend:plan=>operations.reserve('76561198000000001',plan,{overrideCooldown:true})
+  });
+  await operations.finish('76561198000000001',res);
+  assert.equal(res.outcome,'confirmed');
+  assert.equal(serverStats.get(1),0);
+  assert.equal(serverStats.get(3),0);
+  // Ensure no payload ever set achievement bits (stat_id:1) to non-zero during lock_all
+  assert.ok(sentPayloads.every(p=>p.stats.filter(s=>s.stat_id===1).every(s=>s.stat_value===0)));
 });
