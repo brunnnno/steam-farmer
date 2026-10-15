@@ -8,7 +8,7 @@
     if(c.status==='steam_rejected')return result('rejected','Steam rejected the attempt',c.reason||'Steam rejected a previous attempt; the exact restriction is not established.');
     if(['pending_verification','attempted'].includes(c.status))return result('review','Previous attempt needs review',c.reason||'Refresh and review the recorded attempt. No automatic retry is permitted.');
     if(c.code==='history_unavailable')return result('unknown','Activation temporarily blocked',c.reason);
-    if(row.serverControlled||c.code==='server_controlled'||['protected_progress','protected_progress_stat'].includes(p.code))return result('protected','Protected by Steam permissions',p.reason||c.reason||'The returned permissions do not allow this client operation.');
+    if(row.serverControlled||c.code==='server_controlled'||(row.batchSupport?.canReactivate!==true&&['protected_progress','protected_progress_stat'].includes(p.code)))return result('protected','Protected by Steam permissions',p.reason||c.reason||'The returned permissions do not allow this client operation.');
     if(c.status==='restricted'&&row.batchSupport?.canReactivate!==true)return result('unsupported','Unsupported write permissions',c.reason);
     if(c.status==='insufficient_data'&&row.batchSupport?.canReactivate!==true)return result('unknown','Compatibility unknown',c.reason||'Steam did not provide sufficient verified definitions and personal state.');
     if(row.unlocked!==false)return result('unknown','Compatibility unknown',c.reason||'Steam did not return a verified locked personal state.');

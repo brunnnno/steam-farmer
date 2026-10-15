@@ -450,9 +450,9 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           releaseResource=budget.acquire('heavy');
           const readClient=clients.get(acc.id),readVersion=st.webSessionVersion;
           const readStarted=Date.now();
-          const historyTask=requestedMethod!=='web'&&st.connected&&readClient
+          const historyTask=st.connected&&readClient
             ?new Promise(resolve=>{
-              const timer=setTimeout(()=>resolve({unavailable:true}),2500);
+              const timer=setTimeout(()=>resolve({unavailable:true}),6000);
               Promise.resolve().then(()=>operations.latest(st.steamId64,id)).then(receipts=>{clearTimeout(timer);resolve({receipts});},()=>{clearTimeout(timer);resolve({unavailable:true});});
             })
             :Promise.resolve({receipts:new Map()});
@@ -465,37 +465,38 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
             else if(requestedMethod==='auto')method='web';
             if(method==='protocol')return protocolRead(readClient,id);
             const webResult=await steamRead(acc,st,id,process.env.STEAM_API_KEY||'');
-            if(st.connected&&readClient&&(!webResult.verified||(webResult.achievements?.length&&webResult.achievements.every(a=>!a.unlocked)))){
+            if(st.connected&&readClient&&requestedMethod!=='auto'&&(!webResult.verified||(webResult.achievements?.length&&webResult.achievements.every(a=>!a.compatibility)))){
               try{
                 const directResult=await protocolRead(readClient,id,{timeoutMs:6000});
-                if(directResult.verified&&directResult.achievements?.some(a=>a.unlocked===true&&a.apiname)){method='protocol';return directResult;}
+                if(directResult.verified&&directResult.achievements?.some(a=>typeof a.unlocked==='boolean'&&a.apiname)){method='protocol';return directResult;}
               }catch{}
             }
             return webResult;
           }).then(async result => {
             result.readingMethod=method;
-            if(!cfg.accounts.includes(acc)||states.get(acc.id)!==st||clients.get(acc.id)!==readClient||st.webSessionVersion!==readVersion)throw fail('The selected Steam session changed during verification. Refresh again.',409);
+            if(!cfg.accounts.includes(acc)||states.get(acc.id)!==st||clients.get(acc.id)!==readClient||(method==='web'&&st.webSessionVersion!==readVersion))throw fail('The selected Steam session changed during verification. Refresh again.',409);
             let receipts=new Map(),historyUnavailable=false;
             if(method==='protocol'){const history=await historyTask;receipts=history.receipts||new Map();historyUnavailable=Boolean(history.unavailable);if(historyUnavailable)result.historyWarning='Persistent write history is unavailable. Achievement reads remain available, but activation is blocked.';}
             if(method==='protocol') for(const row of result.achievements||[]) {
               const receipt=receipts.get(row.apiname);
-              const removed=receipt?.outcome==='confirmed'&&receipt.action==='remove'&&receipt.after===false;
+              const receiptConfirmed=!receipt||['confirmed','already_unlocked','observed_unlocked'].includes(receipt.outcome);
+              const removed=receiptConfirmed&&receipt?.action==='remove'&&receipt.after===false;
               const pendingRemoval=removed&&!receipt.bulk&&!libraryCorroborates(result.diagnostics?.librarySummary,result.diagnostics?.statsUnlocked,result.achievements.length,receipt.verifiedAt||receipt.checkedAt);
               if(pendingRemoval){row.unlocked=null;row.unlockTimestamp=0;row.compatibility={status:'insufficient_data',code:'removal_library_pending',canUnlock:false,reason:'This removal is awaiting an updated Steam library reading.',action:'Check this achievement in Steam and refresh. No automatic retry is sent.'};if(row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,canPreviewFloat:false,canPreviewShared:false};}
-              const removalReason=historyUnavailable?'Recorded history could not be verified. Restore the history connection and refresh.':receipt&&receipt.outcome!=='confirmed'?'A previous attempt needs review before another change.':row.removalSupport?.reason;
-              const canDirectUnlock=!pendingRemoval&&!historyUnavailable&&row.unlocked===false&&!row.serverControlled&&Number.isInteger(row.statId)&&Number.isInteger(row.bitIndex)&&(!receipt||receipt.outcome==='confirmed');
-              row.batchSupport={canRemove:!pendingRemoval&&!historyUnavailable&&row.removalSupport?.canRemove===true&&(!receipt||receipt.outcome==='confirmed'),removalReason,canReactivate:!pendingRemoval&&!historyUnavailable&&(removed||canDirectUnlock)};
+              const removalReason=historyUnavailable?'Recorded history could not be verified. Restore the history connection and refresh.':!receiptConfirmed?'A previous attempt needs review before another change.':row.removalSupport?.reason;
+              const canDirectUnlock=!pendingRemoval&&!historyUnavailable&&row.unlocked===false&&!row.serverControlled&&Number.isInteger(row.statId)&&Number.isInteger(row.bitIndex)&&receiptConfirmed;
+              row.batchSupport={canRemove:!pendingRemoval&&!historyUnavailable&&row.removalSupport?.canRemove===true&&receiptConfirmed,removalReason,canReactivate:!pendingRemoval&&!historyUnavailable&&(removed||canDirectUnlock)};
               if(receipt) row.lastWriteOutcome=receipt.outcome;
-              if(receipt?.outcome==='confirmed'&&row.unlocked===true&&receipt.after===true&&receipt.before===false&&(!receipt.action||receipt.action==='unlock')){row.panelOperationAt=receipt.checkedAt;row.panelVerifiedAt=receipt.verifiedAt||null;}
-              if(row.compatibility?.status==='provisional' && receipt?.outcome==='confirmed') row.compatibility={...row.compatibility,validatedOnAccount:true};
-              if(receipt && !removed && receipt.outcome!=='confirmed' && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,status:receipt.outcome==='rejected'?'steam_rejected':receipt.outcome==='unknown'||receipt.outcome==='requested'?'pending_verification':'attempted',canUnlock:false,reason:receipt.message||'A write was already attempted for this achievement. The result must be checked; automatic retries are disabled.',code:receipt.diagnostic?.code||'previous_attempt',action:receipt.diagnostic?.action||'Refresh to verify the actual Steam state. A repeated write requires review.'};
-              if(receipt&&!removed&&receipt.outcome!=='confirmed'&&row.unlocked!==true&&row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,reason:row.compatibility.reason};
+              if(receiptConfirmed&&row.unlocked===true&&receipt?.after===true&&receipt.before===false&&(!receipt.action||receipt.action==='unlock')){row.panelOperationAt=receipt.checkedAt;row.panelVerifiedAt=receipt.verifiedAt||null;}
+              if(row.compatibility?.status==='provisional' && receiptConfirmed && receipt) row.compatibility={...row.compatibility,validatedOnAccount:true};
+              if(receipt && !removed && !receiptConfirmed && row.unlocked!==true && row.compatibility) row.compatibility={...row.compatibility,status:receipt.outcome==='rejected'?'steam_rejected':receipt.outcome==='unknown'||receipt.outcome==='requested'?'pending_verification':'attempted',canUnlock:false,reason:receipt.message||'A write was already attempted for this achievement. The result must be checked; automatic retries are disabled.',code:receipt.diagnostic?.code||'previous_attempt',action:receipt.diagnostic?.action||'Refresh to verify the actual Steam state. A repeated write requires review.'};
+              if(receipt&&!removed&&!receiptConfirmed&&row.unlocked!==true&&row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false,reason:row.compatibility.reason};
               if(historyUnavailable&&row.unlocked!==true){row.compatibility={status:'insufficient_data',code:'history_unavailable',canUnlock:false,reason:result.historyWarning,action:'Restore the persistent history connection before activating achievements.'};if(row.progressSupport)row.progressSupport={...row.progressSupport,canComplete:false};}
             }
             const pendingRemovals=(result.achievements||[]).filter(r=>r.compatibility?.code==='removal_library_pending').length;
             if(pendingRemovals&&!result.stateConflict){result.verified=false;result.message=`${pendingRemovals} achievement${pendingRemovals===1?' is':'s are'} awaiting removal confirmation. The other achievements remain available. Check Steam and refresh after making changes there.`;}
             result.readDurationMs=Date.now()-readStarted;
-            result.stateRevision=readingRevision(result);if(!(requestedMethod==='auto'&&method==='web'&&st.connected))achievementCache.set(key, result);
+            result.stateRevision=readingRevision(result);if(!historyUnavailable&&!(requestedMethod==='auto'&&method==='web'&&st.connected))achievementCache.set(key, result);
             console.log(`[Achievements] account=${acc.id} app=${id} source=${result.source || 'none'} verified=${Boolean(result.verified)} durationMs=${result.readDurationMs} webSession=${Boolean(st.webCookies)}`);
             if(result.diagnostics?.retainedUnlockDateCount)console.log('[Achievement state evidence]',JSON.stringify({appid:id,count:result.diagnostics.retainedUnlockDateCount,rows:result.diagnostics.retainedUnlockDates}));
             if(result.diagnostics?.librarySummary)console.log('[Achievement library summary]',JSON.stringify({appid:id,statistics:result.diagnostics.statsUnlocked,summary:result.diagnostics.librarySummary,conflict:result.stateConflict}));

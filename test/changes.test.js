@@ -236,7 +236,7 @@ test('real store transport adaptive 3-tier removal falls back cleanly when expli
   assert.deepEqual(parsedPartial.achievements.map(a=>a.unlocked),[true,true,false,false]);
 
   // Simulate full unlock followed immediately (< 1 minute) by full lock with real AchievementOperations + guardOperations
-  const opsRows=[],targetRows=[],writeRows=[];
+  const opsRows=[],targetRows=[];
   const pool={
     on(){},
     async query(sql,args=[]){return this._exec(sql,args);},
@@ -245,10 +245,10 @@ test('real store transport adaptive 3-tier removal falls back cleanly when expli
       if(sql.includes('to_regclass'))return {rows:[{operations:'t',targets:'t',reservations:'t',present:'t'}]};
       if(sql.startsWith('BEGIN')||sql.startsWith('COMMIT')||sql.startsWith('ROLLBACK')||sql.startsWith('SET LOCAL')||sql.includes('pg_advisory_xact_lock')||sql.startsWith('CREATE'))return {rows:[]};
       if(sql.startsWith('UPDATE steamfarmer_operation_targets SET reserved=FALSE')){for(const r of targetRows)if(r.account_id===args[0])r.reserved=false;return {rows:[]};}
-      if(sql.startsWith('UPDATE steamfarmer_achievement_operations')){for(const r of opsRows)if(r.account_id===args[0]&&(!args[1]||r.operation_id===args[1]))r.receipt=args[2]||r.receipt;return {rows:[]};}
+      if(sql.startsWith('UPDATE steamfarmer_achievement_operations')){for(const r of opsRows)if(r.account_id===args[0]&&(args.length<3||r.operation_id===args[1]))r.receipt=args[2]||r.receipt;return {rows:[]};}
       if(sql.startsWith('INSERT INTO steamfarmer_achievement_operations')){opsRows.push({account_id:args[0],operation_id:args[1],appid:args[2],receipt:structuredClone(args[3]),created_at:new Date()});return {rows:[]};}
       if(sql.startsWith('INSERT INTO steamfarmer_operation_targets')){for(const e of JSON.parse(args[3]))targetRows.push({account_id:args[0],operation_id:args[1],appid:args[2],apiname:e.apiname,receipt:e,reserved:true,created_at:new Date()});return {rows:[]};}
-      if(sql.includes('SELECT receipt FROM steamfarmer_achievement_operations WHERE account_id= AND operation_id=')){const f=opsRows.find(r=>r.account_id===args[0]&&r.operation_id===args[1]);return {rows:f?[{receipt:structuredClone(f.receipt)}]:[]};}
+      if(sql.includes('SELECT receipt FROM steamfarmer_achievement_operations WHERE account_id=$1 AND operation_id=$2')){const f=opsRows.find(r=>r.account_id===args[0]&&r.operation_id===args[1]);return {rows:f?[{receipt:structuredClone(f.receipt)}]:[]};}
       if(sql.includes("INTERVAL '1 minute'"))return {rows:opsRows.filter(r=>r.account_id===args[0]).map(()=>({}))};
       if(sql.includes('WHERE account_id= AND reserved'))return {rows:targetRows.filter(r=>r.account_id===args[0]&&r.reserved)};
       if(sql.startsWith('SELECT COUNT')||sql.includes('SELECT (SELECT COUNT(*)'))return {rows:[{count:opsRows.length}]};
@@ -291,7 +291,6 @@ test('real store transport adaptive 3-tier removal falls back cleanly when expli
     achievement_blocks:[{achievement_id:1,unlock_time:[1700000000,1700000000,1700000000,1700000000]}],
     librarySummary:summary
   });
-  // First operation: record a recent operation in DB (< 1 minute ago)
   const initSnap=await readSnap();
   const lockSel=buildBulkSelection(initSnap,34830,'lock_all');
   assert.equal(lockSel.length,4);

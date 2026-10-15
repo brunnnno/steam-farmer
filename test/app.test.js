@@ -477,7 +477,7 @@ test('bulk unlock_all and lock_all API routes preview and confirm full-game chan
 });
 
 test('encrypted Vault accounts support >32 manual selections, live gamesPlayed emulation and protocol upgrade over 0-unlocked web reads',async t=>{
-  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+' '),typeof v==='object'?kv(v):Buffer.from(String(v)+' '));a.push(Buffer.from([8]));return Buffer.concat(a);}
+  function kv(obj){const a=[];for(const[k,v]of Object.entries(obj))a.push(Buffer.from([typeof v==='object'?0:1]),Buffer.from(k+'\0'),typeof v==='object'?kv(v):Buffer.from(String(v)+'\0'));a.push(Buffer.from([8]));return Buffer.concat(a);}
   const schema=kv({'34830':{stats:{
     1:{type:'4',bits:Object.fromEntries(Array.from({length:32},(_,i)=>[i,{name:'ACH_'+i}]))},
     2:{type:'4',bits:{0:{name:'ACH_32'},1:{name:'ACH_33'},2:{name:'ACH_34'},3:{name:'ACH_35'}}}
@@ -532,7 +532,29 @@ test('encrypted Vault accounts support >32 manual selections, live gamesPlayed e
   assert.equal(readWeb.data.readingMethod,'protocol');
   assert.equal(readWeb.data.achievements.filter(a=>a.unlocked===true).length,36);
 
-  // When paused, completing an achievement operation immediately sends gamesPlayed([]) so Steam stops showing in-game
+  // Partial unlock of 2 achievements after lock_all preserves protocol reading and checkboxes on all remaining achievements across reloads
+  const lockAll1P=await f.request('/api/achievement/change-preview',{accountId:'user2',appid:34830,bulk:true,bulkAction:'lock_all',resetCounters:true});
+  await f.request('/api/achievement/change',{accountId:'user2',appid:34830,bulk:true,bulkAction:'lock_all',resetCounters:true,selection:lockAll1P.data.selection,revision:lockAll1P.data.revision,confirmed:true});
+  const sel2=[{apiname:'ACH_0',action:'unlock'},{apiname:'ACH_1',action:'unlock'}];
+  const prev2=await f.request('/api/achievement/change-preview',{accountId:'user2',appid:34830,selection:sel2,bulk:true});
+  assert.equal(prev2.response.status,200);
+  const conf2=await f.request('/api/achievement/change',{accountId:'user2',appid:34830,selection:sel2,revision:prev2.data.revision,confirmed:true,bulk:true});
+  assert.equal(conf2.data.outcome,'confirmed');
+  for(const mode of ['protocol','auto','web']){
+    const after2=await f.request(`/api/achievements?accountId=user2&appid=34830&method=${mode}&refresh=1`);
+    assert.equal(after2.data.readingMethod,'protocol');
+    assert.equal(after2.data.achievements.filter(a=>a.unlocked===true).length,2);
+    assert.equal(after2.data.achievements.filter(a=>a.unlocked===true).every(a=>a.batchSupport?.canRemove===true),true);
+    assert.equal(after2.data.achievements.filter(a=>a.unlocked===false).every(a=>a.batchSupport?.canReactivate===true),true);
+  }
+  // Unlock 2 MORE achievements immediately after the first 2
+  const selNext2=[{apiname:'ACH_2',action:'unlock'},{apiname:'ACH_32',action:'unlock'}];
+  const prevNext2=await f.request('/api/achievement/change-preview',{accountId:'user2',appid:34830,selection:selNext2,bulk:true});
+  assert.equal(prevNext2.response.status,200);
+  const confNext2=await f.request('/api/achievement/change',{accountId:'user2',appid:34830,selection:selNext2,revision:prevNext2.data.revision,confirmed:true,bulk:true});
+  assert.equal(confNext2.data.outcome,'confirmed');
+
+    // When paused, completing an achievement operation immediately sends gamesPlayed([]) so Steam stops showing in-game
   await f.request('/api/toggle',{accountId:'user2'});
   assert.deepEqual(client.calls.at(-1),[]);
   const lockPreview=await f.request('/api/achievement/change-preview',{accountId:'user2',appid:34830,bulk:true,bulkAction:'lock_all',resetCounters:true});
