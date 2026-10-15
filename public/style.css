@@ -590,3 +590,5 @@ body {
 .sam-tools-grid {
   padding: 8px 0;
 }
+
+#lockModal { display: none !important; visibility: hidden !important; pointer-events: none !important; }

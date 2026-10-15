@@ -62,7 +62,18 @@ async function api(endpoint, body, {signal,retries=4}={}) {
       await new Promise(r => setTimeout(r, 350));
       return api(endpoint, body, {signal, retries: retries - 1});
     }
-    if (response.status === 401 && authAtStart===loginSerial&&csrfAtStart===csrf&&endpoint !== '/api/panel/login' && endpoint !== '/api/panel/password') showLock();
+    if (response.status === 401 && authAtStart===loginSerial&&csrfAtStart===csrf&&endpoint !== '/api/panel/login' && endpoint !== '/api/panel/password') {
+      if (typeof window.testUI === 'undefined' && endpoint !== '/api/panel/session' && retries > 0) {
+        try {
+          const sRes = await fetch('/api/panel/session');
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            if (sData?.csrf) { csrf = sData.csrf; return api(endpoint, body, {signal, retries: retries - 1}); }
+          }
+        } catch {}
+      }
+      showLock();
+    }
     throw Object.assign(new Error(data.error || 'The operation failed.'),{diagnostic:data.diagnostic,status:response.status});
   }
   return data;
@@ -173,7 +184,7 @@ function renderGames(games) {
     const metaRow=element('div',undefined,'card-header-info');
     metaRow.append(element('div',`#${id}`,'card-appid'),element('span',isRunning?'● Running in Steam':active?.isPaused?'Standby':'Ready','card-state'+(isRunning?' active':'')));
     content.append(element('div',title,'card-title'),metaRow);
-    const actions = element('div',undefined,'card-actions');const menu=element('details',undefined,'control-menu');menu.append(element('summary','Options'));const menuContent=element('div',undefined,'control-menu-content');menuContent.append(button('Remove',()=>removeGame(id),'btn-card-remove'));menu.append(menuContent);actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web'),'btn-card-ach'),menu);
+    const actions = element('div',undefined,'card-actions');const menu=element('details',undefined,'control-menu');menu.append(element('summary','Options'));const menuContent=element('div',undefined,'control-menu-content');menuContent.append(button('Timed & Tools',()=>openAchModal(id,title,false,active?.connected?'auto':'web','tools'),'btn-action-sm'),button('Remove',()=>removeGame(id),'btn-card-remove'));menu.append(menuContent);actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web','achievements'),'btn-card-ach'),button('Stats',()=>openAchModal(id,title,false,active?.connected?'auto':'web','stats'),'btn-action-sm btn-card-stats'),menu);
     content.append(actions); card.append(content); cards.push(card);
   }
   grid.replaceChildren(...cards);
@@ -225,7 +236,7 @@ function switchSamTab(tab='achievements'){
   }
 }
 
-async function openAchModal(id,title,forceRefresh=false,method=active?.connected===true?'auto':'web') {
+async function openAchModal(id,title,forceRefresh=false,method=active?.connected===true?'auto':'web',initialTab=null) {
   achievementLive.stop();liveContext=null;achievementRevision='';achievementPage=0;
   clearAchievementSelection();modifiedStats.clear();
   $('sharedProgressReview').hidden=true;
@@ -236,7 +247,9 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
     filterStatus='all'; filterRarity='all'; filterCompatibility='all';currentSort='default'; searchQuery='';
     $('achCompatibilityFilter').value='all';
     $('achSortSelect').value='default'; $('achSearchInput').value='';
-    switchSamTab('achievements');
+    switchSamTab(initialTab||'achievements');
+  } else if (initialTab) {
+    switchSamTab(initialTab);
   }
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
