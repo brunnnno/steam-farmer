@@ -761,4 +761,52 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(tier(20),'Rare');
   assert.equal(tier(50),'Rare');
   assert.equal(tier(50.1),'Common');
+
+  // 10. ASF 2-Hour Card Farming Rule & Anti-Ban Playtime-Sync
+  const st2=f.app.states.get('user2');
+  f.app.cfg.accounts[0].cardFarming=true;
+  st2.cardsReady=true;
+  // Two games < 2h (240, 440) and one game >= 2h (550) -> farms [240, 440] in parallel
+  st2.cardDropGames=[
+    {appid:240,name:'CS:S',remaining:3,hoursPlayed:0.8},
+    {appid:440,name:'TF2',remaining:2,hoursPlayed:1.5},
+    {appid:550,name:'L4D2',remaining:4,hoursPlayed:3.2}
+  ];
+  await f.request('/api/custom-status',{accountId:'user2',status:''});
+  assert.deepEqual(client.calls.at(-1),[240,440]);
+
+  // Once all remaining card-drop games have >= 2h -> farms 1 game at a time ([550])
+  st2.cardDropGames=[
+    {appid:550,name:'L4D2',remaining:4,hoursPlayed:2.5},
+    {appid:620,name:'Portal 2',remaining:3,hoursPlayed:5.0}
+  ];
+  await f.request('/api/custom-status',{accountId:'user2',status:''});
+  assert.deepEqual(client.calls.at(-1),[550]);
+
+  // Anti-Ban Playtime-Sync: starting a non-stealth timed job switches gamesPlayed to [34830], cancelling restores [550]
+  await f.request('/api/achievement/change',{accountId:'user2',appid:34830,confirmed:true,directApply:true,bulk:true,bulkAction:'lock_all',resetCounters:true});
+  await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,bulkAction:'unlock_all',amount:10,units:'minutes',spacing:'natural',stealth:false});
+  assert.deepEqual(client.calls.at(-1),[34830]);
+  await f.request('/api/achievement/timed',{accountId:'user2',appid:34830,action:'cancel'});
+  assert.deepEqual(client.calls.at(-1),[550]);
+
+  // 11. Quick-Sell Market (fetchSellableCards + quickSellCards)
+  const {quickSellCards,computeSellerPriceCents}=require('../lib/steam-data');
+  assert.equal(computeSellerPriceCents(10),8);
+  const marketCalls=[];
+  const qsRes=await quickSellCards('76561198000000001','sessionid=sess999; steamLoginSecure=1',{
+    request:async(url,opts)=>{
+      marketCalls.push({url,method:opts.method||'GET',body:opts.body,referer:opts.referer});
+      if(url.includes('/inventory/'))return {body:JSON.stringify({
+        assets:[{assetid:'9001',classid:'100',instanceid:'0',amount:'1'}],
+        descriptions:[{classid:'100',instanceid:'0',marketable:1,name:'Balkan (Trading Card)',market_hash_name:'730-Balkan (Trading Card)',type:'CS2 Trading Card',market_fee_app:730}]
+      })};
+      if(url.includes('/market/priceoverview/'))return {body:JSON.stringify({success:true,lowest_price:'$0.10',median_price:'$0.10'})};
+      if(url.includes('/market/sellitem/'))return {body:JSON.stringify({success:true,requires_confirmation:1})};
+      return {body:'{}'};
+    }
+  });
+  assert.equal(qsRes.soldCount,1);
+  assert.equal(qsRes.requiresConfirmationCount,1);
+  assert.ok(marketCalls.some(c=>c.url==='https://steamcommunity.com/market/sellitem/'&&c.body.includes('assetid=9001')&&c.body.includes('price=8')));
 });

@@ -173,7 +173,7 @@ function renderCardFarming(account){
   for(const game of games.slice(0,80)){
     const row=element('div',undefined,'cards-game');
     const title=game.name||account.gameNames?.[game.appid]||`AppID ${game.appid}`;
-    const identity=element('div',undefined,'cards-game-identity');identity.append(element('strong',title),element('small',`#${game.appid}`));
+    const identity=element('div',undefined,'cards-game-identity');identity.append(element('strong',title),element('small',`#${game.appid}${typeof game.hoursPlayed==='number'?` · ${game.hoursPlayed.toFixed(1)} hrs`:''}`));
     const state=running.has(game.appid)?'Active':stopped?'Paused':account.cardsReady?'Waiting':'Checking';
     row.append(identity,element('span',state,'cards-game-state'+(running.has(game.appid)?' active':'')),element('span',`${game.remaining} pending`, 'cards-game-remaining'));nodes.push(row);
   }
@@ -999,6 +999,39 @@ async function toggleAutoDiscoveryQueue(enabled){
   const r=await action('/api/discovery-queue',{auto:Boolean(enabled)});
   if(r?.message)notice(r.message);
 }
+async function loadMarketableCards(){
+  if(!activeAccountId)return;
+  try{
+    const data=await api(`/api/cards/inventory?accountId=${encodeURIComponent(activeAccountId)}`);
+    const box=$('marketCardsList');if(!box)return;
+    box.replaceChildren();
+    if(!data.cards?.length){
+      box.append(element('small','No marketable trading cards found in your Steam inventory (753/6).'));
+      return;
+    }
+    for(const c of data.cards.slice(0,40)){
+      const row=element('div',undefined,'cards-game');
+      const info=element('div',undefined,'cards-game-identity');
+      info.append(element('strong',c.name),element('small',c.type));
+      const sellBtn=button('Quick-Sell',()=>quickSellMarketCards([c.assetid]),'btn-action-sm');
+      row.append(info,sellBtn);
+      box.append(row);
+    }
+    notice(`Found ${data.totalCards} marketable trading card${data.totalCards===1?'':'s'}.`);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function quickSellMarketCards(assetids=null){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/cards/sell',{accountId:activeAccountId,...(Array.isArray(assetids)?{assetids}:{})});
+    notice(res.message||'Market quick-sell completed.');
+    await loadMarketableCards();
+  }catch(e){
+    notice(e.message);
+  }
+}
 async function saveSleep(){const fields=['sleepEnabled','sleepStart','sleepEnd','timezoneInput'],versions=draftSettings.snapshot(fields),account=activeAccountId;const saved=await action('/api/set-sleep',{enabled:$('sleepEnabled').checked,start:Number($('sleepStart').value),end:Number($('sleepEnd').value),timezone:$('timezoneInput').value},'Sleep schedule updated. Equal start and end hours disable sleep mode.');if(saved&&account===activeAccountId)draftSettings.commit(fields,versions);return saved;}
 async function saveCustomStatus(){const fields=['customStatusInput'],versions=draftSettings.snapshot(fields),account=activeAccountId;const saved=await action('/api/custom-status',{status:$('customStatusInput').value},'Custom status updated.');if(saved&&account===activeAccountId)draftSettings.commit(fields,versions);return saved;}
 async function saveWebhook(){try{await api('/api/set-webhook',{webhook:$('webhookInput').value.trim()});$('webhookInput').value='';notice('Webhook updated.');await loadStatus();}catch(e){notice(e.message);}}
@@ -1042,6 +1075,8 @@ document.querySelector('[data-event-11]').addEventListener('click', function(eve
 if($('filterRarityCommonBtn'))$('filterRarityCommonBtn').addEventListener('click',()=>setFilter('rarity','common'));
 if($('runDiscoveryQueueBtn'))$('runDiscoveryQueueBtn').addEventListener('click',()=>runDiscoveryQueue());
 if($('autoDiscoveryQueueToggle'))$('autoDiscoveryQueueToggle').addEventListener('change',e=>toggleAutoDiscoveryQueue(e.target.checked));
+if($('loadInventoryCardsBtn'))$('loadInventoryCardsBtn').addEventListener('click',()=>loadMarketableCards());
+if($('quickSellCardsBtn'))$('quickSellCardsBtn').addEventListener('click',()=>quickSellMarketCards(null));
 document.querySelector('[data-event-12]').addEventListener('change', function(event) { setSort(this.value); });
 document.querySelector('[data-event-13]').addEventListener('input', function(event) { onSearchInput(this.value); });
 document.querySelector('[data-event-15]').addEventListener('click', function(event) { openAddAccModal(); });

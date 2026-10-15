@@ -33,7 +33,7 @@ const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
 const {createPercentageReader}=require('./lib/rarity-history');
 const {revisionFor,changesBetween}=require('./lib/achievement-sync');
-const { remote, achievements, parseCards, exploreDiscoveryQueue } = require('./lib/steam-data');
+const { remote, achievements, parseCards, exploreDiscoveryQueue, fetchSellableCards, quickSellCards } = require('./lib/steam-data');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -94,7 +94,30 @@ function createApp(options = {}) {
   const changesWrite=options.changesWriter||applyChanges;
   const statsWrite = options.statsWriter || ((client, id, changes, opts) => writeGameStats(client, id, changes, { read: progressSnapshotRead, send: store, ...opts }));
   const discoveryRun = options.discoveryQueueRunner || exploreDiscoveryQueue;
-  const timedManager = new TimedModificationManager({ pool: options.timedPool || journal.pool || null, file: path.join(directory, 'timed-jobs.json') });
+  const cardsInventoryRead = options.cardsInventoryReader || fetchSellableCards;
+  const cardsQuickSell = options.cardsQuickSeller || quickSellCards;
+  const timedManager = new TimedModificationManager({
+    pool: options.timedPool || journal.pool || null,
+    file: path.join(directory, 'timed-jobs.json'),
+    onScheduleChange: accountId => {
+      const acc = cfg.accounts.find(a => a.id === accountId);
+      if (acc) farming(acc, true);
+    }
+  });
+  function buildProgressBar(completed, total, width = 12) {
+    const safeTotal = Math.max(1, Number(total) || 1);
+    const safeDone = Math.max(0, Math.min(safeTotal, Number(completed) || 0));
+    const filled = Math.round((safeDone / safeTotal) * width);
+    const pct = Math.round((safeDone / safeTotal) * 100);
+    return `${'█'.repeat(filled)}${'░'.repeat(Math.max(0, width - filled))} ${safeDone}/${safeTotal} (${pct}%)`;
+  }
+  function rarityMeta(percent) {
+    if (typeof percent !== 'number' || !Number.isFinite(percent)) return { label: 'Unknown', color: 0x64748b };
+    if (percent < 5) return { label: 'Mythic / Legendary', color: 0xf59e0b };
+    if (percent < 20) return { label: 'Epic', color: 0xa855f7 };
+    if (percent <= 50) return { label: 'Rare', color: 0x38bdf8 };
+    return { label: 'Common', color: 0x10b981 };
+  }
   function makeTimedItemExecutor(accountId, id, stealth = false) {
     return async item => {
       const acc = cfg.accounts.find(a => a.id === accountId);
@@ -106,6 +129,30 @@ function createApp(options = {}) {
       const hasSchema = await operations.schema();
       const r = await changesWrite(client, id, singleSel, { expectedRevision: plan.revision, bulk: true, resetCounters: item.action === 'remove', allowRetoggle: true, overrideCooldown: true, stealth: Boolean(stealth), readHistory: () => operations.latest(identity, id), beforeSend: async p => hasSchema ? operations.reserve(identity, p, { overrideCooldown: true }) : cleanOperation({ ...p, operationId: crypto.randomUUID(), checkedAt: new Date().toISOString(), outcome: 'requested' }) });
       if (hasSchema) try { await operations.finish(identity, r); } catch {}
+      try {
+        const view = parseSnapshot(snap, id);
+        const achRow = view.achievements.find(a => a.apiname === item.apiname);
+        const pctCached = percentageCache.get(String(id) + ':api') || percentageCache.get(String(id) + ':titles');
+        const pct = pctCached?.percentages?.[item.apiname] ?? achRow?.percent ?? null;
+        const rMeta = rarityMeta(pct);
+        const jobStatus = timedManager.status(accountId, id);
+        const doneNow = (jobStatus.completedCount || 0) + 1;
+        const totalNow = jobStatus.totalCount || 1;
+        const gameTitle = acc.gameNames?.[id] || `AppID ${id}`;
+        const iconUrl = achRow?.iconOpen && /^https:\/\//i.test(achRow.iconOpen) ? achRow.iconOpen : undefined;
+        notify(
+          `${item.action === 'remove' ? '🔒 Achievement Locked' : '🏆 Achievement Unlocked'} · ${gameTitle}`,
+          `**${achRow?.name || item.apiname}**${achRow?.description ? `\n${achRow.description}` : ''}`,
+          {
+            color: rMeta.color,
+            ...(iconUrl ? { thumbnail: { url: iconUrl } } : {}),
+            fields: [
+              { name: 'Rarity', value: `${rMeta.label}${pct !== null ? ` (${Number(pct).toFixed(1)}%)` : ''}`, inline: true },
+              { name: 'Task Progress', value: buildProgressBar(doneNow, totalNow), inline: true }
+            ]
+          }
+        );
+      } catch {}
       st.webSessionVersion++; achievementCache.clear(); farming(acc, true);
     };
   }
@@ -136,13 +183,28 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     const state=states.get(id);if(state.pausedInitialized!==true){state.isPaused=Boolean(cfg.accounts.find(a=>a.id===id)?.paused);state.pausedInitialized=true;}return state;
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
+  function selectOptimalCardGames(cardDropGames, manualGames) {
+    if (!Array.isArray(cardDropGames) || !cardDropGames.length) return (manualGames || []).slice(0, 32);
+    const under2h = cardDropGames.filter(g => typeof g.hoursPlayed === 'number' && g.hoursPlayed < 2.0);
+    if (under2h.length > 0) {
+      return under2h.map(g => g.appid).slice(0, 32);
+    }
+    const over2h = cardDropGames.filter(g => typeof g.hoursPlayed === 'number' && g.hoursPlayed >= 2.0);
+    if (over2h.length > 0) {
+      return [over2h[0].appid];
+    }
+    return [cardDropGames[0].appid];
+  }
   function farming(acc, force = false) {
     if(persistence && !persistence.available)return;
     const st = stateFor(acc.id); syncSleep(acc);
     const client = clients.get(acc.id); if (!client) return;
-    let games = acc.cardFarming
-      ? (st.cardsReady ? [...new Set([...st.cardDropGames.map(g => g.appid), ...acc.games])].slice(0, 32) : [])
-      : acc.games.slice(0, 32);
+    const timedSyncApps = timedManager.activeNonStealthApps(acc.id);
+    let games = timedSyncApps.length
+      ? [...new Set(timedSyncApps)].slice(0, 32)
+      : acc.cardFarming
+        ? (st.cardsReady ? selectOptimalCardGames(st.cardDropGames, acc.games) : [])
+        : acc.games.slice(0, 32);
     if (!st.connected || st.isPaused || st.isCollisionPaused || st.isSleepPaused) games = [];
     const list = [...games]; if (games.length && acc.customStatus && list.length < 32) list.push(acc.customStatus);
     if (!force && JSON.stringify(list) === JSON.stringify(st.playedGames)) return;
@@ -153,11 +215,12 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       st.isFarming = games.length > 0;
     } catch { st.isFarming = false; st.sessionStartTime = null; st.error = 'Could not update Steam activity.'; }
   }
-  async function webhook(title, description) {
+  async function webhook(title, description, extraEmbed = {}) {
     if (!cfg.discordWebhook) return;
-    await remote(cfg.discordWebhook, { method: 'POST', body: JSON.stringify({ username: 'SteamFarmer', embeds: [{ title, description, timestamp: new Date().toISOString() }] }), maxBytes: 65536 });
+    const embed = { title, description, timestamp: new Date().toISOString(), ...extraEmbed };
+    await remote(cfg.discordWebhook, { method: 'POST', body: JSON.stringify({ username: 'SteamFarmer', embeds: [embed] }), maxBytes: 65536 });
   }
-  function notify(title, description) { webhook(title, description).catch(() => {}); }
+  function notify(title, description, extraEmbed = {}) { webhook(title, description, extraEmbed).catch(() => {}); }
   async function scan(acc) {
     const st = stateFor(acc.id);
     if (!st.connected || !st.webCookies || st.scanning) return;
@@ -166,6 +229,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     const client=clients.get(acc.id),version=st.webSessionVersion;
     const current=()=>!closing&&cfg.accounts.includes(acc)&&states.get(acc.id)===st&&clients.get(acc.id)===client&&st.connected&&st.webSessionVersion===version&&acc.cardFarming;
     try {
+      const previousDrops = new Map((st.cardDropGames || []).map(g => [g.appid, g]));
       const found = new Map();
       for (let page = 1; page <= 50; page++) {
         if(!current())return;
@@ -177,6 +241,33 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
         if (page === 50) throw new Error('Too many badge pages; scan incomplete.');
       }
       if (!current()) return;
+      if (typeof client?.getUserOwnedApps === 'function' && [...found.values()].some(g => g.hoursPlayed === undefined)) {
+        try {
+          const lib = await ownedFloatLibrary(client);
+          for (const g of lib.games) {
+            if (found.has(g.appid) && !found.get(g.appid).name) found.get(g.appid).name = g.name;
+          }
+        } catch {}
+      }
+      for (const [appid, prev] of previousDrops) {
+        const cur = found.get(appid);
+        const nowRem = cur ? cur.remaining : 0;
+        if (prev.remaining > nowRem) {
+          const dropped = prev.remaining - nowRem;
+          const gameTitle = cur?.name || prev.name || acc.gameNames?.[appid] || `AppID ${appid}`;
+          notify(
+            `🃏 Trading Card Dropped · ${gameTitle}`,
+            `Obtained **${dropped}** trading card${dropped === 1 ? '' : 's'} in **${gameTitle}**.`,
+            {
+              color: 0xa855f7,
+              fields: [
+                { name: 'Remaining Drops', value: String(nowRem), inline: true },
+                { name: 'Badge Progress', value: buildProgressBar(prev.remaining - nowRem, prev.remaining), inline: true }
+              ]
+            }
+          );
+        }
+      }
       st.cardDropGames = [...found.values()]; st.cardsReady = true; st.cardError = '';st.cardScanAt=new Date().toISOString(); farming(acc);
     } catch { if(current()){st.cardError = 'Could not update card drops; keeping the previous scan.'; try { client?.webLogOn(); } catch {}} }
     finally { st.scanning = false;release(); }
@@ -441,7 +532,7 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         data = await readBody(req);
       }
       if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
-      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings'].includes(url.pathname))releaseResource=budget.acquire('small');
+      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/sell'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
@@ -564,6 +655,30 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
           achievementPending.set(key, task);
         }
         return json(res, 200, reply(await achievementPending.get(key)));
+      }
+      if(url.pathname==='/api/cards/inventory'&&req.method==='GET'){
+        const acc=getAccount(req,url),st=stateFor(acc.id);
+        const steamid=st.steamId64||acc.mySteamID;
+        if(!st.connected||!st.webCookies||!steamid)throw fail('Connect to Steam with an active web session to read your card inventory.',409);
+        rate(`cards-inv:${acc.id}`,15,60000);
+        const result=await cardsInventoryRead(steamid,st.webCookies);
+        return json(res,200,result);
+      }
+      if(url.pathname==='/api/cards/sell'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id);
+        const steamid=st.steamId64||acc.mySteamID;
+        if(!st.connected||!st.webCookies||!steamid)throw fail('Connect to Steam with an active web session to sell trading cards.',409);
+        rate(`cards-sell:${acc.id}`,10,60000);
+        const result=await cardsQuickSell(steamid,st.webCookies,{
+          assetids:Array.isArray(data.assetids)?data.assetids:null,
+          customPriceCents:data.priceCents?Number(data.priceCents):null,
+          currency:Number(data.currency)||1,
+          maxCards:Number(data.maxCards)||25
+        });
+        return json(res,200,{
+          ...result,
+          message:`Listed ${result.soldCount}/${result.processedCount} card${result.processedCount===1?'':'s'} on the Steam Market${result.requiresConfirmationCount?` (${result.requiresConfirmationCount} awaiting Steam Guard mobile confirmation)`:''}.`
+        });
       }
       if(url.pathname==='/api/stats'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
