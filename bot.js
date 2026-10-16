@@ -16,6 +16,9 @@ const {
   exportGameData,
   computeAchievementAnalytics,
   parseExternalUserTimings,
+  classifyProgressionPhase,
+  sortAchievementsByProgression,
+  buildRealisticPlatinumSchedule,
   TimedModificationManager
 } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
@@ -298,6 +301,11 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
       if(st.reconnectTimer){clearTimeout(st.reconnectTimer);st.reconnectTimer=null;}
+      try {
+        const sock = client._connection?.stream || client._connection?.socket || client._connection;
+        sock?.setNoDelay?.(true);
+        sock?.setKeepAlive?.(true, 15000);
+      } catch {}
       st.connected = true; st.error = ''; st.retryCount = 0; st.linkCheckStarted = false; st.achievementPersistence = null; st.candidateScanStarted = false; st.steamId64 = client.steamID.toString();
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
@@ -1041,25 +1049,38 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         }
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Timed modifications require the available connected main Steam account.',409);
         rate(`ach-timed:${acc.id}`,15,60000);
-        const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);
+        const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id,{skipLibrarySummary:true}),operations.latest(identity,id)]);
         const bulkAction=data.bulkAction?text(String(data.bulkAction),32):null;
         const items=Array.isArray(data.selection)&&data.selection.length
           ?changeSelection(data.selection,{bulk:true})
           :buildBulkSelection(snapshot,id,bulkAction||'unlock_all',receipts,{allowRetoggle:true});
         const stealth=Boolean(data.stealth);
+        const spacing=['even','random','natural','platinum'].includes(data.spacing)?data.spacing:'even';
+        const order=spacing==='platinum'?'progression':(['random','progression'].includes(data.order)?data.order:'selection');
+        let percentagesMap=data.percentages&&typeof data.percentages==='object'?data.percentages:null;
+        if((spacing==='platinum'||order==='progression')&&(!percentagesMap||!Object.keys(percentagesMap).length)){
+          try{
+            const pctRes=await percentagesRead(id,{includeTitles:false});
+            if(pctRes?.percentages&&typeof pctRes.percentages==='object')percentagesMap=pctRes.percentages;
+          }catch{}
+        }
         const status=timedManager.start({
           accountId:acc.id,
           appid:id,
           items,
+          percentagesMap,
           amount:Number(data.amount)||5,
           units:['seconds','minutes','hours'].includes(data.units)?data.units:'minutes',
-          spacing:['even','random','natural'].includes(data.spacing)?data.spacing:'even',
-          order:data.order==='random'?'random':'selection',
+          spacing,
+          order,
           stealth,
           pausedByCollision:Boolean(st.isCollisionPaused),
           executeItem:makeTimedItemExecutor(acc.id,id,stealth)
         });
-        return json(res,200,{...status,message:`Scheduled ${items.length} achievement${items.length===1?'':'s'} (${status.order} order, ${status.spacing} spacing).`});
+        const msg=spacing==='platinum'&&status.summaryTextEs
+          ?status.summaryTextEs
+          :`Scheduled ${items.length} achievement${items.length===1?'':'s'} (${status.order} order, ${status.spacing} spacing).`;
+        return json(res,200,{...status,message:msg});
       }
       if(url.pathname==='/api/achievement/shared-progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
@@ -1109,17 +1130,31 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         if(!hasSchema&&!directApply)throw fail('Persistent reviewed-operation reservations must be installed first.',503);
         experimentBusy.add(acc.id);
         try{
+          try {
+            const sock = client._connection?.stream || client._connection?.socket || client._connection;
+            sock?.setNoDelay?.(true);
+            sock?.setKeepAlive?.(true, 15000);
+          } catch {}
+          if (directApply && !stealth && typeof client.gamesPlayed === 'function') {
+            try {
+              const nextPlayed = st.inspectingAppId === id ? [id, ...st.playedGames.filter(x => x !== id)].slice(0, 32) : [id];
+              client.gamesPlayed(nextPlayed);
+              st.playedGames = nextPlayed;
+            } catch {}
+          }
           let writeSelection=selected;
           let expectedRevision=data.revision;
+          let preloadedSnapshot=null,preloadedReceipts=null;
           if(!writeSelection&&bulkAction||directApply){
-            const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);current();
+            const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id,{skipLibrarySummary:directApply}),operations.latest(identity,id)]);current();
+            preloadedSnapshot=snapshot;preloadedReceipts=receipts;
             if(!writeSelection&&bulkAction)writeSelection=buildBulkSelection(snapshot,id,bulkAction,receipts,{filterNames,allowRetoggle});
             if(directApply){
               const autoPlan=prepareChanges(snapshot,id,writeSelection,receipts,undefined,{bulk,resetCounters,allowRetoggle});
               expectedRevision=autoPlan.revision;
             }
           }
-          const result=await changesWrite(client,id,writeSelection,{expectedRevision,bulk,resetCounters,allowRetoggle,overrideCooldown,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=hasSchema?await operations.reserve(identity,plan,{overrideCooldown}):cleanOperation({...plan,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'});current();st.lastAchievementWrite=Date.now();if(!stealth){try{if(typeof client.gamesPlayed==='function'){const nextPlayed=st.inspectingAppId===id?[id,...st.playedGames.filter(x=>x!==id)].slice(0,32):[id];client.gamesPlayed(nextPlayed);st.playedGames=nextPlayed;}}catch{}}return intent;}});
+          const result=await changesWrite(client,id,writeSelection,{expectedRevision,initialSnapshot:preloadedSnapshot,initialReceipts:preloadedReceipts,fastDirect:directApply,preserveGamesPlayed:true,bulk,resetCounters,allowRetoggle,overrideCooldown,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{if(!directApply)await persistence?.flush();current();const intent=hasSchema?await operations.reserve(identity,plan,{overrideCooldown}):cleanOperation({...plan,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'});current();st.lastAchievementWrite=Date.now();if(!stealth){try{if(typeof client.gamesPlayed==='function'){const nextPlayed=st.inspectingAppId===id?[id,...st.playedGames.filter(x=>x!==id)].slice(0,32):[id];client.gamesPlayed(nextPlayed);st.playedGames=nextPlayed;}}catch{}}return intent;}});
           if(hasSchema){try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}}
           lastOperations.set(`${acc.id}:${id}`,{selection:writeSelection,at:new Date().toISOString()});
           return json(res,200,result);

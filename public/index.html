@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=48">
+  <link rel="stylesheet" href="/style.css?v=49">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -177,17 +177,20 @@
                 <option value="hours">Hours</option>
               </select>
               <select id="timedSpacingSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="platinum">🏆 Realistic Platinum (1–3h sessions + 10–20h rest)</option>
                 <option value="natural" selected>Natural (Gaussian + breaks)</option>
                 <option value="random">Random (Gaussian)</option>
                 <option value="even">Even spacing</option>
               </select>
               <select id="timedOrderSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+                <option value="progression">Progression by Rarity (&gt;60% → &lt;10%)</option>
                 <option value="selection">In order</option>
                 <option value="random" selected>Random order</option>
               </select>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
               <button id="startTimedBtn" type="button" class="btn-main">Start timed schedule</button>
+              <button id="startPlatinumBtn" type="button" class="btn-purple">🏆 Modo Platino Realista</button>
               <button id="stopTimedBtn" type="button" class="btn-clear" hidden>Stop schedule</button>
             </div>
             <p id="timedStatusText" style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"></p>
@@ -504,10 +507,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=48" defer></script>
-  <script src="/achievement-availability.js?v=48" defer></script>
-  <script src="/draft-settings.js?v=48" defer></script>
-  <script src="/achievement-live.js?v=48" defer></script>
-  <script src="/app.js?v=48" defer></script>
+  <script src="/achievement-rarity.js?v=49" defer></script>
+  <script src="/achievement-availability.js?v=49" defer></script>
+  <script src="/draft-settings.js?v=49" defer></script>
+  <script src="/achievement-live.js?v=49" defer></script>
+  <script src="/app.js?v=49" defer></script>
 </body>
 </html>

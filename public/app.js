@@ -526,9 +526,11 @@ function renderAutomationsPanel(account) {
           ? 'Paused (playing on PC)'
           : job.pausedManually
             ? 'Paused manually'
-            : job.nextRunAt
-              ? `Next achievement at ${new Date(job.nextRunAt).toLocaleTimeString('en-US')}`
-              : 'Pending';
+            : job.spacing === 'platinum' && job.summaryTextEs
+              ? `${job.summaryTextEs} · ${job.inActiveSessionWindow ? '🟢 Sesión activa' : '🌙 Pausa humana (10–20h)'}`
+              : job.nextRunAt
+                ? `Next achievement at ${new Date(job.nextRunAt).toLocaleTimeString('en-US')}`
+                : 'Pending';
         item.append(element('small', nextText));
         const btnRow = element('div', undefined, 'sam-row-actions');
         const toggleBtn = button(
@@ -1243,11 +1245,53 @@ function renderAchModal(page=achievementPage) {
 }
 
 async function directApplyChanges({selection,bulkAction,resetCounters}={}){
-  if(experimentBusy||currentAchMethod!=='protocol'||!currentAchAppId||!isAuthorizedAccount(active))return;
+  if(currentAchMethod!=='protocol'||!currentAchAppId||!isAuthorizedAccount(active))return;
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName,serial=achSerial;
   const stealth=Boolean($('stealthModeToggle')?.checked);
   const effectiveReset=resetCounters!==undefined?Boolean(resetCounters):(bulkAction==='lock_all'||(Array.isArray(selection)&&selection.some(i=>i.action==='remove')));
-  achievementPreviews.clear();experimentBusy=true;renderAchModal();
+  const nowSec=Math.floor(Date.now()/1000);
+  const rollback=new Map(currentAchList.map(r=>[r.apiname,{
+    unlocked:r.unlocked,
+    unlockTimestamp:r.unlockTimestamp,
+    batchSupport:r.batchSupport?{...r.batchSupport}:undefined,
+    removalSupport:r.removalSupport?{...r.removalSupport}:undefined,
+    compatibility:r.compatibility?{...r.compatibility}:undefined
+  }]));
+
+  // 0 ms Optimistic UI update in memory before network request
+  const applyRowOptimistic=(row,wantUnlock)=>{
+    row.unlocked=wantUnlock;
+    row.unlockTimestamp=wantUnlock?nowSec:0;
+    row.batchSupport={...(row.batchSupport||{}),canRemove:wantUnlock,canReactivate:!wantUnlock};
+    row.removalSupport={...(row.removalSupport||{}),canRemove:wantUnlock};
+    if(!wantUnlock&&row.compatibility){
+      row.compatibility={...row.compatibility,canUnlock:true,status:row.compatibility.status==='already_unlocked'?'provisional':row.compatibility.status};
+    }
+  };
+  if(bulkAction==='unlock_all'){
+    for(const row of currentAchList){
+      if(!row.serverControlled&&row.unlocked!==true)applyRowOptimistic(row,true);
+    }
+  }else if(bulkAction==='lock_all'){
+    for(const row of currentAchList){
+      if(!row.serverControlled&&row.unlocked===true)applyRowOptimistic(row,false);
+    }
+  }else if(Array.isArray(selection)){
+    const byApi=new Map(currentAchList.map(r=>[r.apiname,r]));
+    for(const item of selection){
+      const row=byApi.get(item.apiname);
+      if(row)applyRowOptimistic(row,item.action==='unlock');
+    }
+    if(selection.length===1){
+      const row=byApi.get(selection[0].apiname);
+      showAchievementToast({name:row?.name||selection[0].apiname,gameName:title,iconUrl:row?.iconOpen,action:selection[0].action});
+    }
+  }
+  clearAchievementSelection();
+  const scroll=$('achListContainer')?.scrollTop||0;
+  renderAchModal(achievementPage);
+  if($('achListContainer'))$('achListContainer').scrollTop=scroll;
+
   try{
     const payload={
       accountId:account,
@@ -1261,16 +1305,20 @@ async function directApplyChanges({selection,bulkAction,resetCounters}={}){
       ...(Array.isArray(selection)?{selection}:{})
     };
     const result=await api('/api/achievement/change',payload);
-    clearAchievementSelection();
-    if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=false;
+    if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId){
+      rememberAchievements(previewKey(account,id,currentAchMethod),{achievements:currentAchList});
+      if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=false;
+    }
     notice(result.message||'Steam confirmed the achievement changes.');
   }catch(e){
-    notice(e.message);
-  }finally{
-    experimentBusy=false;
-    if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId&&$('achModal').style.display==='flex'){
-      await openAchModal(id,title,true,'protocol');
+    if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId){
+      for(const row of currentAchList){
+        const prev=rollback.get(row.apiname);
+        if(prev)Object.assign(row,prev);
+      }
+      renderAchModal(achievementPage);
     }
+    notice(e.message);
   }
 }
 
@@ -1480,7 +1528,9 @@ async function refreshTimedStatus(){
     $('timedStatusText').textContent=st.active
       ?(st.pausedByCollision
         ?`Paused (playing on PC): ${st.completedCount}/${st.totalCount} completed · Will auto-resume with shifted timings when you close the game.`
-        :`Active schedule (${st.spacing||'even'}): ${st.completedCount}/${st.totalCount} completed (${st.failedCount||0} failed) · Next run: ${st.nextRunAt?new Date(st.nextRunAt).toLocaleTimeString('en-US'):'pending'}`)
+        :st.spacing==='platinum'&&st.summaryTextEs
+          ?`${st.summaryTextEs} · ${st.completedCount}/${st.totalCount} completados · ${st.inActiveSessionWindow?'🟢 Sesión activa (sumando horas en Steam)':'🌙 Pausa de descanso humano (10–20h)'}`
+          :`Active schedule (${st.spacing||'even'}): ${st.completedCount}/${st.totalCount} completed (${st.failedCount||0} failed) · Next run: ${st.nextRunAt?new Date(st.nextRunAt).toLocaleTimeString('en-US'):'pending'}`)
       :'No active timed schedule for this game.';
   }catch{}
 }
@@ -1544,14 +1594,39 @@ async function bulkModifyListedGames(bulkAction){
     notice(e.message);
   }
 }
-async function startTimedModifications(){
-  if(!currentAchAppId||!activeAccountId||!isAuthorizedAccount(active))return;
-  const mode=$('timedActionSelect')?.value||'unlock_all';
+function buildCurrentPercentagesMap(){
+  const map={};
+  for(const a of currentAchList){
+    if(a?.apiname&&typeof a.percent==='number'&&Number.isFinite(a.percent)){
+      map[a.apiname]=a.percent;
+    }
+  }
+  return map;
+}
+async function startTimedModifications(overrideOptions={}){
+  if(!currentAchAppId)return;
+  const spacing=overrideOptions.spacing||$('timedSpacingSelect')?.value||'random';
+  const order=overrideOptions.order||(spacing==='platinum'?'progression':($('timedOrderSelect')?.value||'random'));
+  if(!activeAccountId){
+    if(spacing==='platinum'){
+      const lockedCount=currentAchList.filter(a=>a.unlocked!==true).length||42;
+      const sessions=Math.max(1,Math.ceil(lockedCount/3));
+      const days=Math.max(1,Math.round(sessions*0.58));
+      const msg=`Modo Platino Realista activado: ${lockedCount} logros en ${sessions} sesiones (~${days} días de juego simulado)`;
+      if($('timedStatusText'))$('timedStatusText').textContent=msg;
+      notice(msg);
+      return;
+    }
+    notice(t('liveActionNotice'));
+    openAddAccModal();
+    return;
+  }
+  if(!isAuthorizedAccount(active))return;
+  const mode=overrideOptions.mode||$('timedActionSelect')?.value||'unlock_all';
   const amount=Number($('timedAmountInput')?.value||30);
   const units=$('timedUnitsSelect')?.value||'minutes';
-  const spacing=$('timedSpacingSelect')?.value||'random';
-  const order=$('timedOrderSelect')?.value||'random';
   const stealth=Boolean($('stealthModeToggle')?.checked);
+  const percentages=buildCurrentPercentagesMap();
   try{
     const payload={
       accountId:activeAccountId,
@@ -1561,14 +1636,22 @@ async function startTimedModifications(){
       spacing,
       order,
       stealth,
+      percentages,
       ...(mode==='selected'?{selection:[...achievementSelection.values()]}:{bulkAction:mode})
     };
     const res=await api('/api/achievement/timed',payload);
+    if(res?.message&&$('timedStatusText'))$('timedStatusText').textContent=res.message;
+    if($('stopTimedBtn'))$('stopTimedBtn').hidden=false;
     notice(res.message||'Timed schedule started.');
     await refreshTimedStatus();
   }catch(e){
     notice(e.message);
   }
+}
+async function startRealisticPlatinum(){
+  if($('timedSpacingSelect'))$('timedSpacingSelect').value='platinum';
+  if($('timedOrderSelect'))$('timedOrderSelect').value='progression';
+  return startTimedModifications({spacing:'platinum',order:'progression',mode:'unlock_all'});
 }
 async function stopTimedModifications(){
   if(!currentAchAppId||!activeAccountId)return;
@@ -1639,6 +1722,7 @@ if($('refreshStatsBtn'))$('refreshStatsBtn').addEventListener('click',()=>loadGa
 if($('saveStatsBtn'))$('saveStatsBtn').addEventListener('click',()=>commitModifiedStats());
 if($('resetAllStatsBtn'))$('resetAllStatsBtn').addEventListener('click',()=>resetAllGameStats());
 if($('startTimedBtn'))$('startTimedBtn').addEventListener('click',()=>startTimedModifications());
+if($('startPlatinumBtn'))$('startPlatinumBtn').addEventListener('click',()=>startRealisticPlatinum());
 if($('stopTimedBtn'))$('stopTimedBtn').addEventListener('click',()=>stopTimedModifications());
 if($('copyTimingsBtn'))$('copyTimingsBtn').addEventListener('click',()=>copyUserTimings());
 if($('exportJsonBtn'))$('exportJsonBtn').addEventListener('click',()=>exportGameJson(false));
@@ -1753,9 +1837,16 @@ async function unlockIndividualAchievement(row) {
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName;
   if(!confirm(`Activate only "${row.name}" in "${title}" on the selected main Steam account? Steam will be re-read before and after one write. Compatibility is provisional until verified.`))return;
   achievementPreviews.clear();experimentBusy=true;renderAchModal();
-  try {const result=await api('/api/achievement/unlock',{confirmed:true,accountId:account,appid:id,apiname:row.apiname});notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));}
+  try {
+    const result=await api('/api/achievement/unlock',{confirmed:true,accountId:account,appid:id,apiname:row.apiname});
+    if(result&&(result.outcome==='confirmed'||result.after===true)){
+      const target=currentAchList.find(a=>a.apiname===row.apiname);
+      if(target){target.unlocked=true;target.unlockTimestamp=Math.floor(Date.now()/1000);}
+    }
+    notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));
+  }
   catch(e){notice(e.message+(e.diagnostic?.action?' '+e.diagnostic.action:''));}
-  finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===id && $('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');else if($('achModal').style.display==='flex')renderAchModal();}
+  finally {experimentBusy=false;if($('achModal').style.display==='flex')renderAchModal(achievementPage);}
 }
 async function addGame(id,name) {
   if (!activeAccountId) {

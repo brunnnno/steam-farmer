@@ -1068,4 +1068,98 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.deepEqual(f.app.states.get("user2").playedGames, thirtyTwoGames);
   assert.equal(f.app.states.get("user2").inspectPreviousGames, null);
   assert.equal(f.app.states.get("user2").inspectingAppId, null);
+
+  // 16. Realistic Platinum Engine (4 Rarity Progression Phases + 1-3h Human Sessions + 10-20h Rest Pauses + Session Playtime Sync)
+  const { classifyProgressionPhase, sortAchievementsByProgression, buildRealisticPlatinumSchedule } = require("../lib/steam-protocol");
+  assert.equal(classifyProgressionPhase(75.0).phase, 1);
+  assert.equal(classifyProgressionPhase(45.0).phase, 2);
+  assert.equal(classifyProgressionPhase(18.0).phase, 3);
+  assert.equal(classifyProgressionPhase(3.2).phase, 4);
+
+  const unsortedItems = [
+    { apiname: "PLATINUM_GOD", action: "unlock", percent: 1.5 },
+    { apiname: "MID_BOSS", action: "unlock", percent: 45.0 },
+    { apiname: "FIRST_STEP", action: "unlock", percent: 88.1 },
+    { apiname: "SECRET_COLLECTIBLE", action: "unlock", percent: 19.3 },
+    { apiname: "TUTORIAL_DONE", action: "unlock", percent: 72.4 },
+    { apiname: "RARE_CHALLENGE", action: "unlock", percent: 6.8 }
+  ];
+  const progSorted = sortAchievementsByProgression(unsortedItems);
+  assert.deepEqual(
+    progSorted.map(x => [x.apiname, x.phase]),
+    [
+      ["FIRST_STEP", 1],
+      ["TUTORIAL_DONE", 1],
+      ["MID_BOSS", 2],
+      ["SECRET_COLLECTIBLE", 3],
+      ["RARE_CHALLENGE", 4],
+      ["PLATINUM_GOD", 4]
+    ]
+  );
+
+  // Verify 42 achievements grouped into 14 sessions (~8 days of simulated play)
+  const fortyTwo = Array.from({ length: 42 }, (_, idx) => ({
+    apiname: `ACH_${idx + 1}`,
+    action: "unlock",
+    percent: Math.max(1, 95 - idx * 2.2)
+  }));
+  const platSchedule = buildRealisticPlatinumSchedule(fortyTwo, { rng: () => 0.85 });
+  assert.equal(platSchedule.totalAchievements, 42);
+  assert.equal(platSchedule.sessionCount, 14);
+  assert.match(platSchedule.summaryTextEs, /^Modo Platino Realista activado: 42 logros en 14 sesiones \(~\d+ días de juego simulado\)$/);
+  for (let i = 0; i < platSchedule.sessions.length; i++) {
+    const s = platSchedule.sessions[i];
+    assert.ok(s.durationHours >= 1 && s.durationHours <= 3, `Session ${i} duration ${s.durationHours}h must be 1..3h`);
+    assert.ok(s.itemCount >= 1 && s.itemCount <= 3);
+    if (i > 0) {
+      const prev = platSchedule.sessions[i - 1];
+      const restHours = (s.startOffsetMs - prev.endOffsetMs) / 3600000;
+      assert.ok(restHours >= 10 && restHours <= 20, `Rest pause ${restHours}h must be 10..20h`);
+    }
+  }
+
+  // Lock all achievements in 34830 first, then start Realistic Platinum schedule via API
+  await f.request("/api/achievement/change", {
+    accountId: "user2",
+    appid: 34830,
+    confirmed: true,
+    directApply: true,
+    bulk: true,
+    bulkAction: "lock_all",
+    resetCounters: true
+  });
+  const platApiRes = await f.request("/api/achievement/timed", {
+    accountId: "user2",
+    appid: 34830,
+    bulkAction: "unlock_all",
+    spacing: "platinum",
+    percentages: { ACT_1: 78.5, SNIPER_KILLER: 22.0, ACT_2: 3.4 }
+  });
+  assert.equal(platApiRes.response.status, 200);
+  assert.equal(platApiRes.data.spacing, "platinum");
+  assert.equal(platApiRes.data.order, "progression");
+  assert.match(platApiRes.data.message, /Modo Platino Realista activado:/);
+  assert.deepEqual(platApiRes.data.remaining.map(r => r.apiname), ["ACT_1", "SNIPER_KILLER", "ACT_2"]);
+
+  // Verify activeNonStealthApps is active during session 0 window and inactive during the 10-20h rest pause
+  const firstSessionEndMs = Date.parse(platApiRes.data.sessions[0].endAt);
+  assert.deepEqual(f.app.timedManager.activeNonStealthApps("user2", firstSessionEndMs - 60000), [34830]);
+  assert.deepEqual(f.app.timedManager.activeNonStealthApps("user2", firstSessionEndMs + 5 * 3600000), []);
+  await f.request("/api/achievement/timed", { accountId: "user2", appid: 34830, action: "cancel" });
+
+  // 17. Sub-100ms Low-Latency Direct Achievement Write
+  const writeStartMs = performance.now();
+  const fastWriteRes = await f.request("/api/achievement/change", {
+    accountId: "user2",
+    appid: 34830,
+    confirmed: true,
+    directApply: true,
+    bulk: true,
+    selection: [{ apiname: "ACT_1", action: "unlock" }],
+    stealth: false
+  });
+  const writeDurationMs = performance.now() - writeStartMs;
+  assert.equal(fastWriteRes.response.status, 200);
+  assert.equal(fastWriteRes.data.outcome, "confirmed");
+  assert.ok(writeDurationMs < 100, `Direct achievement write took ${writeDurationMs.toFixed(1)}ms (expected < 100ms)`);
 });

@@ -529,6 +529,34 @@ test('SamRewritten tabs, live 1-click controls, Invert page, Statistics editor, 
   assert.ok(rowButtons.includes('Unlock'));
   assert.ok(rowButtons.includes('Lock'));
 
+  // Verify 0ms Optimistic UI: clicking Unlock immediately flips row to Verified & Lock button in 0ms without waiting for network or calling openAchModal
+  let resolveChange;
+  const prevFetch = w.fetch;
+  const achCallsDuringApply = [];
+  w.fetch = (url, options) => {
+    if (url.startsWith('/api/achievements')) achCallsDuringApply.push(url);
+    if (url === '/api/achievement/change') {
+      return new Promise(r => {
+        resolveChange = () => r({ ok: true, status: 200, json: async () => ({ outcome: 'confirmed', message: 'Applied in background.' }) });
+      });
+    }
+    return prevFetch(url, options);
+  };
+  const unlockBtn = [...w.document.querySelectorAll('#achListContainer .ach-item button')].find(b => b.textContent === 'Unlock');
+  unlockBtn.click();
+  // Immediately (0 ms, before resolveChange is called!), the first row is already unlocked and shows 'Lock' (never stuck in 'Applying…')
+  const immediateButtons = [...w.document.querySelectorAll('#achListContainer .ach-item button')].map(b => b.textContent);
+  assert.ok(!immediateButtons.includes('Applying…'), 'Buttons must not freeze in Applying…');
+  assert.deepEqual(immediateButtons, ['Lock', 'Lock']);
+  resolveChange();
+  await new Promise(r => setImmediate(r));
+  assert.equal(achCallsDuringApply.length, 0, 'directApplyChanges must not re-download the achievement list via openAchModal');
+  // Restore A1 to locked for the next assertions in this test
+  const firstLockBtn = w.document.querySelector('#achListContainer .ach-item button');
+  w.fetch = prevFetch;
+  firstLockBtn.click();
+  await new Promise(r => setImmediate(r));
+
   // Invert page selects all eligible rows (both locked and unlocked)
   const invertBtn=w.document.getElementById('invertPageAchievements');
   assert.equal(invertBtn.hidden,false);
@@ -554,6 +582,10 @@ test('SamRewritten tabs, live 1-click controls, Invert page, Statistics editor, 
   w.document.getElementById('startTimedBtn').click();
   await new Promise(r=>setImmediate(r));
   assert.ok(calls.some(c=>c.url==='/api/achievement/timed'&&c.method==='POST'));
+
+  w.document.getElementById('startPlatinumBtn').click();
+  await new Promise(r=>setImmediate(r));
+  assert.ok(calls.some(c=>c.url==='/api/achievement/timed'&&c.method==='POST'&&c.body?.spacing==='platinum'&&c.body?.order==='progression'));
 
   w.document.getElementById('copyTimingsSourceInput').value='https://steamcommunity.com/id/example';
   w.document.getElementById('copyTimingsBtn').click();
