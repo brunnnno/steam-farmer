@@ -939,4 +939,47 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   cancelAllBtn.click();
   await new Promise(r => setImmediate(r));
   assert.ok(uiActionCalls.some(c => c.url === "/api/achievement/timed/cancel-all" && c.body?.accountId === "acc1"));
+
+  // 11. Verify v51: Native Windows/Browser Notification API on unlock, [Base] & [DLC] row badges, dual Base/Total progress bar, and Base-Game Completed Showcase rule
+  const desktopNotifications = [];
+  w.Notification = function FakeNotification(title, options) {
+    desktopNotifications.push({ title, options });
+  };
+  w.Notification.permission = "granted";
+
+  const v51SetRows = [
+    { apiname: "BASE_1", name: "Base Story", description: "Finish campaign", unlocked: true, percent: 65.0, tier: "Common", set_id: "base", set_name: "Base Game", statId: 1, bitIndex: 0, batchSupport: { canRemove: true } },
+    { apiname: "DLC_1", name: "DLC Boss", description: "Defeat expansion boss", unlocked: false, percent: 8.0, tier: "Epic", set_id: "dlc_1", set_name: "Expansion Pack 1", statId: 1, bitIndex: 1, compatibility: { status: "provisional", canUnlock: true } }
+  ];
+  w.fetch = async (url, opts) => {
+    if (url === "/api/achievement/change") {
+      return { ok: true, status: 200, json: async () => ({ outcome: "confirmed", message: "Confirmed." }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ ...response(v51SetRows), readingMethod: "protocol" }) };
+  };
+  w.testUI.activate({ id: "acc1", name: "Main", connected: true, tokenSource: "environment", tokenAccountMatches: true, isCollisionPaused: false, games: [730] });
+  await w.testUI.open(730, "Counter-Strike 2", true, "protocol");
+
+  // Verify dual progress bar shows Base Game 1/1 (100% · Completed ★) and Total w/ DLCs 1/2 (50%)
+  assert.match(w.document.getElementById("achProgressText").textContent, /Base Game: 1\/1 \(100% · Completed ★\)/);
+  assert.match(w.document.getElementById("achProgressText").textContent, /Total w\/ DLCs: 1\/2 \(50%\)/);
+
+  // Verify [Base] and [DLC: Expansion Pack 1] badges in table rows
+  assert.ok(w.document.querySelector("#achTableBody .ach-set-badge.set-base"));
+  assert.equal(w.document.querySelector("#achTableBody .ach-set-badge.set-base").textContent, "[Base]");
+  assert.ok(w.document.querySelector("#achTableBody .ach-set-badge.set-dlc"));
+  assert.equal(w.document.querySelector("#achTableBody .ach-set-badge.set-dlc").textContent, "[DLC: Expansion Pack 1]");
+
+  // Verify Showcase Card counts game as Completed because Base Game is 100% unlocked despite locked DLC
+  w.document.getElementById("btnShowcaseCard").click();
+  assert.match(w.document.getElementById("showcaseCanvas").dataset.summary, /Completed \/ Completados/);
+  w.document.getElementById("closeShowcaseBtn").click();
+
+  // Click Unlock on DLC_1 -> verify 0ms optimistic UI + native Notification API fired
+  const unlockBtn = [...w.document.querySelectorAll("#achTableBody .sam-quick-btn")].find(b => b.textContent === "Unlock");
+  assert.ok(unlockBtn);
+  unlockBtn.click();
+  assert.ok(desktopNotifications.length >= 1, "Native Windows/Browser Notification API must fire at 0ms on achievement unlock");
+  assert.match(desktopNotifications.at(-1).title, /Achievement Unlocked/);
+  assert.match(desktopNotifications.at(-1).options.body, /DLC Boss/);
 });

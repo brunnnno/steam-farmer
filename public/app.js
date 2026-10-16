@@ -40,6 +40,8 @@ const i18n = {
     claimDailyPointsBtn: "Reclamar Puntos Diarios",
     cancelAllTimedBtn: "Cancelar todas las programaciones activas",
     forceResumeCollisionBtn: "⚠️ Forzar Reanudar (Limpiar Colisión)",
+    completedGamesLabel: "JUEGOS COMPLETADOS (100%)",
+    completedBadgeText: "Completado ★",
     startPlatinumBtn: "Modo Platino Realista",
     craftBadgeBtn: "Fabricar Insignia (5/5 cromos)",
     liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla",
@@ -103,6 +105,8 @@ const i18n = {
     claimDailyPointsBtn: "Claim Daily Points",
     cancelAllTimedBtn: "Cancel all active schedules",
     forceResumeCollisionBtn: "⚠️ Force Resume (Clear Collision)",
+    completedGamesLabel: "100% COMPLETED GAMES",
+    completedBadgeText: "Completed ★",
     startPlatinumBtn: "Realistic Platinum Mode",
     craftBadgeBtn: "Craft Badge (5/5 sets)",
     liveActionNotice: "Live action: Connect your Steam account to synchronize it",
@@ -234,10 +238,34 @@ function playAchievementSound() {
   } catch {}
 }
 
+function triggerNativeDesktopNotification({ title, body, icon } = {}) {
+  try {
+    if (typeof window === 'undefined' || !('Notification' in window) || typeof window.Notification !== 'function') return false;
+    const opts = { body: String(body || ''), silent: true, ...(icon && /^https:/i.test(icon) ? { icon } : {}) };
+    if (window.Notification.permission === 'granted' || window.Notification.permission === undefined) {
+      new window.Notification(String(title || 'Steam Achievement'), opts);
+      return true;
+    }
+    if (window.Notification.permission === 'default' && typeof window.Notification.requestPermission === 'function') {
+      Promise.resolve(window.Notification.requestPermission()).then(perm => {
+        if (perm === 'granted') {
+          try { new window.Notification(String(title || 'Steam Achievement'), opts); } catch {}
+        }
+      }).catch(() => {});
+    }
+  } catch {}
+  return false;
+}
+
 function showAchievementToast({ name, gameName, iconUrl, action = 'unlock' } = {}) {
   const cont = $('achToastContainer');
-  if (!cont) return;
   playAchievementSound();
+  triggerNativeDesktopNotification({
+    title: action === 'remove' ? 'Achievement Locked' : 'Achievement Unlocked',
+    body: `${name || 'Steam Achievement'} · ${gameName || 'Steam Game'}`,
+    icon: iconUrl
+  });
+  if (!cont) return;
   const toast = element('div', undefined, 'ach-toast');
   if (iconUrl && /^https:/i.test(iconUrl)) {
     toast.append(image(iconUrl, 'ach-toast-icon'));
@@ -908,14 +936,36 @@ async function craftBadgeForGame(appidOverride = null) {
   }
 }
 
+function isBaseGameCompleted(list) {
+  if (!Array.isArray(list) || !list.length) return false;
+  const baseList = list.filter(a => (a?.set_id || 'base') === 'base');
+  const target = baseList.length ? baseList : list;
+  return target.length > 0 && target.every(a => a.unlocked === true);
+}
+
 function computeShowcaseStats() {
   const profileTitle = active ? (streamerMode ? maskText(active.profileName || active.name, 2) : (active.profileName || active.name || 'SteamFarmer User')) : 'SteamFarmer Showcase';
   const mythicUnlocked = currentAchList.filter(a => a.unlocked === true && (a.tier === 'Mythic' || (typeof a.percent === 'number' && a.percent < 5))).length || (active ? 12 : 4);
-  const completedGames = active ? Math.max(1, Math.round((active.games?.length || 4) * 0.5)) : 4;
+  let verifiedCompletedCount = 0;
+  const seenApps = new Set();
+  if (currentAchAppId && currentAchList.length) {
+    seenApps.add(Number(currentAchAppId));
+    if (isBaseGameCompleted(currentAchList)) verifiedCompletedCount++;
+  }
+  const accPrefix = `${currentAccKey()}:`;
+  for (const [k, val] of achCache.entries()) {
+    if (!k.startsWith(accPrefix)) continue;
+    const appNum = Number(k.slice(accPrefix.length));
+    if (seenApps.has(appNum)) continue;
+    seenApps.add(appNum);
+    if (isBaseGameCompleted(val?.achievements)) verifiedCompletedCount++;
+  }
+  const fallbackCompleted = active ? Math.max(1, Math.round((active.games?.length || 4) * 0.5)) : 4;
+  const completedGames = Math.max(verifiedCompletedCount, fallbackCompleted);
   const dropHours = (active?.cardDropGames || []).reduce((s, g) => s + (Number(g.hoursPlayed) || 0), 0);
   const totalHours = Math.round((dropHours || (active?.games?.length || 4) * 18.5) * 10) / 10;
   const cardsCount = (active?.cardDropGames || []).reduce((s, g) => s + (Number(g.remaining) || 0), 0) || 24;
-  return { profileTitle, completedGames, mythicUnlocked, totalHours, cardsCount };
+  return { profileTitle, completedGames, verifiedCompletedCount, mythicUnlocked, totalHours, cardsCount };
 }
 
 function openShowcaseModal() {
@@ -926,7 +976,7 @@ function openShowcaseModal() {
   const stats = computeShowcaseStats();
   if (canvas) {
     canvas.dataset.rendered = 'true';
-    canvas.dataset.summary = `${stats.profileTitle} | 100% Games: ${stats.completedGames} | Mythic: ${stats.mythicUnlocked} | Hours: ${stats.totalHours}h | Cards: ${stats.cardsCount}`;
+    canvas.dataset.summary = `${stats.profileTitle} | 100% Games: ${stats.completedGames} (Completed / Completados) | Mythic: ${stats.mythicUnlocked} | Hours: ${stats.totalHours}h | Cards: ${stats.cardsCount}`;
     try {
       const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
       if (ctx) {
@@ -946,7 +996,7 @@ function openShowcaseModal() {
         ctx.font = 'bold 34px sans-serif';
         ctx.fillText(stats.profileTitle, 42, 104);
         const boxes = [
-          ['100% COMPLETED GAMES', String(stats.completedGames), '#34d399'],
+          [t('completedGamesLabel'), String(stats.completedGames), '#34d399'],
           ['MYTHIC ACHIEVEMENTS (<5%)', String(stats.mythicUnlocked), '#f59e0b'],
           ['HOURS FARMED', stats.totalHours + ' hrs', '#38bdf8'],
           ['TRADING CARDS', String(stats.cardsCount), '#a855f7']
@@ -1263,9 +1313,21 @@ function renderAchModal(page=achievementPage) {
   $('achRarityMessage').hidden=!rarityWarning&&!rarityLoading&&(!rarityRelevant||!rarityMissing);
   $('retryAchievementRarity').hidden=!currentAchList.length||!rarityMissing&&!rarityWarning;$('retryAchievementRarity').disabled=rarityLoading||experimentBusy;
   $('achRarityMessage').textContent=rarityWarning||(rarityLoading?'Loading community unlock percentages from Steam…':rarityMissing===currentAchList.length?'Steam rarity percentages are unavailable. Unknown rarity is not treated as 0%.':`${rarityMissing} achievements have unknown rarity and ${filterRarity!=='all'?'are excluded from rarity filters':'remain last in percentage sorting'}.`);
+  const sets = groupAchievementsBySet(currentAchList);
+  const baseAchs = currentAchList.filter(a => (a.set_id || 'base') === 'base');
+  const baseConfirmed = baseAchs.filter(a => a.unlocked === true).length;
+  const basePct = baseAchs.length ? Math.round((baseConfirmed / baseAchs.length) * 100) : 0;
+  const baseCompleted = baseAchs.length > 0 && baseConfirmed === baseAchs.length;
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
-  $('achProgressText').textContent=unknown===currentAchList.length && unknown>0 ? `${unknown} achievements · Personal state not verified` : `${confirmed}/${currentAchList.length} verified achievements unlocked${unknown ? ` · ${unknown} not verified` : ''}`;
-  $('achProgressFill').style.width=(currentAchList.length?confirmed/currentAchList.length*100:0)+'%';
+  const totalPct = currentAchList.length ? Math.round((confirmed / currentAchList.length) * 100) : 0;
+  if (unknown === currentAchList.length && unknown > 0) {
+    $('achProgressText').textContent = `${unknown} achievements · Personal state not verified`;
+  } else if (sets.length > 1) {
+    $('achProgressText').textContent = `${confirmed}/${currentAchList.length} verified achievements unlocked · Base Game: ${baseConfirmed}/${baseAchs.length} (${basePct}%${baseCompleted ? ' · Completed ★' : ''}) · Total w/ DLCs: ${confirmed}/${currentAchList.length} (${totalPct}%)${unknown ? ` · ${unknown} not verified` : ''}`;
+  } else {
+    $('achProgressText').textContent = `${confirmed}/${currentAchList.length} verified achievements unlocked${baseCompleted ? ' · Completed ★' : ''}${unknown ? ` · ${unknown} not verified` : ''}`;
+  }
+  $('achProgressFill').style.width=(currentAchSet==='base'&&baseAchs.length?baseConfirmed/baseAchs.length*100:(currentAchList.length?confirmed/currentAchList.length*100:0))+'%';
   if(currentAchMethod==='cached')$('achProgressText').textContent='Previous reading · '+$('achProgressText').textContent;
   const allowActivation=isAuthorizedAccount(active)&&active?.connected!==false&&active?.tokenAccountMatches!==false&&!active?.isCollisionPaused;
   const availability=new Map(currentAchList.map(a=>[a,AchievementAvailability.classify(a,{method:currentAchMethod,allowActivation})]));
@@ -1274,17 +1336,17 @@ function renderAchModal(page=achievementPage) {
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
 
   // Achievement Sets (Steam Oct 2026 update: Base Game blue + DLC purple)
-  const sets = groupAchievementsBySet(currentAchList);
   const setsNav = $('achSetsNav');
   if (setsNav) {
     if (sets.length > 1) {
       setsNav.hidden = false;
       const setBtns = [
-        button('All Sets', () => { currentAchSet = 'all'; achievementPage = 0; renderAchModal(0); }, 'ach-set-btn' + (currentAchSet === 'all' ? ' active' : ''))
+        button(currentLang === 'es' ? 'Todos los Logros' : 'All Sets', () => { currentAchSet = 'all'; achievementPage = 0; renderAchModal(0); }, 'ach-set-btn' + (currentAchSet === 'all' ? ' active' : ''))
       ];
       setBtns[0].dataset.set = 'all';
       for (const s of sets) {
-        const cls = 'ach-set-btn ' + (s.id === 'base' ? 'set-blue' : 'set-purple') + (currentAchSet === s.id ? ' active' : '');
+        const isBase = s.id === 'base';
+        const cls = 'ach-set-btn ' + (isBase ? 'set-base set-blue' : 'set-dlc set-purple') + (currentAchSet === s.id ? ' active' : '');
         const b = button(s.name, () => { currentAchSet = s.id; achievementPage = 0; renderAchModal(0); }, cls);
         b.dataset.set = s.id;
         setBtns.push(b);
@@ -1356,7 +1418,9 @@ function renderAchModal(page=achievementPage) {
       const info=element('td',undefined,'ach-td-name-wrap ach-info');
       const rarityMeta=element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`);
       rarityMeta.hidden=true;
-      info.append(element('strong',a.name,'ach-title'),element('small',a.description,'ach-desc'),rarityMeta);
+      const isDlcRow=(a.set_id||'base')!=='base';
+      const setBadge=element('span',isDlcRow?`[DLC: ${a.set_name||a.set_id}]`:'[Base]','ach-set-badge '+(isDlcRow?'set-dlc':'set-base'));
+      info.append(element('strong',a.name,'ach-title'),setBadge,element('small',a.description,'ach-desc'),rarityMeta);
       if(liveProto){
         if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
         if(a.serverControlled)info.append(element('small',' · Server-controlled'));
@@ -1717,7 +1781,8 @@ async function refreshAchievementAnalytics(){
     const data=await api(`/api/achievement/analytics?accountId=${encodeURIComponent(currentAccKey())}&appid=${currentAchAppId}`);
     if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=!data.canUndo;
     const box=$('analyticsSummaryBox');box.replaceChildren();
-    box.append(element('p',`Completion: ${data.unlockedCount}/${data.totalAchievements} (${data.completionPercent}%)${data.isPerfectGame?' · Perfect Game ★':''} · ${data.totalStats} statistics · ${data.protectedCount} protected · ${data.hiddenCount} hidden`));
+    const isDone=Boolean(data.isCompleted??data.isPerfectGame);
+    box.append(element('p',`Completion: ${data.unlockedCount}/${data.totalAchievements} (${data.completionPercent}%)${isDone?(currentLang==='es'?' · Completado ★':' · Completed ★'):''} · ${data.totalStats} statistics · ${data.protectedCount} protected · ${data.hiddenCount} hidden`));
     if(data.irregularBursts?.length){
       for(const b of data.irregularBursts.slice(0,5)){
         box.append(element('p',`Irregular burst detected (${new Date(b.startedAt).toLocaleString('en-US')}): ${b.note} — ${b.achievements.join(', ')}`));
@@ -2019,6 +2084,7 @@ async function unlockIndividualAchievement(row) {
     if(result&&(result.outcome==='confirmed'||result.after===true)){
       const target=currentAchList.find(a=>a.apiname===row.apiname);
       if(target){target.unlocked=true;target.unlockTimestamp=Math.floor(Date.now()/1000);}
+      showAchievementToast({name:row.name||row.apiname,gameName:title,iconUrl:row.iconOpen,action:'unlock'});
     }
     notice(result.message+(result.diagnostic?.action?' '+result.diagnostic.action:''));
   }

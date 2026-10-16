@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=50">
+  <link rel="stylesheet" href="/style.css?v=51">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -138,7 +138,10 @@
           <summary>Game integration &amp; activation limits</summary>
           <div id="gameRequirementsContent"></div>
         </details>
-        <div id="achSetsNav" class="ach-sets-nav" hidden></div>
+        <div id="achSetsNav" class="ach-sets-nav" hidden>
+          <button type="button" class="ach-set-btn active" data-set="all">Todos los Logros</button>
+          <button type="button" class="ach-set-btn set-base set-blue" data-set="base">Juego Base (Base Game)</button>
+        </div>
         <div class="ach-list" id="achListContainer"></div>
       </div>
 
@@ -559,10 +562,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=50" defer></script>
-  <script src="/achievement-availability.js?v=50" defer></script>
-  <script src="/draft-settings.js?v=50" defer></script>
-  <script src="/achievement-live.js?v=50" defer></script>
-  <script src="/app.js?v=50" defer></script>
+  <script src="/achievement-rarity.js?v=51" defer></script>
+  <script src="/achievement-availability.js?v=51" defer></script>
+  <script src="/draft-settings.js?v=51" defer></script>
+  <script src="/achievement-live.js?v=51" defer></script>
+  <script src="/app.js?v=51" defer></script>
 </body>
 </html>

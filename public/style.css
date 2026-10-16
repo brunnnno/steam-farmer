@@ -1494,19 +1494,54 @@ textarea:focus {
   color: var(--primary);
 }
 
+.ach-set-btn.set-base,
 .ach-set-btn.set-blue {
-  border-color: rgba(56,189,248,0.35);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
 }
 
+.ach-set-btn.set-base.active,
 .ach-set-btn.set-blue.active {
-  background: var(--cyan-dim);
-  color: var(--cyan);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
 }
 
+.ach-set-btn.set-dlc,
+.ach-set-btn.set-purple {
+  border-color: rgba(168, 85, 247, 0.35);
+  color: #a855f7;
+}
+
+.ach-set-btn.set-dlc.active,
 .ach-set-btn.set-purple.active {
-  background: rgba(168,85,247,0.15);
-  border-color: rgba(168,85,247,0.4);
-  color: #c4b5fd;
+  border-color: #a855f7;
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.15);
+}
+
+.ach-set-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin-left: 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+
+.ach-set-badge.set-base {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.ach-set-badge.set-dlc {
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
 #achMainPanel:not([hidden]),

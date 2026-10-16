@@ -1295,4 +1295,28 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(cancelAllRes.data.success, true);
   assert.equal(cancelAllRes.data.cancelledCount, 1);
   assert.equal(f.app.timedManager.listForAccount("user2").length, 0);
+
+  // 20. v51 SAM Local Trigger Bridge & Steam October 2026 Achievement Sets (Base Game vs DLC Completion Rule)
+  const { detectLocalSteamClient, ensureInGameBeforeStore } = require("../scripts/sam-local-trigger");
+  const { detectAchievementSet, computeAchievementAnalytics } = require("../lib/steam-protocol");
+  const localCheck = detectLocalSteamClient();
+  assert.equal(typeof localCheck.detected, "boolean");
+  const playedBeforeStore = [];
+  const nextList = ensureInGameBeforeStore({ gamesPlayed: g => playedBeforeStore.push(g) }, 34830, { stealth: false, currentPlayed: [730] });
+  assert.deepEqual(nextList, [34830, 730]);
+  assert.deepEqual(playedBeforeStore[0], [34830, 730]);
+
+  assert.deepEqual(detectAchievementSet({ name: "ACH_BASE" }, {}), { set_id: "base", set_name: "Base Game", explicitName: false });
+  assert.deepEqual(detectAchievementSet({ name: "ACH_DLC", dlc_appid: "12345", set_name: "Phantom Liberty" }, {}), { set_id: "dlc_12345", set_name: "Phantom Liberty", explicitName: true });
+
+  const oct2026Analytics = computeAchievementAnalytics([
+    { apiname: "B1", name: "Base 1", unlocked: true, set_id: "base" },
+    { apiname: "B2", name: "Base 2", unlocked: true, set_id: "base" },
+    { apiname: "D1", name: "DLC 1", unlocked: false, set_id: "dlc_99", set_name: "Expansion" }
+  ], []);
+  assert.equal(oct2026Analytics.baseTotalAchievements, 2);
+  assert.equal(oct2026Analytics.baseUnlockedCount, 2);
+  assert.equal(oct2026Analytics.baseCompletionPercent, 100);
+  assert.equal(oct2026Analytics.isCompleted, true, "Game with 100% Base Game unlocked must be marked Completed even with locked DLC");
+  assert.equal(oct2026Analytics.isPerfectGame, true);
 });

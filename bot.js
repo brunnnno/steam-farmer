@@ -1263,7 +1263,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             sock?.setNoDelay?.(true);
             sock?.setKeepAlive?.(true, 15000);
           } catch {}
-          if (directApply && !stealth && typeof client.gamesPlayed === 'function') {
+          if (!stealth && typeof client.gamesPlayed === 'function') {
             try {
               const nextPlayed = st.inspectingAppId === id ? [id, ...st.playedGames.filter(x => x !== id)].slice(0, 32) : [id];
               client.gamesPlayed(nextPlayed);
