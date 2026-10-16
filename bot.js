@@ -39,7 +39,7 @@ const { ResultCache } = require('./lib/cache');
 const {ResourceBudget}=require('./lib/resources');
 const {createPercentageReader}=require('./lib/rarity-history');
 const {revisionFor,changesBetween}=require('./lib/achievement-sync');
-const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge, estimateCardBatchNet, DEMO_CATALOG, fetchPublicDemoAchievements, exploreDiscoveryQueue, fetchSellableCards, quickSellCards } = require('./lib/steam-data');
+const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge, estimateCardBatchNet, DEMO_CATALOG, fetchPublicDemoAchievements, exploreDiscoveryQueue, fetchSellableCards, quickSellCards, fetchHowLongToBeat } = require('./lib/steam-data');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -1239,6 +1239,12 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         farming(acc,true);
         return json(res,200,{success:true,cancelledCount,message:`Cancelled all active scheduled tasks (${cancelledCount} stopped).`});
       }
+      if(url.pathname==='/api/achievement/hltb'&&req.method==='GET'){
+        const id=url.searchParams.get('appid')?appId(url.searchParams.get('appid')):null;
+        const title=text(url.searchParams.get('title')||'',256);
+        const hltb=await fetchHowLongToBeat(title,{appid:id});
+        return json(res,200,hltb);
+      }
       if(url.pathname==='/api/achievement/timed'&&req.method==='GET'){
         const id=appId(url.searchParams.get('appid'));
         if(url.searchParams.get('accountId')==='demo')return json(res,200,{active:false,demoMode:true,appid:id});
@@ -1277,11 +1283,18 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             if(pctRes?.percentages&&typeof pctRes.percentages==='object')percentagesMap=pctRes.percentages;
           }catch{}
         }
+        let hltbData = null;
+        if (spacing === 'platinum') {
+          const gameTitle = text(data.gameTitle || acc.gameNames?.[id] || DEMO_CATALOG.find(g => g.id === id)?.name || '', 256);
+          hltbData = await fetchHowLongToBeat(gameTitle, { appid: id }).catch(() => null);
+        }
         const status=timedManager.start({
           accountId:acc.id,
           appid:id,
           items,
           percentagesMap,
+          targetHours:Number(data.targetHours)||hltbData?.completionistHours||null,
+          hltbData,
           amount:Number(data.amount)||5,
           units:['seconds','minutes','hours'].includes(data.units)?data.units:'minutes',
           spacing,
@@ -1293,7 +1306,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const msg=spacing==='platinum'&&status.summaryTextEs
           ?status.summaryTextEs
           :`Scheduled ${items.length} achievement${items.length===1?'':'s'} (${status.order} order, ${status.spacing} spacing).`;
-        return json(res,200,{...status,message:msg});
+        return json(res,200,{...status,...(hltbData?{hltb:hltbData}:{}),message:msg});
       }
       if(url.pathname==='/api/achievement/shared-progress-preview'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);

@@ -1406,4 +1406,28 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const lbEntriesRes = await f.request("/api/leaderboards/entries?accountId=user2&appid=34830&leaderboardId=101");
   assert.equal(lbEntriesRes.response.status, 200);
   assert.equal(lbEntriesRes.data.userEntry.score, 500000);
+
+  // 24. Tarea 4: HowLongToBeat (HLTB) Auto-Calibration (The Witcher 3 = 120h, Portal = 4h, and live API mock)
+  const { fetchHowLongToBeat } = require("../lib/steam-data");
+  const witcherHltb = await fetchHowLongToBeat("The Witcher 3: Wild Hunt");
+  assert.equal(witcherHltb.mainStoryHours, 51.5);
+  assert.equal(witcherHltb.completionistHours, 120);
+
+  const portalHltb = await fetchHowLongToBeat("Portal");
+  assert.equal(portalHltb.mainStoryHours, 3);
+  assert.equal(portalHltb.completionistHours, 4);
+
+  const liveHltb = await fetchHowLongToBeat("Custom Indie Game", {
+    request: async () => ({
+      body: JSON.stringify({
+        data: [{ game_name: "Custom Indie Game", comp_main: 18000, comp_plus: 28800, comp_100: 36000 }]
+      })
+    })
+  });
+  assert.equal(liveHltb.mainStoryHours, 5);
+  assert.equal(liveHltb.completionistHours, 10);
+
+  const hltbRouteRes = await f.request("/api/achievement/hltb?title=Portal");
+  assert.equal(hltbRouteRes.response.status, 200);
+  assert.equal(hltbRouteRes.data.completionistHours, 4);
 });
