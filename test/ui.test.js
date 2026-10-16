@@ -565,3 +565,144 @@ test('SamRewritten tabs, live 1-click controls, Invert page, Statistics editor, 
   assert.ok(w.document.getElementById('achToastContainer'));
   assert.ok(w.document.getElementById('marketIdentitySecretInput'));
 });
+
+test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Estimator, Badge Crafter, Cluster & Showcase Card work end-to-end", async t => {
+  const demoRows = [
+    { apiname: "TF_MYTHIC", name: "First Do No Harm", description: "Score highest without killing", unlocked: false, percent: 3.1, tier: "Mythic" },
+    { apiname: "TF_COMMON", name: "Sentry Gunner", description: "10 sentry kills", unlocked: true, percent: 64.2, tier: "Common" }
+  ];
+  const demoStats = [
+    { statId: 101, name: "TF_STATS_KILLS", displayName: "Total Eliminations", type: "INT", value: 1420, min: 0, max: 1000000, writable: true },
+    { statId: 103, name: "TF_STATS_ACCURACY_RATIO", displayName: "Weapon Accuracy Ratio", type: "FLOAT", value: 0.425, min: 0, max: 1, writable: true }
+  ];
+  const calls = [];
+  const w = ui(t, url => {
+    calls.push(url);
+    if (url === "/api/status") {
+      return {
+        accounts: [],
+        demoCatalog: [
+          { id: 440, name: "Team Fortress 2" },
+          { id: 730, name: "Counter-Strike 2" },
+          { id: 620, name: "Portal 2" },
+          { id: 550, name: "Left 4 Dead 2" }
+        ],
+        presets: [],
+        timezone: "America/Montevideo"
+      };
+    }
+    if (url.startsWith("/api/achievements?accountId=demo")) {
+      return {
+        appid: 440,
+        demoMode: true,
+        readingMethod: "web",
+        source: "Steam Public Showcase",
+        message: "Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo",
+        checkedAt: new Date().toISOString(),
+        achievements: demoRows,
+        statistics: demoStats
+      };
+    }
+    if (url.startsWith("/api/stats?accountId=demo")) {
+      return { appid: 440, demoMode: true, stats: demoStats };
+    }
+    if (url.startsWith("/api/achievement/analytics?accountId=demo")) {
+      return { appid: 440, demoMode: true, unlockedCount: 1, totalAchievements: 2, completionPercent: 50, totalStats: 2, protectedCount: 0, hiddenCount: 0 };
+    }
+    return response(demoRows);
+  });
+
+  w.testUI.authenticate();
+  w.testUI.select("");
+  w.testUI.activate(null);
+  await w.testUI.load();
+
+  // 1. Verify Guest Demo / Showcase Mode renders banner + 4 iconic demo games when !active
+  assert.match(w.document.getElementById("demoBannerContainer").textContent, /Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo/);
+  const demoCards = w.document.querySelectorAll("#gamesGrid .demo-card");
+  assert.equal(demoCards.length, 4);
+  assert.match(w.document.getElementById("gamesGrid").textContent, /Team Fortress 2/);
+  assert.match(w.document.getElementById("gamesGrid").textContent, /Counter-Strike 2/);
+  assert.match(w.document.getElementById("gamesGrid").textContent, /Portal 2/);
+  assert.match(w.document.getElementById("gamesGrid").textContent, /Left 4 Dead 2/);
+
+  // 2. Open TF2 achievement modal in Guest Demo Mode and verify Demo banner, Rarity filter, INT/FLOAT Stats & Timed tab
+  demoCards[0].querySelector(".btn-card-ach").click();
+  await new Promise(r => setImmediate(r));
+  assert.equal(w.document.getElementById("achModal").style.display, "flex");
+  assert.match(w.document.getElementById("achReadMessage").textContent, /Modo Demostración/);
+  w.testUI.filter("rarity", "mythic");
+  assert.equal(w.document.querySelectorAll("#achListContainer .ach-item").length, 1);
+  assert.match(w.document.querySelector("#achListContainer .ach-title").textContent, /First Do No Harm/);
+
+  w.document.getElementById("tabStatsBtn").click();
+  await new Promise(r => setImmediate(r));
+  assert.match(w.document.getElementById("statsListContainer").textContent, /Total Eliminations/);
+  assert.match(w.document.getElementById("statsListContainer").textContent, /FLOAT/);
+
+  w.document.getElementById("tabToolsBtn").click();
+  await new Promise(r => setImmediate(r));
+  assert.match(w.document.getElementById("timedStatusText").textContent, /Modo Demostración/);
+  w.testUI.close();
+
+  // 3. Verify Library View Selector (Grid vs Compact List)
+  const gridEl = w.document.getElementById("gamesGrid");
+  w.document.getElementById("btnViewList").click();
+  assert.equal(gridEl.classList.contains("list-view"), true);
+  w.document.getElementById("btnViewGrid").click();
+  assert.equal(gridEl.classList.contains("list-view"), false);
+
+  // 4. Verify Task Center Colored Status Cards
+  assert.ok(w.document.getElementById("taskCardFarming").classList.contains("status-green"));
+  assert.ok(w.document.getElementById("taskCardCards").classList.contains("status-purple"));
+  assert.ok(w.document.getElementById("taskCardTimed").classList.contains("status-blue"));
+
+  // 5. Verify Sound Mute Toggle & Streamer / Privacy Mode masking
+  const soundBtn = w.document.getElementById("btnSoundToggle");
+  assert.match(soundBtn.textContent, /Sound: ON/);
+  soundBtn.click();
+  assert.match(soundBtn.textContent, /Sound: OFF/);
+
+  const connectedAcc = {
+    id: "acc1",
+    name: "BrunoMain",
+    profileName: "BrunoSteam",
+    linkedSteamId: "76561198012345678",
+    connected: true,
+    webSessionReady: true,
+    isFarming: true,
+    runningGames: [730],
+    games: [730],
+    gameNames: { 730: "Counter-Strike 2" },
+    cardFarming: true,
+    cardsReady: true,
+    cardDropGames: [{ appid: 730, name: "Counter-Strike 2", remaining: 3, hoursPlayed: 4.5 }],
+    craftableBadges: [{ appid: 730, name: "Counter-Strike 2", craftable: true }],
+    sleepMode: { enabled: false, start: 3, end: 8 }
+  };
+  w.fetch = async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => url === "/api/status" ? { accounts: [connectedAcc], presets: [], timezone: "America/Montevideo" } : {}
+  });
+  w.testUI.select("acc1");
+  await w.testUI.load();
+  assert.match(w.document.getElementById("userLabel").textContent, /BrunoMain/);
+  assert.match(w.document.getElementById("connectionDetails").textContent, /76561198012345678/);
+
+  const streamerBtn = w.document.getElementById("btnStreamerMode");
+  streamerBtn.click();
+  assert.equal(w.document.body.classList.contains("streamer-mode"), true);
+  assert.doesNotMatch(w.document.getElementById("userLabel").textContent, /BrunoMain/);
+  assert.doesNotMatch(w.document.getElementById("connectionDetails").textContent, /76561198012345678/);
+  assert.match(w.document.getElementById("connectionDetails").textContent, /76561••••••/);
+
+  // 6. Verify Steam Showcase Card Generator modal & canvas summary
+  w.document.getElementById("btnShowcaseCard").click();
+  assert.equal(w.document.getElementById("showcaseModal").style.display, "flex");
+  const canvas = w.document.getElementById("showcaseCanvas");
+  assert.equal(canvas.dataset.rendered, "true");
+  assert.match(canvas.dataset.summary, /100% Games:/);
+  w.document.getElementById("closeShowcaseBtn").click();
+  assert.equal(w.document.getElementById("showcaseModal").style.display, "none");
+});

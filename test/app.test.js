@@ -843,4 +843,187 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(qsRetryRes.autoConfirmedCount,2);
   assert.ok(delays.some(d=>d>=1800&&d<=3200));
   assert.ok(delays.includes(15000));
+
+  // 13. Bloque 1 & 3.2: Full DB persistence -> collision pause -> process restart (rehydrate) -> pausedDeltaMs shift -> smart exponential backoff retries
+  const dbJobs = new Map();
+  const dbQueue = new Map();
+  const mockPool = {
+    query: async (sql, params = []) => {
+      const s = String(sql).trim();
+      if (/CREATE TABLE/i.test(s)) return { rows: [] };
+      if (/UPDATE steamfarmer_timed_jobs SET status = 'cancelled'/i.test(s)) {
+        for (const j of dbJobs.values()) {
+          if (j.account_id === params[0] && j.appid === params[1] && ["active", "paused_collision"].includes(j.status)) j.status = "cancelled";
+        }
+        return { rows: [] };
+      }
+      if (/INSERT INTO steamfarmer_timed_jobs/i.test(s)) {
+        dbJobs.set(params[0], { job_id: params[0], account_id: params[1], appid: params[2], status: params[3], config: JSON.parse(params[4] || "{}"), started_at: params[5], created_at: new Date().toISOString() });
+        return { rows: [] };
+      }
+      if (/INSERT INTO steamfarmer_timed_queue/i.test(s)) {
+        const list = dbQueue.get(params[0]) || [];
+        list.push({ job_id: params[0], item_index: params[1], apiname: params[2], action: params[3], run_at: params[4], completed: false, error: null });
+        dbQueue.set(params[0], list);
+        return { rows: [] };
+      }
+      if (/UPDATE steamfarmer_timed_jobs SET status = \$2, config = \$3/i.test(s)) {
+        const j = dbJobs.get(params[0]);
+        if (j) { j.status = params[1]; j.config = JSON.parse(params[2] || "{}"); }
+        return { rows: [] };
+      }
+      if (/UPDATE steamfarmer_timed_jobs SET status = \$2 WHERE job_id = \$1/i.test(s)) {
+        const j = dbJobs.get(params[0]);
+        if (j) j.status = params[1];
+        return { rows: [] };
+      }
+      if (/UPDATE steamfarmer_timed_jobs SET status = 'completed'/i.test(s)) {
+        const j = dbJobs.get(params[0]);
+        if (j) j.status = "completed";
+        return { rows: [] };
+      }
+      if (/UPDATE steamfarmer_timed_queue SET run_at = \$3/i.test(s)) {
+        const list = dbQueue.get(params[0]) || [];
+        const item = list.find(x => x.item_index === params[1] && !x.completed);
+        if (item) item.run_at = params[2];
+        return { rows: [] };
+      }
+      if (/UPDATE steamfarmer_timed_queue SET completed = TRUE/i.test(s)) {
+        const list = dbQueue.get(params[0]) || [];
+        const item = list.find(x => x.item_index === params[1]);
+        if (item) { item.completed = true; item.error = params[2]; }
+        return { rows: [] };
+      }
+      if (/SELECT job_id, account_id, appid, status, config, started_at FROM steamfarmer_timed_jobs/i.test(s)) {
+        const rows = [...dbJobs.values()].filter(j => ["active", "paused_collision"].includes(j.status) && (!params[0] || j.account_id === params[0]));
+        return { rows };
+      }
+      if (/SELECT item_index, apiname, action, run_at, completed FROM steamfarmer_timed_queue/i.test(s)) {
+        const rows = (dbQueue.get(params[0]) || []).slice().sort((a, b) => a.item_index - b.item_index);
+        return { rows };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const mgr1 = new TimedModificationManager({ pool: mockPool, retryDelaysMs: [25, 50, 100] });
+  const startRes = mgr1.start({
+    accountId: "user2",
+    appid: 440,
+    items: [{ apiname: "ACH_RETRY_1", action: "unlock" }, { apiname: "ACH_RETRY_2", action: "unlock" }],
+    customDelaysMs: [120, 220],
+    executeItem: async () => {}
+  });
+  await mgr1.flush();
+  assert.equal(dbJobs.size, 1);
+  const origRunAt0 = Date.parse(startRes.remaining[0].runAt);
+
+  // Trigger collision pause and persist to DB before simulated Render container restart
+  mgr1.pauseAccount("user2");
+  await mgr1.flush();
+  const savedJobRow = dbJobs.get(startRes.jobId);
+  assert.equal(savedJobRow.status, "paused_collision");
+  assert.ok(Number(savedJobRow.config.pausedAt) > 0);
+  mgr1.cancelAll();
+
+  await new Promise(r => setTimeout(r, 70));
+
+  // Simulate process restart with new TimedModificationManager instance rehydrating from PostgreSQL
+  let attemptsForFirst = 0;
+  const completedInRestart = [];
+  const mgr2 = new TimedModificationManager({ pool: mockPool, retryDelaysMs: [25, 50, 100] });
+  const rehydratedCount = await mgr2.rehydrate({
+    accountId: "user2",
+    isCollisionPaused: () => true,
+    executeItemFactory: () => async item => {
+      if (item.apiname === "ACH_RETRY_1" && ++attemptsForFirst < 3) {
+        throw new Error("Transient Steam maintenance disconnect");
+      }
+      completedInRestart.push(item.apiname);
+    }
+  });
+  assert.equal(rehydratedCount, 1);
+  assert.equal(mgr2.status("user2", 440).pausedByCollision, true);
+
+  // Resume from collision after restart -> verify pausedDeltaMs shifts timestamps without corruption
+  mgr2.resumeAccount("user2");
+  await mgr2.flush();
+  const resumedAfterRestart = mgr2.status("user2", 440);
+  assert.equal(resumedAfterRestart.pausedByCollision, false);
+  for (const rem of resumedAfterRestart.remaining) {
+    const parsedTs = Date.parse(rem.runAt);
+    assert.ok(Number.isFinite(parsedTs), "Shifted timestamp must be valid ISO date");
+  }
+  assert.ok(Date.parse(resumedAfterRestart.remaining[0].runAt) >= origRunAt0 + 50);
+
+  // Wait for items + smart exponential backoff retries (25ms + 50ms) to finish
+  const deadline = Date.now() + 2500;
+  while (completedInRestart.length < 2 && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 30));
+  }
+  await mgr2.flush();
+  assert.deepEqual(completedInRestart, ["ACH_RETRY_1", "ACH_RETRY_2"]);
+  assert.equal(attemptsForFirst, 3);
+  assert.equal(dbJobs.get(startRes.jobId).status, "completed");
+  assert.ok((dbQueue.get(startRes.jobId) || []).every(q => q.completed === true));
+  mgr2.cancelAll();
+
+  // 14. Bloque 2, 3 & 4 API Routes: Demo Mode endpoints, Net Fee Estimator, Auto Badge Crafter & Multi-Account Idle Cluster
+  const demoAchRes = await f.request("/api/achievements?accountId=demo&appid=440");
+  assert.equal(demoAchRes.response.status, 200);
+  assert.equal(demoAchRes.data.demoMode, true);
+  assert.ok(demoAchRes.data.achievements.length >= 4);
+  assert.match(demoAchRes.data.message, /Modo Demostración/);
+
+  const demoStatsRes = await f.request("/api/stats?accountId=demo&appid=440");
+  assert.equal(demoStatsRes.response.status, 200);
+  assert.equal(demoStatsRes.data.demoMode, true);
+  assert.ok(demoStatsRes.data.stats.some(s => s.type === "INT") && demoStatsRes.data.stats.some(s => s.type === "FLOAT"));
+
+  const demoAnalyticsRes = await f.request("/api/achievement/analytics?accountId=demo&appid=440");
+  assert.equal(demoAnalyticsRes.response.status, 200);
+  assert.equal(demoAnalyticsRes.data.demoMode, true);
+
+  const { computeFeeBreakdownCents, estimateCardBatchNet, parseCraftableBadges, craftSteamBadge } = require("../lib/steam-data");
+  const feeBd = computeFeeBreakdownCents(20);
+  assert.equal(feeBd.valveFeeCents, 1);
+  assert.equal(feeBd.developerFeeCents, 2);
+  assert.equal(feeBd.sellerNetCents, 17);
+
+  const batchEst = estimateCardBatchNet([
+    { appid: 730, name: "Card 1", marketHashName: "730-1", buyerCents: 10 },
+    { appid: 730, name: "Card 2", marketHashName: "730-2", buyerCents: 10 },
+    { appid: 730, name: "Card 3", marketHashName: "730-3", buyerCents: 10 },
+    { appid: 730, name: "Card 4", marketHashName: "730-4", buyerCents: 10 },
+    { appid: 730, name: "Card 5", marketHashName: "730-5", buyerCents: 10 }
+  ]);
+  assert.equal(batchEst.totalCards, 5);
+  assert.equal(batchEst.grossBuyerCents, 50);
+  assert.equal(batchEst.estimatedNetCents, 40);
+  assert.equal(batchEst.craftableSets.length, 1);
+  assert.equal(batchEst.craftableSets[0].appid, 730);
+
+  const craftableHtml = '<div class="badge_row"><a class="badge_row_overlay" href="https://steamcommunity.com/my/gamecards/730/"></a><div class="badge_title">Counter-Strike 2</div><div class="badge_craft_button">Ready to craft</div></div>';
+  assert.deepEqual(parseCraftableBadges(craftableHtml), [{ appid: 730, name: "Counter-Strike 2", craftable: true }]);
+
+  const craftRes = await craftSteamBadge("76561198000000001", "sessionid=sess123; steamLoginSecure=1", {
+    appid: 730,
+    request: async (url, opts) => {
+      assert.ok(url.includes("/ajaxcraftbadge/"));
+      assert.ok(opts.body.includes("appid=730") && opts.body.includes("sessionid=sess123"));
+      return { body: JSON.stringify({ success: 1, Badge: { title: "CS2 Soldier", xp: 100 }, playerlevel: 42, rgDroppedItems: [{ name: ":cs2_emoticon:", type: "Emoticon" }] }) };
+    }
+  });
+  assert.equal(craftRes.success, true);
+  assert.equal(craftRes.xpEarned, 100);
+  assert.equal(craftRes.newLevel, 42);
+  assert.equal(craftRes.unlockedItems.length, 1);
+
+  const clusterStatus = await f.request("/api/cluster/status");
+  assert.equal(clusterStatus.response.status, 200);
+  assert.equal(clusterStatus.data.totalAccounts, 1);
+
+  const clusterAction = await f.request("/api/cluster/action", { action: "start_all" });
+  assert.equal(clusterAction.response.status, 200);
+  assert.equal(clusterAction.data.affected, 1);
 });

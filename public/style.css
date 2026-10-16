@@ -1050,3 +1050,169 @@ html, body {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* v45 UI/UX Comfort, Demo Showcase, Colored Task Center, View Selector & Streamer Mode */
+header {
+  background: linear-gradient(135deg, rgba(16, 26, 42, 0.88) 0%, rgba(11, 18, 30, 0.94) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 20px;
+  padding: 22px 28px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+header:hover {
+  border-color: rgba(52, 211, 153, 0.32);
+}
+.acc-pill, .btn-action-sm, .btn-main, .btn-purple, .btn-clear {
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+.acc-pill:hover, .btn-action-sm:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.task-center-box {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+.task-center-box:hover {
+  transform: translateY(-2px);
+}
+.task-center-box.status-green {
+  border-color: rgba(16, 185, 129, 0.42);
+  background: linear-gradient(145deg, rgba(12, 34, 29, 0.82), rgba(10, 18, 28, 0.9));
+}
+.task-center-box.status-purple {
+  border-color: rgba(168, 85, 247, 0.42);
+  background: linear-gradient(145deg, rgba(31, 18, 47, 0.82), rgba(10, 18, 28, 0.9));
+}
+.task-center-box.status-blue {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: linear-gradient(145deg, rgba(13, 30, 49, 0.82), rgba(10, 18, 28, 0.9));
+}
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.status-dot.green {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+.status-dot.purple {
+  background: #a855f7;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.8);
+}
+.status-dot.blue {
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+}
+
+.cluster-panel-box {
+  background: rgba(9, 14, 24, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.cluster-bot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  font-size: 0.78rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.cluster-bot-pill.active-bot {
+  border-color: rgba(52, 211, 153, 0.5);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.view-selector {
+  display: inline-flex;
+  gap: 6px;
+  background: rgba(10, 16, 26, 0.75);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+}
+.view-btn.active {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: rgba(52, 211, 153, 0.55);
+  color: #fff;
+}
+
+#gamesGrid.list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#gamesGrid.list-view .card {
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 16px;
+}
+#gamesGrid.list-view .game-art {
+  width: 132px;
+  min-width: 132px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+#gamesGrid.list-view .card-content {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  gap: 14px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+#gamesGrid.list-view .card-actions {
+  width: auto;
+  flex-wrap: nowrap;
+}
+
+.demo-showcase-banner {
+  background: linear-gradient(135deg, rgba(16, 40, 36, 0.92) 0%, rgba(15, 25, 42, 0.95) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  border-radius: 16px;
+  padding: 18px 22px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.demo-showcase-banner h3 {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #fff;
+  margin-top: 2px;
+}
+.demo-showcase-banner p {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  max-width: 680px;
+}
+
+@media (max-width: 600px) {
+  #gamesGrid.list-view .card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #gamesGrid.list-view .game-art {
+    width: 100%;
+  }
+  #gamesGrid.list-view .card-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

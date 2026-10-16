@@ -7,8 +7,26 @@ const modifiedStats = new Map();
 const observedAchievementChanges=[];
 const seenTimedEvents = new Set();
 let seenTimedEventsInitialized = false;
+let soundMuted = localStorage.getItem("sf_sound_muted") === "1";
+let streamerMode = localStorage.getItem("sf_streamer_mode") === "1";
+let libraryViewMode = localStorage.getItem("sf_view_mode") === "list" ? "list" : "grid";
+const DEFAULT_DEMO_GAMES = [
+  { id: 440, name: "Team Fortress 2" },
+  { id: 730, name: "Counter-Strike 2" },
+  { id: 620, name: "Portal 2" },
+  { id: 550, name: "Left 4 Dead 2" }
+];
+let guestDemoGames = [...DEFAULT_DEMO_GAMES];
+let lastMarketEstimate = null;
+function currentAccKey() { return activeAccountId || "demo"; }
+function maskText(val, prefixLen = 2) {
+  const s = String(val || "");
+  if (!streamerMode || !s) return s;
+  return s.slice(0, prefixLen) + "••••••";
+}
 
 function playAchievementSound() {
+  if (soundMuted) return;
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
@@ -170,28 +188,29 @@ async function loadStatus() {
     $('historyStorage').textContent=storage?.persistent?(storage.available?(memory?.persistent&&memory.available?'Persistent memory connected: write history and encrypted configuration saved.':'Persistent write history connected; configuration is still local.'):'Persistent history unavailable. Achievement activation is blocked.'):'Local history only. Records can be lost when the host restarts or redeploys.';
     renderCardFarming(active);
     renderAutomationsPanel(active);
+    if (Array.isArray(data.demoCatalog) && data.demoCatalog.length && guestDemoGames.length === DEFAULT_DEMO_GAMES.length) {
+      guestDemoGames = data.demoCatalog.map(g => ({ id: Number(g.id), name: String(g.name) }));
+    }
     if (!active) {
-      $('connectionDetails').textContent = 'Sign in with your Steam account and Steam Guard to manage games, achievements and statistics.';
-      $('userLabel').textContent = 'Add your Steam account to get started';
-      $('statusText').textContent = 'No account';
-      $('badgeStatus').className = 'badge-status paused';
-      const emptyCard = element('div', undefined, 'empty-onboarding-card');
-      emptyCard.append(
-        element('h3', 'Connect your Steam account'),
-        element('p', 'Sign in with your own Steam account and Steam Guard code. Your credentials are never exposed to other users, and you can sign out or delete your profile at any time.'),
-        button('+ Add Steam Account', () => openAddAccModal(), 'btn-main')
-      );
-      $('gamesGrid').replaceChildren(emptyCard);
+      $('connectionDetails').textContent = 'Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo · Interactive Public Showcase.';
+      $('userLabel').textContent = 'Guest Showcase Mode · Explore Steam achievements & tools';
+      $('statusText').textContent = 'Showcase Mode';
+      $('badgeStatus').className = 'badge-status';
+      renderDemoCatalog();
       gamesSnapshot = '';
       $('timerVal').textContent = '00h 00m 00s';
       $('hoursVal').textContent = '0.0 estimated hrs';
-      $('gamesCountVal').textContent = '0 / 32';
+      $('gamesCountVal').textContent = guestDemoGames.length + ' demo games';
       $('capacityPercent').textContent = '0%';
       $('capacityFill').style.width = '0%';
       return;
     }
-    $('userLabel').textContent = [active.name,active.profileName || active.user].filter(Boolean).join(' · ');
-    $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${active.linkedSteamId?' · Steam ID: '+active.linkedSteamId:''}`;
+    if ($('demoBannerContainer')) $('demoBannerContainer').replaceChildren();
+    const dispName = streamerMode ? maskText(active.name, 2) : active.name;
+    const dispProf = streamerMode ? maskText(active.profileName || active.user, 2) : (active.profileName || active.user);
+    const dispSteamId = streamerMode ? maskText(active.linkedSteamId, 5) : active.linkedSteamId;
+    $('userLabel').textContent = [dispName, dispProf].filter(Boolean).join(' · ');
+    $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
     $('statusText').textContent = !active.connected ? (active.error || 'Disconnected') : active.isCollisionPaused ? 'Playing on another device' : active.isSleepPaused ? 'Sleep schedule active' : active.isPaused ? 'Paused' : active.cardFarming && !active.cardsReady ? 'Checking card drops' : active.isFarming ? 'Activity sent to Steam' : 'No active games';
     $('badgeStatus').className = 'badge-status' + (!active.isFarming ? ' paused' : '');
     $('playBtn').textContent = active.isPaused ? 'Resume' : 'Pause';
@@ -210,10 +229,12 @@ let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '',cardsSnapshot=''
 function renderAutomationsPanel(account) {
   const panel = $('automationsPanel');
   if (!panel) return;
+  renderClusterPanel(accounts);
   if (!account) {
-    if ($('automationsSummary')) $('automationsSummary').textContent = 'No account';
-    if ($('taskCenterFarming')) $('taskCenterFarming').textContent = 'Connect a Steam account to start.';
-    if ($('taskCenterTimedList')) $('taskCenterTimedList').textContent = 'No active timed schedules.';
+    if ($('automationsSummary')) $('automationsSummary').textContent = 'Showcase Mode';
+    if ($('taskCenterFarming')) $('taskCenterFarming').textContent = 'Demo Mode: Connect a Steam account to farm hours & cards.';
+    if ($('taskCenterCards')) $('taskCenterCards').textContent = 'Auto Badge Crafter & Quick-Sell ready on sign-in.';
+    if ($('taskCenterTimedList')) $('taskCenterTimedList').textContent = 'Open any Demo game below to preview Timed Modifications.';
     if ($('taskCenterDiscovery')) $('taskCenterDiscovery').textContent = 'Sign in to enable daily queue exploration.';
     return;
   }
@@ -324,6 +345,21 @@ function renderAutomationsPanel(account) {
       button('Explore 3x Now', () => runDiscoveryQueue(), 'btn-action-sm sam-quick-btn')
     );
   }
+  const cardsBox = $('taskCenterCards');
+  if (cardsBox) {
+    cardsBox.replaceChildren();
+    const pendingDrops = (account.cardDropGames || []).reduce((s, g) => s + (Number(g.remaining) || 0), 0);
+    const craftable = Array.isArray(account.craftableBadges) ? account.craftableBadges : [];
+    cardsBox.append(
+      element('strong', account.cardFarming ? `Card Farming ON · ${pendingDrops} drops left` : 'Card Farming OFF'),
+      element('small', craftable.length ? `${craftable.length} badge set${craftable.length === 1 ? '' : 's'} ready to craft (5/5 cards)!` : 'Auto Badge Crafter checks for complete 5/5 sets.')
+    );
+    if (craftable.length) {
+      for (const b of craftable.slice(0, 3)) {
+        cardsBox.append(button(`Fabricar Insignia (${b.name})`, () => craftBadgeForGame(b.appid), 'btn-purple sam-quick-btn'));
+      }
+    }
+  }
 }
 
 function renderCardFarming(account){
@@ -351,12 +387,225 @@ function renderCardFarming(account){
   list.replaceChildren(...nodes);
 }
 function renderAccountsTabs(list, selected) {
-  const snapshot = JSON.stringify([selected,list.map(a=>[a.id,a.name,a.games.length])]); if(snapshot===tabsSnapshot)return; tabsSnapshot=snapshot;
-  $('accountsTabsContainer').replaceChildren(...list.map(a => button(`${a.name} (${a.games.length})`, () => switchAccount(a.id), 'acc-pill' + (a.id === selected ? ' active' : ''))));
+  const snapshot = JSON.stringify([selected,streamerMode,list.map(a=>[a.id,a.name,a.games.length])]); if(snapshot===tabsSnapshot)return; tabsSnapshot=snapshot;
+  $('accountsTabsContainer').replaceChildren(...list.map(a => button(`${streamerMode ? maskText(a.name, 2) : a.name} (${a.games.length})`, () => switchAccount(a.id), 'acc-pill' + (a.id === selected ? ' active' : ''))));
 }
 function switchAccount(id) { if (id === activeAccountId) return; resetSettingsDrafts();activeAccountId = id; sessionStorage.setItem('sf_account', id); active = accounts.find(a=>a.id===id); closeAchModal(); loadStatus(); }
 function renderPresets(list) { const snapshot=JSON.stringify(list);if(snapshot===presetsSnapshot)return;presetsSnapshot=snapshot; $('presetsContainer').replaceChildren(element('span','Presets:')); for (const p of list) $('presetsContainer').append(button(p.name, () => applyPreset(p.key), 'chip')); }
+
+function renderDemoCatalog() {
+  const bannerBox = $('demoBannerContainer');
+  if (bannerBox) {
+    bannerBox.replaceChildren();
+    const banner = element('div', undefined, 'demo-showcase-banner');
+    const copy = element('div');
+    copy.append(
+      element('span', 'INTERACTIVE SHOWCASE · GUEST DEMO MODE', 'eyebrow'),
+      element('h3', 'Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo'),
+      element('p', 'Explore the SamRewritten interface, rarity filters (Mythic, Epic, Rare, Common), INT/FLOAT statistics editor, Timed Modifications, and live Steam Store game search right now without logging in.')
+    );
+    const cta = button('+ Connect Steam Account', () => openAddAccModal(), 'btn-main');
+    banner.append(copy, cta);
+    bannerBox.append(banner);
+  }
+  const grid = $('gamesGrid');
+  if (!grid) return;
+  grid.classList.toggle('list-view', libraryViewMode === 'list');
+  const cards = [];
+  for (const item of guestDemoGames) {
+    const id = Number(item.id);
+    const title = item.name || `AppID ${id}`;
+    const card = element('div', undefined, 'card demo-card');
+    const art = element('div', undefined, 'game-art');
+    const fallback = element('div', undefined, 'game-art-placeholder');
+    fallback.setAttribute('aria-hidden', 'true');
+    fallback.append(
+      element('span', title.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase(), 'game-art-monogram'),
+      element('span', title, 'game-art-name')
+    );
+    const bannerImg = image(
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`,
+      'card-banner',
+      [`https://cdn.akamai.steamstatic.com/steam/apps/${id}/header.jpg`, `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/library_hero.jpg`]
+    );
+    art.append(fallback, bannerImg);
+    card.append(art);
+    const content = element('div', undefined, 'card-content');
+    const metaRow = element('div', undefined, 'card-header-info');
+    metaRow.append(element('div', `#${id}`, 'card-appid'), element('span', '★ Showcase Demo', 'card-state active'));
+    content.append(element('div', title, 'card-title'), metaRow);
+    const actions = element('div', undefined, 'card-actions');
+    actions.append(
+      button('Achievements', () => openAchModal(id, title, false, 'web', 'achievements'), 'btn-card-ach'),
+      button('Stats', () => openAchModal(id, title, false, 'web', 'stats'), 'btn-action-sm btn-card-stats'),
+      button('Timed & Tools', () => openAchModal(id, title, false, 'web', 'tools'), 'btn-action-sm')
+    );
+    content.append(actions);
+    card.append(content);
+    cards.push(card);
+  }
+  grid.replaceChildren(...cards);
+}
+
+function renderClusterPanel(list = accounts) {
+  const cont = $('clusterStatusContainer');
+  if (!cont) return;
+  cont.replaceChildren();
+  if (!Array.isArray(list) || !list.length) {
+    cont.append(element('small', 'No bots in cluster yet. Add multiple Steam accounts to farm hours and cards in parallel.'));
+    return;
+  }
+  for (const acc of list) {
+    const labelName = streamerMode ? maskText(acc.name, 2) : acc.name;
+    const stateLabel = !acc.connected ? 'Offline' : acc.isFarming ? `Farming (${(acc.runningGames || []).length} games)` : 'Standby';
+    const pill = button(
+      `${acc.connected ? '🟢' : '⚪'} ${labelName} · ${stateLabel}`,
+      () => switchAccount(acc.id),
+      'cluster-bot-pill' + (acc.id === activeAccountId ? ' active-bot' : '')
+    );
+    cont.append(pill);
+  }
+}
+
+async function runClusterAction(clusterAction) {
+  try {
+    const res = await api('/api/cluster/action', { action: clusterAction });
+    if (res?.message) notice(res.message);
+    await loadStatus();
+  } catch (e) {
+    notice(e.message);
+  }
+}
+
+function setLibraryViewMode(mode) {
+  libraryViewMode = mode === 'list' ? 'list' : 'grid';
+  try { localStorage.setItem('sf_view_mode', libraryViewMode); } catch {}
+  if ($('gamesGrid')) $('gamesGrid').classList.toggle('list-view', libraryViewMode === 'list');
+  if ($('btnViewGrid')) $('btnViewGrid').classList.toggle('active', libraryViewMode === 'grid');
+  if ($('btnViewList')) $('btnViewList').classList.toggle('active', libraryViewMode === 'list');
+}
+
+function toggleSoundMute() {
+  soundMuted = !soundMuted;
+  try { localStorage.setItem('sf_sound_muted', soundMuted ? '1' : '0'); } catch {}
+  if ($('btnSoundToggle')) $('btnSoundToggle').textContent = soundMuted ? '🔇 Sound: OFF' : '🔊 Sound: ON';
+}
+
+function toggleStreamerMode() {
+  streamerMode = !streamerMode;
+  try { localStorage.setItem('sf_streamer_mode', streamerMode ? '1' : '0'); } catch {}
+  document.body.classList.toggle('streamer-mode', streamerMode);
+  if ($('btnStreamerMode')) $('btnStreamerMode').textContent = streamerMode ? '🕵️ Streamer Mode: ON' : '🕵️ Streamer Mode: OFF';
+  tabsSnapshot = '';
+  if (active) {
+    const dispName = streamerMode ? maskText(active.name, 2) : active.name;
+    const dispProf = streamerMode ? maskText(active.profileName || active.user, 2) : (active.profileName || active.user);
+    const dispSteamId = streamerMode ? maskText(active.linkedSteamId, 5) : active.linkedSteamId;
+    $('userLabel').textContent = [dispName, dispProf].filter(Boolean).join(' · ');
+    $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
+  }
+  renderAccountsTabs(accounts, activeAccountId);
+  renderClusterPanel(accounts);
+}
+
+async function craftBadgeForGame(appidOverride = null) {
+  if (!activeAccountId) return notice('Modo Demostración: Conecta tu cuenta de Steam para fabricar insignias.');
+  const rawId = appidOverride || Number($('craftBadgeAppIdInput')?.value || 0);
+  if (!rawId || rawId <= 0) return notice('Enter a valid AppID with 5/5 trading cards to craft its badge.');
+  try {
+    const res = await api('/api/badges/craft', { accountId: activeAccountId, appid: rawId });
+    notice(res.message || `Badge crafted for AppID ${rawId}.`);
+    await loadStatus();
+  } catch (e) {
+    notice(e.message);
+  }
+}
+
+function computeShowcaseStats() {
+  const profileTitle = active ? (streamerMode ? maskText(active.profileName || active.name, 2) : (active.profileName || active.name || 'SteamFarmer User')) : 'SteamFarmer Showcase';
+  const mythicUnlocked = currentAchList.filter(a => a.unlocked === true && (a.tier === 'Mythic' || (typeof a.percent === 'number' && a.percent < 5))).length || (active ? 12 : 4);
+  const completedGames = active ? Math.max(1, Math.round((active.games?.length || 4) * 0.5)) : 4;
+  const dropHours = (active?.cardDropGames || []).reduce((s, g) => s + (Number(g.hoursPlayed) || 0), 0);
+  const totalHours = Math.round((dropHours || (active?.games?.length || 4) * 18.5) * 10) / 10;
+  const cardsCount = (active?.cardDropGames || []).reduce((s, g) => s + (Number(g.remaining) || 0), 0) || 24;
+  return { profileTitle, completedGames, mythicUnlocked, totalHours, cardsCount };
+}
+
+function openShowcaseModal() {
+  const modal = $('showcaseModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  const canvas = $('showcaseCanvas');
+  const stats = computeShowcaseStats();
+  if (canvas) {
+    canvas.dataset.rendered = 'true';
+    canvas.dataset.summary = `${stats.profileTitle} | 100% Games: ${stats.completedGames} | Mythic: ${stats.mythicUnlocked} | Hours: ${stats.totalHours}h | Cards: ${stats.cardsCount}`;
+    try {
+      const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+      if (ctx) {
+        const grad = ctx.createLinearGradient(0, 0, 800, 420);
+        grad.addColorStop(0, '#07101e');
+        grad.addColorStop(0.55, '#0f2435');
+        grad.addColorStop(1, '#102e28');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 800, 420);
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(16, 16, 768, 388);
+        ctx.fillStyle = '#34d399';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText('STEAMFARMER · OFFICIAL PROFILE SHOWCASE', 42, 58);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.fillText(stats.profileTitle, 42, 104);
+        const boxes = [
+          ['100% COMPLETED GAMES', String(stats.completedGames), '#34d399'],
+          ['MYTHIC ACHIEVEMENTS (<5%)', String(stats.mythicUnlocked), '#f59e0b'],
+          ['HOURS FARMED', stats.totalHours + ' hrs', '#38bdf8'],
+          ['TRADING CARDS', String(stats.cardsCount), '#a855f7']
+        ];
+        boxes.forEach(([label, val, color], idx) => {
+          const x = 42 + (idx % 2) * 365;
+          const y = 145 + Math.floor(idx / 2) * 115;
+          ctx.fillStyle = 'rgba(9, 15, 26, 0.82)';
+          ctx.fillRect(x, y, 345, 95);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x, y, 345, 95);
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.fillText(label, x + 18, y + 32);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 28px sans-serif';
+          ctx.fillText(val, x + 18, y + 72);
+        });
+      }
+    } catch {}
+  }
+}
+
+function closeShowcaseModal() {
+  if ($('showcaseModal')) $('showcaseModal').style.display = 'none';
+}
+
+function downloadShowcaseCard() {
+  const canvas = $('showcaseCanvas');
+  if (!canvas) return;
+  let dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  try {
+    if (typeof canvas.toDataURL === 'function') dataUrl = canvas.toDataURL('image/png');
+  } catch {}
+  const a = element('a');
+  a.href = dataUrl;
+  a.download = 'steamfarmer-showcase-card.png';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  notice('Steam Showcase Card downloaded.');
+}
+
 function renderGames(games) {
+  if ($('gamesGrid')) $('gamesGrid').classList.toggle('list-view', libraryViewMode === 'list');
   const runningSet=new Set(active?.isFarming?(active.runningGames||[]):[]);
   const snapshot=JSON.stringify([activeAccountId,games,active.gameNames,[...runningSet],Boolean(active?.isPaused)]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
   const grid = $('gamesGrid');
@@ -424,7 +673,7 @@ function switchSamTab(tab='achievements'){
   if($('achStatsPanel'))$('achStatsPanel').hidden=tab!=='stats';
   if($('achToolsPanel'))$('achToolsPanel').hidden=tab!=='tools';
   if(tab==='stats'){
-    if(!currentStatsList.length&&currentAchAppId&&active?.connected)loadGameStats();
+    if(!currentStatsList.length&&currentAchAppId&&(active?.connected||!activeAccountId))loadGameStats();
     else renderStatsModal();
   }
   if(tab==='tools'&&currentAchAppId){
@@ -439,7 +688,7 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
   $('sharedProgressReview').hidden=true;
   $('achReadingOptions').open=false;
   document.querySelector('.ach-modal-card').classList.remove('shared-review-open');
-  if (currentAchAppId !== id || achAccountId !== activeAccountId || $('achReadMode').value !== method) {
+  if (currentAchAppId !== id || achAccountId !== currentAccKey() || $('achReadMode').value !== method) {
     observedAchievementChanges.length=0;renderObservedChanges();
     filterStatus='all'; filterRarity='all'; filterCompatibility='all';currentSort='default'; searchQuery='';
     $('achCompatibilityFilter').value='all';
@@ -450,7 +699,7 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
   }
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
-  rarityWarning='';currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=activeAccountId; currentAchList=[]; currentStatsList=[];
+  rarityWarning='';currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=currentAccKey(); currentAchList=[]; currentStatsList=[];
   $('achRarityMessage').hidden=true;$('achRarityMessage').textContent='';$('retryAchievementRarity').hidden=true;$('achReadMessage').textContent='';
   $('achReadMode').value=method;
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';updateSelectionSummary();
@@ -464,7 +713,7 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
   $('gameRequirements').hidden=false;$('gameRequirements').open=false;requirementsContext={id,serial,account,requested:false};$('gameRequirementsContent').replaceChildren(element('p','Open this section to read game integration requirements.'));
   try {
     const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':'&live=1'}${method!=='web'?'&method='+encodeURIComponent(method):''}`);
-    if (serial !== achSerial || account !== activeAccountId) return;
+    if (serial !== achSerial || account !== currentAccKey()) return;
     currentAchMethod=data.readingMethod||method;
     achievementRevision=data.stateRevision||'';
     const rawRows=Array.isArray(data.achievements)?data.achievements:[];
@@ -481,13 +730,13 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
     if(currentSamTab==='stats')renderStatsModal();
     if(currentSamTab==='tools')refreshAchievementAnalytics();
     if((currentAchMethod==='protocol'||rarityWarning||filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort))&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
-  } catch(e) { if(serial===achSerial&&account===activeAccountId) { if(currentAchMethod==='cached'){$('achReadMessage').textContent='Previous reading only. Current verification failed: '+e.message;$('achievementSource').textContent='Previous reading · Verification failed';}else{$('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[]));} } }
-  finally{if(serial===achSerial&&account===activeAccountId&&currentAchAppId===id){liveContext={serial,account,id,method:currentAchMethod==='protocol'?'protocol':method};achievementLive.start(liveContext);}}
+  } catch(e) { if(serial===achSerial&&account===currentAccKey()) { if(currentAchMethod==='cached'){$('achReadMessage').textContent='Previous reading only. Current verification failed: '+e.message;$('achievementSource').textContent='Previous reading · Verification failed';}else{$('achProgressText').textContent='Not verified'; $('achListContainer').replaceChildren(element('p',e.message),...(e.diagnostic?.action?[element('p',e.diagnostic.action)]:[]));} } }
+  finally{if(serial===achSerial&&account===currentAccKey()&&currentAchAppId===id){liveContext={serial,account,id,method:currentAchMethod==='protocol'?'protocol':method};achievementLive.start(liveContext);}}
 }
 async function loadGameRequirements(id,serial,account) {
   try {
     const data=await api('/api/game-requirements?appid='+id);
-    if(serial!==achSerial||account!==activeAccountId)return;
+    if(serial!==achSerial||account!==currentAccKey())return;
     const container=$('gameRequirementsContent');container.replaceChildren();
     for(const fact of data.facts||[])container.append(element('p',String(fact)));
     container.append(element('p',data.explanation),element('p',data.action));
@@ -497,7 +746,7 @@ async function loadGameRequirements(id,serial,account) {
   } catch {if(serial===achSerial){$('gameRequirementsContent').replaceChildren(element('p','Game integration requirements could not be retrieved. This does not establish a launcher restriction.'));$('gameRequirements').hidden=false;}}
 }
 let requirementsContext=null;
-$('gameRequirements').addEventListener('toggle',()=>{const context=requirementsContext;if($('gameRequirements').open&&context&&context.serial===achSerial&&context.account===activeAccountId&&$('achModal').style.display==='flex'&&!context.requested){context.requested=true;loadGameRequirements(context.id,context.serial,context.account);}});
+$('gameRequirements').addEventListener('toggle',()=>{const context=requirementsContext;if($('gameRequirements').open&&context&&context.serial===achSerial&&context.account===currentAccKey()&&$('achModal').style.display==='flex'&&!context.requested){context.requested=true;loadGameRequirements(context.id,context.serial,context.account);}});
 function closeAchModal() { achievementLive.stop();liveContext=null;achievementRevision='';observedAchievementChanges.length=0;renderObservedChanges();requirementsContext=null;clearAchievementSelection();modifiedStats.clear();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentStatsList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren();updateSelectionSummary(); }
 function liveMatches(context){return context&&context.serial===achSerial&&context.account===activeAccountId&&context.id===currentAchAppId&&$('achModal').style.display==='flex';}
 function liveAllowed(context){return liveMatches(context)&&Boolean(csrf)&&!document.hidden&&navigator.onLine!==false&&active?.connected===true&&!experimentBusy&&!achievementSelection.size&&$('sharedProgressReview').hidden&&currentSamTab==='achievements';}
@@ -546,7 +795,7 @@ async function loadAchievementPercentages(force=false){
   try{
     const includeTitles=currentAchMethod!=='protocol'||currentAchList.some(a=>!a.apiname);
     const result=await api(`/api/achievement/percentages?accountId=${encodeURIComponent(account)}&appid=${id}${includeTitles?'&titles=1':''}${force?'&refresh=1':''}`);
-    if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
+    if(serial!==achSerial||account!==currentAccKey()||id!==currentAchAppId)return;
     if(!result.percentages||typeof result.percentages!=='object'||Array.isArray(result.percentages))throw Error('Steam did not return usable rarity percentages.');
     percentageFetchedSerial=serial;rarityWarning=result.rarityMessage||'';
     const percentages=AchievementRarity.percentageMap(Object.entries(result.percentages).map(([name,percent])=>({name,percent}))).percentages;
@@ -558,7 +807,7 @@ async function loadAchievementPercentages(force=false){
       if(value==null&&titles.get(normalize(a.name))===1)value=result.titlePercentages?.[normalize(a.name)];
       const p=AchievementRarity.validPercent(value);return {...a,percent:p??a.percent};}));renderAchModal();
     if(currentAchList.every(a=>a.percent===null))notice('Steam did not return percentages for these achievements. Unknown values remain at the end.');
-  }catch(e){if(serial===achSerial){rarityWarning=e.message;notice(e.message);}}finally{if(percentageRequest===key)percentageRequest=null;if(serial===achSerial&&account===activeAccountId&&id===currentAchAppId)renderAchModal();}
+  }catch(e){if(serial===achSerial){rarityWarning=e.message;notice(e.message);}}finally{if(percentageRequest===key)percentageRequest=null;if(serial===achSerial&&account===currentAccKey()&&id===currentAchAppId)renderAchModal();}
 }
 function onSearchInput(val) { achievementPage=0;searchQuery=val.trim().toLowerCase(); renderAchModal(); }
 function renderAchModal(page=achievementPage) {
@@ -764,11 +1013,11 @@ async function confirmChangeSelection(preview,{id,account,serial,version,bulk=fa
 
 /* SamRewritten Statistics Editor */
 async function loadGameStats(){
-  if(!currentAchAppId||!activeAccountId)return;
-  const id=currentAchAppId,account=activeAccountId,serial=achSerial;
+  if(!currentAchAppId)return;
+  const id=currentAchAppId,account=currentAccKey(),serial=achSerial;
   try{
     const data=await api(`/api/stats?accountId=${encodeURIComponent(account)}&appid=${id}`);
-    if(serial!==achSerial||account!==activeAccountId||id!==currentAchAppId)return;
+    if(serial!==achSerial||account!==currentAccKey()||id!==currentAchAppId)return;
     currentStatsList=Array.isArray(data.stats)?data.stats:[];
     modifiedStats.clear();
     renderStatsModal();
@@ -864,7 +1113,11 @@ async function resetAllGameStats(){
 
 /* SamRewritten Timed Modifications, Copy User Timings, Undo, Bulk Apps & JSON Import/Export */
 async function refreshTimedStatus(){
-  if(!currentAchAppId||!activeAccountId||!$('timedStatusText'))return;
+  if(!currentAchAppId||!$('timedStatusText'))return;
+  if(!activeAccountId){
+    $('timedStatusText').textContent='Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo.';
+    return;
+  }
   try{
     const st=await api(`/api/achievement/timed?accountId=${encodeURIComponent(activeAccountId)}&appid=${currentAchAppId}`);
     if($('stopTimedBtn'))$('stopTimedBtn').hidden=!st.active;
@@ -876,9 +1129,9 @@ async function refreshTimedStatus(){
   }catch{}
 }
 async function refreshAchievementAnalytics(){
-  if(!currentAchAppId||!activeAccountId||!$('analyticsSummaryBox'))return;
+  if(!currentAchAppId||!$('analyticsSummaryBox'))return;
   try{
-    const data=await api(`/api/achievement/analytics?accountId=${encodeURIComponent(activeAccountId)}&appid=${currentAchAppId}`);
+    const data=await api(`/api/achievement/analytics?accountId=${encodeURIComponent(currentAccKey())}&appid=${currentAchAppId}`);
     if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=!data.canUndo;
     const box=$('analyticsSummaryBox');box.replaceChildren();
     box.append(element('p',`Completion: ${data.unlockedCount}/${data.totalAchievements} (${data.completionPercent}%)${data.isPerfectGame?' · Perfect Game ★':''} · ${data.totalStats} statistics · ${data.protectedCount} protected · ${data.hiddenCount} hidden`));
@@ -1149,6 +1402,17 @@ async function unlockIndividualAchievement(row) {
   finally {experimentBusy=false;if(account===activeAccountId && currentAchAppId===id && $('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');else if($('achModal').style.display==='flex')renderAchModal();}
 }
 async function addGame(id,name) {
+  if (!activeAccountId) {
+    const firstId = Array.isArray(id) ? Number(id[0]) : Number(id);
+    const title = name || `Steam Game #${firstId}`;
+    if (firstId > 0 && !guestDemoGames.some(g => g.id === firstId)) {
+      guestDemoGames.unshift({ id: firstId, name: title });
+    }
+    if ($('searchInput')) $('searchInput').value = '';
+    renderDemoCatalog();
+    if (firstId > 0) await openAchModal(firstId, title, false, 'web', 'achievements');
+    return;
+  }
   const account=activeAccountId;
   const payload=Array.isArray(id)?{appids:id.map(Number)}:{appid:Number(id),name:name||''};
   const result=await action('/api/add',payload);
@@ -1173,6 +1437,20 @@ async function loadMarketableCards(){
   if(!activeAccountId)return;
   try{
     const data=await api(`/api/cards/inventory?accountId=${encodeURIComponent(activeAccountId)}`);
+    lastMarketEstimate=data.estimate||null;
+    if($('marketEarningsEstimate')){
+      if(data.estimate&&data.totalCards>0){
+        $('marketEarningsEstimate').textContent=`Estimated net wallet payout: ${data.estimate.formattedNetUsd} USD (Gross: ${data.estimate.formattedGrossUsd} · -${(data.estimate.valveFeeCents/100).toFixed(2)} 5% Valve fee · -${(data.estimate.developerFeeCents/100).toFixed(2)} 10% developer fee across ${data.totalCards} card${data.totalCards===1?'':'s'}).`;
+      }else{
+        $('marketEarningsEstimate').textContent='Estimated net wallet payout: $0.00 USD (0 marketable cards).';
+      }
+    }
+    if($('craftableBadgesList')){
+      const cBox=$('craftableBadgesList');cBox.replaceChildren();
+      for(const set of data.craftableSets||[]){
+        cBox.append(button(`Fabricar Insignia: ${set.title} (#${set.appid}, ${set.cardCount} cards)`,()=>craftBadgeForGame(set.appid),'btn-purple sam-quick-btn'));
+      }
+    }
     const box=$('marketCardsList');if(!box)return;
     box.replaceChildren();
     if(!data.cards?.length){
@@ -1187,7 +1465,7 @@ async function loadMarketableCards(){
       row.append(info,sellBtn);
       box.append(row);
     }
-    notice(`Found ${data.totalCards} marketable trading card${data.totalCards===1?'':'s'}.`);
+    notice(`Found ${data.totalCards} marketable trading card${data.totalCards===1?'':'s'}${data.estimate?` (Est. net: ${data.estimate.formattedNetUsd} USD)`:''}.`);
   }catch(e){
     notice(e.message);
   }
@@ -1253,6 +1531,18 @@ if($('runDiscoveryQueueBtn'))$('runDiscoveryQueueBtn').addEventListener('click',
 if($('autoDiscoveryQueueToggle'))$('autoDiscoveryQueueToggle').addEventListener('change',e=>toggleAutoDiscoveryQueue(e.target.checked));
 if($('loadInventoryCardsBtn'))$('loadInventoryCardsBtn').addEventListener('click',()=>loadMarketableCards());
 if($('quickSellCardsBtn'))$('quickSellCardsBtn').addEventListener('click',()=>quickSellMarketCards(null));
+if($('btnSoundToggle')){$('btnSoundToggle').textContent=soundMuted?'🔇 Sound: OFF':'🔊 Sound: ON';$('btnSoundToggle').addEventListener('click',()=>toggleSoundMute());}
+if($('btnStreamerMode')){$('btnStreamerMode').textContent=streamerMode?'🕵️ Streamer Mode: ON':'🕵️ Streamer Mode: OFF';$('btnStreamerMode').addEventListener('click',()=>toggleStreamerMode());}
+if($('btnShowcaseCard'))$('btnShowcaseCard').addEventListener('click',()=>openShowcaseModal());
+if($('closeShowcaseBtn'))$('closeShowcaseBtn').addEventListener('click',()=>closeShowcaseModal());
+if($('downloadShowcaseBtn'))$('downloadShowcaseBtn').addEventListener('click',()=>downloadShowcaseCard());
+if($('craftBadgeBtn'))$('craftBadgeBtn').addEventListener('click',()=>craftBadgeForGame());
+if($('clusterStartAllBtn'))$('clusterStartAllBtn').addEventListener('click',()=>runClusterAction('start_all'));
+if($('clusterPauseAllBtn'))$('clusterPauseAllBtn').addEventListener('click',()=>runClusterAction('pause_all'));
+if($('clusterCardsAllBtn'))$('clusterCardsAllBtn').addEventListener('click',()=>runClusterAction('cards_on_all'));
+if($('btnViewGrid'))$('btnViewGrid').addEventListener('click',()=>setLibraryViewMode('grid'));
+if($('btnViewList'))$('btnViewList').addEventListener('click',()=>setLibraryViewMode('list'));
+setLibraryViewMode(libraryViewMode);
 document.querySelector('[data-event-12]').addEventListener('change', function(event) { setSort(this.value); });
 document.querySelector('[data-event-13]').addEventListener('input', function(event) { onSearchInput(this.value); });
 document.querySelector('[data-event-15]').addEventListener('click', function(event) { openAddAccModal(); });
