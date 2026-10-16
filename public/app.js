@@ -7,6 +7,8 @@ const modifiedStats = new Map();
 const achCache = new Map();
 let achSortState = { col: 'default', dir: 'asc' };
 let currentAchSet = 'all';
+let dependencyTreeMode = false;
+let currentLeaderboardsList = [], currentLeaderboardId = 101;
 let eventSource = null, sseFailures = 0;
 const observedAchievementChanges=[];
 const seenTimedEvents = new Set();
@@ -42,6 +44,8 @@ const i18n = {
     forceResumeCollisionBtn: "⚠️ Forzar Reanudar (Limpiar Colisión)",
     completedGamesLabel: "JUEGOS COMPLETADOS (100%)",
     completedBadgeText: "Completado ★",
+    dependencyTreeBtn: "Árbol de Progresión (Dependency Tree)",
+    uploadLeaderboardBtn: "Subir Puntuación al Ranking Mundial de Steam",
     startPlatinumBtn: "Modo Platino Realista",
     craftBadgeBtn: "Fabricar Insignia (5/5 cromos)",
     liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla",
@@ -107,6 +111,8 @@ const i18n = {
     forceResumeCollisionBtn: "⚠️ Force Resume (Clear Collision)",
     completedGamesLabel: "100% COMPLETED GAMES",
     completedBadgeText: "Completed ★",
+    dependencyTreeBtn: "Dependency Tree",
+    uploadLeaderboardBtn: "Subir Puntuación al Ranking Mundial de Steam",
     startPlatinumBtn: "Realistic Platinum Mode",
     craftBadgeBtn: "Craft Badge (5/5 sets)",
     liveActionNotice: "Live action: Connect your Steam account to synchronize it",
@@ -383,6 +389,15 @@ function image(src, className, alternatives=[]) {
   img.addEventListener('error',()=>{while(next<alternatives.length){try{const u=new URL(alternatives[next++]);if(u.protocol==='https:'){img.src=u.href;img.hidden=false;return;}}catch{}}img.hidden=true;});
   return img;
 }
+function updateLocalBridgeBadge(data) {
+  const el = $('localBridgeBadge');
+  if (!el) return;
+  const connected = Boolean(data?.localBridgeConnected);
+  el.className = 'acc-pill local-bridge-badge ' + (connected ? 'online' : 'offline');
+  el.textContent = connected
+    ? (currentLang === 'es' ? '🟢 Local Bridge: Conectado (Pop-up Oficial Activo)' : '🟢 Local Bridge: Connected (Official Pop-up Active)')
+    : (currentLang === 'es' ? '⚪ Local Bridge: Offline (Modo Nube)' : '⚪ Local Bridge: Offline (Cloud Mode)');
+}
 function setGuestModeLayout(isGuest) {
   const guest = Boolean(isGuest);
   if ($('saasLandingSection')) $('saasLandingSection').hidden = !guest;
@@ -420,6 +435,7 @@ async function loadStatus() {
     const memory=data.applicationStorage;
     $('resourceUsage').textContent=data.resources?`Process RAM: ${(data.resources.rssBytes/1048576).toFixed(1)} MiB · Heap: ${(data.resources.heapUsedBytes/1048576).toFixed(1)} MiB · ${data.resources.steamConnections}/3 Steam connections · ${data.resources.activeHeavy}/1 heavy operations`:'Server resource data unavailable.';
     $('historyStorage').textContent=storage?.persistent?(storage.available?(memory?.persistent&&memory.available?'Persistent memory connected: write history and encrypted configuration saved.':'Persistent write history connected; configuration is still local.'):'Persistent history unavailable. Achievement activation is blocked.'):'Local history only. Records can be lost when the host restarts or redeploys.';
+    updateLocalBridgeBadge(data);
     renderCardFarming(active);
     renderAutomationsPanel(active);
     if (Array.isArray(data.demoCatalog) && data.demoCatalog.length && guestDemoGames.length === DEFAULT_DEMO_GAMES.length) {
@@ -1129,9 +1145,11 @@ function switchSamTab(tab='achievements'){
   if($('tabAchievementsBtn'))$('tabAchievementsBtn').classList.toggle('active',tab==='achievements');
   if($('tabStatsBtn'))$('tabStatsBtn').classList.toggle('active',tab==='stats');
   if($('tabToolsBtn'))$('tabToolsBtn').classList.toggle('active',tab==='tools');
+  if($('tabLeaderboardsBtn'))$('tabLeaderboardsBtn').classList.toggle('active',tab==='leaderboards');
   if($('achMainPanel'))$('achMainPanel').hidden=tab!=='achievements';
   if($('achStatsPanel'))$('achStatsPanel').hidden=tab!=='stats';
   if($('achToolsPanel'))$('achToolsPanel').hidden=tab!=='tools';
+  if($('achLeaderboardsPanel'))$('achLeaderboardsPanel').hidden=tab!=='leaderboards';
   if(tab==='stats'){
     if(!currentStatsList.length&&currentAchAppId&&(active?.connected||!activeAccountId))loadGameStats();
     else renderStatsModal();
@@ -1139,6 +1157,9 @@ function switchSamTab(tab='achievements'){
   if(tab==='tools'&&currentAchAppId){
     refreshTimedStatus();
     refreshAchievementAnalytics();
+  }
+  if(tab==='leaderboards'&&currentAchAppId){
+    loadGameLeaderboards();
   }
 }
 
@@ -1261,6 +1282,135 @@ function setFilter(type,val) {
   if(type==='rarity'&&filterRarity!=='all'&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
 let percentageRequest=null,percentageFetchedSerial=-1,rarityWarning='';
+function computeClientDependencyMap(rows = []) {
+  const map = new Map();
+  if (!Array.isArray(rows) || !rows.length) return map;
+  const roman = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+  const parseNum = tok => {
+    const c = String(tok || '').trim().toLowerCase().replace(/,/g, '');
+    if (/^\d+$/.test(c)) return Number(c);
+    return roman[c] || null;
+  };
+  const byStat = new Map();
+  const bySeries = new Map();
+  const prologues = [];
+  const bosses = [];
+  const platinums = [];
+
+  rows.forEach((a, idx) => {
+    if (a.dependencyInfo) {
+      map.set(a, a.dependencyInfo);
+      return;
+    }
+    const text = `${a.name || ''} ${a.description || ''} ${a.apiname || ''}`.toLowerCase();
+    let stage = 2;
+    if (/\b(platinum|platino|all achievements|todos los logros|100%|completionist)\b/i.test(text)) stage = 5;
+    else if (/\b(prologue|pr[oó]logo|tutorial|first step|primer paso|welcome|intro)\b/i.test(text)) stage = 1;
+    else if (/\b(final boss|jefe final|epilogue|ep[ií]logo|finish the game|complete the game|beat the game)\b/i.test(text)) stage = 4;
+    else if (/\b(collectible|coleccionable|secret|secreto|hidden|find all)\b/i.test(text)) stage = 3;
+    else if (typeof a.percent === 'number') {
+      stage = a.percent > 60 ? 1 : a.percent >= 30 ? 2 : a.percent >= 10 ? 3 : 4;
+    }
+    const info = {
+      stage,
+      depth: 0,
+      parents: [],
+      parentNames: [],
+      missingParents: [],
+      blockedByDependency: false,
+      requiresText: '',
+      _idx: idx,
+      _parentRows: []
+    };
+    map.set(a, info);
+    if (stage === 1) prologues.push(a);
+    else if (stage === 4) bosses.push(a);
+    else if (stage === 5) platinums.push(a);
+
+    const statName = a.progressDetails?.statName;
+    const maxVal = Number(a.progressDetails?.maximum ?? NaN);
+    if (statName && Number.isFinite(maxVal) && maxVal > 0) {
+      const sk = String(statName).toLowerCase();
+      if (!byStat.has(sk)) byStat.set(sk, []);
+      byStat.get(sk).push({ row: a, val: maxVal });
+    }
+
+    const kw = (a.name || '').match(/\b(chapter|cap[ií]tulo|act|acto|part|parte|stage|etapa|level|nivel|rank|wave)\s+([0-9]+|[ivx]+)\b/i)
+      || (a.description || '').match(/\b(chapter|cap[ií]tulo|act|acto|part|parte|stage|etapa|level|nivel|rank|wave)\s+([0-9]+|[ivx]+)\b/i);
+    if (kw) {
+      const num = parseNum(kw[2]);
+      if (num) {
+        const gk = `kw:${kw[1].toLowerCase()}`;
+        if (!bySeries.has(gk)) bySeries.set(gk, []);
+        bySeries.get(gk).push({ row: a, val: num });
+      }
+    } else if (a.apiname) {
+      const am = String(a.apiname).match(/^([A-Za-z]+(?:_[A-Za-z]+)*?)[_]?(\d+)$/);
+      if (am && /^(act|chap|chapter|ep|stage|lvl|level|rank|tier|wave|boss|story|part)/i.test(am[1])) {
+        const gk = `api:${am[1].toLowerCase()}`;
+        if (!bySeries.has(gk)) bySeries.set(gk, []);
+        bySeries.get(gk).push({ row: a, val: Number(am[2]) });
+      }
+    }
+  });
+
+  const linkParent = (parentRow, childRow) => {
+    if (!parentRow || !childRow || parentRow === childRow) return;
+    const cInfo = map.get(childRow);
+    const pInfo = map.get(parentRow);
+    if (!cInfo || !pInfo || !cInfo._parentRows) return;
+    if (!cInfo._parentRows.includes(parentRow)) cInfo._parentRows.push(parentRow);
+  };
+
+  for (const list of byStat.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.val - b.val);
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].val > list[i - 1].val) linkParent(list[i - 1].row, list[i].row);
+    }
+  }
+  for (const list of bySeries.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.val - b.val);
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].val > list[i - 1].val) linkParent(list[i - 1].row, list[i].row);
+    }
+  }
+  if (prologues.length > 0 && bosses.length > 0) {
+    for (const b of bosses) {
+      const bi = map.get(b);
+      if (bi?._parentRows?.length === 0) linkParent(prologues[0], b);
+    }
+  }
+  if (platinums.length > 0) {
+    const anchor = bosses[0] || prologues[0];
+    if (anchor) {
+      for (const p of platinums) linkParent(anchor, p);
+    }
+  }
+
+  for (const [row, info] of map.entries()) {
+    if (!info._parentRows) continue;
+    info.parents = info._parentRows.map(p => p.apiname || p.name);
+    info.parentNames = info._parentRows.map(p => p.name || p.apiname);
+    info.missingParents = info._parentRows.filter(p => p.unlocked !== true).map(p => ({ apiname: p.apiname, name: p.name || p.apiname }));
+    info.blockedByDependency = row.unlocked !== true && info.missingParents.length > 0;
+    info.depth = info._parentRows.length;
+    if (info.missingParents.length > 0) {
+      info.requiresText = `Requiere antes: ${info.missingParents.map(p => p.name).join(', ')}`;
+    } else if (info.parentNames.length > 0) {
+      info.requiresText = `Requiere antes: ${info.parentNames.join(', ')}`;
+    }
+  }
+  return map;
+}
+
+function toggleDependencyTreeMode() {
+  dependencyTreeMode = !dependencyTreeMode;
+  if ($('btnDependencyTreeFilter')) $('btnDependencyTreeFilter').classList.toggle('active', dependencyTreeMode);
+  achievementPage = 0;
+  renderAchModal(0);
+}
 function groupAchievementsBySet(list) {
   const sets = new Map();
   for (const ach of list) {
@@ -1358,6 +1508,8 @@ function renderAchModal(page=achievementPage) {
     }
   }
 
+  const depMap = computeClientDependencyMap(currentAchList);
+  if ($('btnDependencyTreeFilter')) $('btnDependencyTreeFilter').classList.toggle('active', dependencyTreeMode);
   let list=currentAchList.filter(a=>(currentAchSet==='all'||(a.set_id||'base')===currentAchSet) && (!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<20||filterRarity==='rare'&&a.percent>=20&&a.percent<=50||filterRarity==='common'&&a.percent>50)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
   list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&!['unknown','review'].includes(v.status)&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
@@ -1372,6 +1524,14 @@ function renderAchModal(page=achievementPage) {
   }else if(achSortState.col==='date'){
     const dir=achSortState.dir==='asc'?1:-1;
     list.sort((a,b)=>((a.unlockTimestamp||0)-(b.unlockTimestamp||0))*dir);
+  }
+  if(dependencyTreeMode){
+    list.sort((a,b)=>{
+      const da=depMap.get(a)||{stage:2,depth:0},db=depMap.get(b)||{stage:2,depth:0};
+      if(da.stage!==db.stage)return da.stage-db.stage;
+      if(da.depth!==db.depth)return da.depth-db.depth;
+      return ((b.percent??-1)-(a.percent??-1));
+    });
   }
 
   const cont=$('achListContainer');
@@ -1421,6 +1581,11 @@ function renderAchModal(page=achievementPage) {
       const isDlcRow=(a.set_id||'base')!=='base';
       const setBadge=element('span',isDlcRow?`[DLC: ${a.set_name||a.set_id}]`:'[Base]','ach-set-badge '+(isDlcRow?'set-dlc':'set-base'));
       info.append(element('strong',a.name,'ach-title'),setBadge,element('small',a.description,'ach-desc'),rarityMeta);
+      const depInfo=depMap.get(a);
+      if(depInfo&&depInfo.requiresText&&(depInfo.blockedByDependency||dependencyTreeMode)){
+        const depBadge=element('small',depInfo.blockedByDependency?`🔒 ${depInfo.requiresText}`:`✓ ${depInfo.requiresText}`,'ach-dep-badge '+(depInfo.blockedByDependency?'blocked':'satisfied'));
+        info.append(depBadge);
+      }
       if(liveProto){
         if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
         if(a.serverControlled)info.append(element('small',' · Server-controlled'));
@@ -1654,6 +1819,108 @@ async function confirmChangeSelection(preview,{id,account,serial,version,bulk=fa
   }
   catch(e){notice(e.message);}
   finally{experimentBusy=false;if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId&&$('achModal').style.display==='flex')await openAchModal(id,title,true,'protocol');}
+}
+
+
+async function loadGameLeaderboards() {
+  if (!currentAchAppId) return;
+  const id = currentAchAppId, account = currentAccKey();
+  try {
+    const data = await api(`/api/leaderboards?accountId=${encodeURIComponent(account)}&appid=${id}`);
+    currentLeaderboardsList = Array.isArray(data.leaderboards) ? data.leaderboards : [];
+    const sel = $('leaderboardSelect');
+    if (sel) {
+      sel.replaceChildren();
+      for (const b of currentLeaderboardsList) {
+        const opt = element('option', `${b.name} (${b.entryCount || 0} entries)`);
+        opt.value = String(b.id);
+        sel.append(opt);
+      }
+      if (currentLeaderboardsList.length) {
+        currentLeaderboardId = Number(currentLeaderboardsList[0].id) || 101;
+        sel.value = String(currentLeaderboardId);
+      }
+    }
+    await loadLeaderboardEntries(currentLeaderboardId);
+  } catch (e) {
+    if ($('leaderboardUserRankCard')) $('leaderboardUserRankCard').textContent = e.message;
+  }
+}
+
+async function loadLeaderboardEntries(leaderboardId = currentLeaderboardId) {
+  if (!currentAchAppId) return;
+  currentLeaderboardId = Number(leaderboardId) || 101;
+  const id = currentAchAppId, account = currentAccKey();
+  try {
+    const data = await api(`/api/leaderboards/entries?accountId=${encodeURIComponent(account)}&appid=${id}&leaderboardId=${currentLeaderboardId}`);
+    const rankCard = $('leaderboardUserRankCard');
+    if (rankCard) {
+      if (data.userEntry) {
+        rankCard.textContent = `Tu puesto actual: #${data.userEntry.rank} Mundial · ${data.userEntry.personaName} · Puntuación: ${data.userEntry.score}`;
+      } else {
+        rankCard.textContent = 'Tu puesto actual: Sin clasificar en este tablero. Sube una puntuación para entrar al Ranking Mundial.';
+      }
+    }
+    const tbody = $('leaderboardTopTableBody');
+    if (tbody) {
+      tbody.replaceChildren();
+      for (const entry of data.topEntries || []) {
+        const tr = element('tr', undefined, 'ach-item');
+        const tdRank = element('td', `#${entry.rank}`);
+        tdRank.style.fontWeight = '700';
+        const tdPlayer = element('td');
+        const pWrap = element('div');
+        pWrap.style.display = 'flex';
+        pWrap.style.alignItems = 'center';
+        pWrap.style.gap = '8px';
+        if (entry.avatarUrl) {
+          const av = image(entry.avatarUrl);
+          av.style.width = '24px';
+          av.style.height = '24px';
+          av.style.borderRadius = '4px';
+          pWrap.append(av);
+        }
+        pWrap.append(element('strong', entry.personaName));
+        tdPlayer.append(pWrap);
+        const tdScore = element('td', String(entry.score));
+        tdScore.style.fontVariantNumeric = 'tabular-nums';
+        tr.append(tdRank, tdPlayer, tdScore);
+        tbody.append(tr);
+      }
+    }
+  } catch (e) {
+    if ($('leaderboardUserRankCard')) $('leaderboardUserRankCard').textContent = e.message;
+  }
+}
+
+async function submitLeaderboardScore() {
+  if (!activeAccountId) {
+    notice(t('liveActionNotice'));
+    openAddAccModal();
+    return;
+  }
+  if (!currentAchAppId) return;
+  const rawScore = Number($('leaderboardScoreInput')?.value);
+  if (!Number.isFinite(rawScore)) {
+    notice('Enter a valid numeric score or time.');
+    return;
+  }
+  const scoreMethod = $('leaderboardMethodSelect')?.value || 'keep_best';
+  const stealth = Boolean($('stealthModeToggle')?.checked);
+  try {
+    const res = await api('/api/leaderboards/upload', {
+      accountId: activeAccountId,
+      appid: currentAchAppId,
+      leaderboardId: currentLeaderboardId,
+      score: Math.trunc(rawScore),
+      scoreMethod,
+      stealth
+    });
+    notice(res.message || 'Leaderboard score uploaded to Steam.');
+    await loadLeaderboardEntries(currentLeaderboardId);
+  } catch (e) {
+    notice(e.message);
+  }
 }
 
 /* SamRewritten Statistics Editor */
@@ -1957,6 +2224,11 @@ $('clearAchievementSelection').addEventListener('click',()=>{clearAchievementSel
 if($('tabAchievementsBtn'))$('tabAchievementsBtn').addEventListener('click',()=>switchSamTab('achievements'));
 if($('tabStatsBtn'))$('tabStatsBtn').addEventListener('click',()=>switchSamTab('stats'));
 if($('tabToolsBtn'))$('tabToolsBtn').addEventListener('click',()=>switchSamTab('tools'));
+if($('tabLeaderboardsBtn'))$('tabLeaderboardsBtn').addEventListener('click',()=>switchSamTab('leaderboards'));
+if($('btnDependencyTreeFilter'))$('btnDependencyTreeFilter').addEventListener('click',()=>toggleDependencyTreeMode());
+if($('leaderboardSelect'))$('leaderboardSelect').addEventListener('change',e=>loadLeaderboardEntries(Number(e.target.value)));
+if($('refreshLeaderboardsBtn'))$('refreshLeaderboardsBtn').addEventListener('click',()=>loadLeaderboardEntries(currentLeaderboardId));
+if($('uploadLeaderboardScoreBtn'))$('uploadLeaderboardScoreBtn').addEventListener('click',()=>submitLeaderboardScore());
 if($('undoLastOperationBtn'))$('undoLastOperationBtn').addEventListener('click',()=>undoLastAchievementChange());
 if($('statsSearchInput'))$('statsSearchInput').addEventListener('input',()=>renderStatsModal());
 if($('hideProtectedStats'))$('hideProtectedStats').addEventListener('change',()=>renderStatsModal());
@@ -2218,6 +2490,7 @@ function applyStatusUpdate(data){
   active=accounts.find(a=>a.id===activeAccountId)||null;
   renderAccountsTabs(accounts,activeAccountId);
   if(data.presets)renderPresets(data.presets);
+  updateLocalBridgeBadge(data);
   renderCardFarming(active);
   renderAutomationsPanel(active);
   setGuestModeLayout(!active);
@@ -2245,7 +2518,19 @@ function connectSSE(){
     eventSource=es;
     es.onmessage=e=>{
       sseFailures=0;
-      try{applyStatusUpdate(JSON.parse(e.data));}catch{}
+      try{
+        const payload=JSON.parse(e.data);
+        if(payload&&payload.type==='achievement_unlocked'){
+          showAchievementToast({
+            name:payload.name||payload.apiname,
+            gameName:payload.gameTitle||(`AppID ${payload.appid||currentAchAppId||''}`),
+            iconUrl:payload.iconUrl,
+            action:payload.action||'unlock'
+          });
+          return;
+        }
+        applyStatusUpdate(payload);
+      }catch{}
     };
     es.onerror=()=>{
       try{es.close();}catch{}

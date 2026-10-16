@@ -19,7 +19,10 @@ const {
   classifyProgressionPhase,
   sortAchievementsByProgression,
   buildRealisticPlatinumSchedule,
-  TimedModificationManager
+  TimedModificationManager,
+  findOrListLeaderboards,
+  getLeaderboardEntries,
+  uploadLeaderboardScore
 } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement, prepare, prepareShared, prepareFloat, applyChanges, store } = require('./lib/achievement-writer');
@@ -155,6 +158,16 @@ function createApp(options = {}) {
         const totalNow = jobStatus.totalCount || 1;
         const gameTitle = acc.gameNames?.[id] || `AppID ${id}`;
         const iconUrl = achRow?.iconOpen && /^https:\/\//i.test(achRow.iconOpen) ? achRow.iconOpen : undefined;
+        emitAchievementUnlockedEvent({
+          accountId,
+          appid: id,
+          apiname: item.apiname,
+          name: achRow?.name || item.apiname,
+          description: achRow?.description || '',
+          iconUrl: iconUrl || '',
+          gameTitle,
+          action: item.action
+        });
         notify(
           `${item.action === 'remove' ? '🔒 Achievement Locked' : '🏆 Achievement Unlocked'} · ${gameTitle}`,
           `**${achRow?.name || item.apiname}**${achRow?.description ? `\n${achRow.description}` : ''}`,
@@ -194,12 +207,38 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
   }));
   let closing = false;
   const sseListeners = new Set();
+  const localBridgeListeners = new Set();
+  let localBridgeLastHeartbeat = 0;
+  function isLocalBridgeConnected() {
+    return localBridgeListeners.size > 0 || (localBridgeLastHeartbeat > 0 && Date.now() - localBridgeLastHeartbeat < 60000);
+  }
+  function emitSseEvent(eventPayload) {
+    if (!sseListeners.size) return;
+    for (const listener of sseListeners) {
+      try { listener(eventPayload); } catch {}
+    }
+  }
+  function emitAchievementUnlockedEvent({ accountId, appid, apiname, name, description, iconUrl, gameTitle, action = 'unlock' } = {}) {
+    emitSseEvent({
+      type: 'achievement_unlocked',
+      accountId: accountId || '',
+      appid: Number(appid) || 0,
+      apiname: String(apiname || ''),
+      name: String(name || apiname || 'Steam Achievement'),
+      description: String(description || ''),
+      iconUrl: String(iconUrl || ''),
+      gameTitle: String(gameTitle || `AppID ${appid}`),
+      action: action === 'remove' ? 'remove' : 'unlock',
+      timestamp: new Date().toISOString()
+    });
+  }
   function buildStatusPayload() {
     return {
       accounts: cfg.accounts.map(publicAccount),
       demoCatalog: DEMO_CATALOG,
       timezone: cfg.timezone,
       webhookConfigured: Boolean(cfg.discordWebhook),
+      localBridgeConnected: isLocalBridgeConnected(),
       presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })),
       achievementHistoryStorage: journal.status(),
       achievementProbes: stateFor(environmentAccountId).achievementProbes || null,
@@ -645,7 +684,13 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         };
         sendUpdate();
         if (url.searchParams.get('once') === '1') return res.end();
+        const isBridge = url.searchParams.get('bridge') === '1';
         sseListeners.add(sendUpdate);
+        if (isBridge) {
+          localBridgeListeners.add(sendUpdate);
+          localBridgeLastHeartbeat = Date.now();
+          emitStatusChange();
+        }
         const hb = setInterval(() => {
           try { res.write(':\n\n'); } catch {}
         }, 20000);
@@ -653,8 +698,21 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         req.on('close', () => {
           clearInterval(hb);
           sseListeners.delete(sendUpdate);
+          if (isBridge) {
+            localBridgeListeners.delete(sendUpdate);
+            emitStatusChange();
+          }
         });
         return;
+      }
+      if (url.pathname === '/api/local-bridge/heartbeat' && req.method === 'POST') {
+        if (data.connected === false) {
+          localBridgeLastHeartbeat = 0;
+        } else {
+          localBridgeLastHeartbeat = Date.now();
+        }
+        emitStatusChange();
+        return json(res, 200, { ok: true, localBridgeConnected: isLocalBridgeConnected() });
       }
       if (url.pathname === '/api/points/claim-daily' && req.method === 'POST') {
         const acc = getAccount(req, url, data), st = stateFor(acc.id);
@@ -1142,6 +1200,38 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           return json(res,200,{appid:id,outcome:'confirmed',achievementsApplied,statsApplied,message:`Imported ${achievementsApplied} achievement changes and ${statsApplied} statistics.`});
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }
+      if(url.pathname==='/api/leaderboards'&&req.method==='GET'){
+        const id=appId(url.searchParams.get('appid'));
+        const name=text(url.searchParams.get('name')||'',128);
+        if(url.searchParams.get('accountId')==='demo'||!cfg.accounts.length){
+          return json(res,200,await findOrListLeaderboards(null,id,{name}));
+        }
+        const acc=getAccount(req,url),client=clients.get(acc.id);
+        return json(res,200,await findOrListLeaderboards(client,id,{name}));
+      }
+      if(url.pathname==='/api/leaderboards/entries'&&req.method==='GET'){
+        const id=appId(url.searchParams.get('appid'));
+        const leaderboardId=Number(url.searchParams.get('leaderboardId'))||101;
+        if(url.searchParams.get('accountId')==='demo'||!cfg.accounts.length){
+          return json(res,200,await getLeaderboardEntries(null,id,leaderboardId,{steamId64:'76561198000000000',personaName:'Demo Player'}));
+        }
+        const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id);
+        return json(res,200,await getLeaderboardEntries(client,id,leaderboardId,{steamId64:st.steamId64||acc.mySteamID||'',personaName:st.profileName||acc.name||''}));
+      }
+      if(url.pathname==='/api/leaderboards/upload'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
+        if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Uploading leaderboard scores requires the available connected main Steam account.',409);
+        rate(`lb-upload:${acc.id}`,15,60000);
+        const id=appId(data.appid);
+        const leaderboardId=Number(data.leaderboardId)||101;
+        const result=await uploadLeaderboardScore(client,id,leaderboardId,data.score,{
+          scoreMethod:data.scoreMethod,
+          stealth:Boolean(data.stealth),
+          steamId64:identity,
+          personaName:st.profileName||acc.name||'SteamFarmer Player'
+        });
+        return json(res,200,result);
+      }
       if(url.pathname==='/api/achievement/timed/cancel-all'&&req.method==='POST'){
         const acc=getAccount(req,url,data);
         const cancelledCount=timedManager.cancelAllForAccount(acc.id);
@@ -1285,6 +1375,20 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           const result=await changesWrite(client,id,writeSelection,{expectedRevision,initialSnapshot:preloadedSnapshot,initialReceipts:preloadedReceipts,fastDirect:directApply,preserveGamesPlayed:true,bulk,resetCounters,allowRetoggle,overrideCooldown,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{if(!directApply)await persistence?.flush();current();const intent=hasSchema?await operations.reserve(identity,plan,{overrideCooldown}):cleanOperation({...plan,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'});current();st.lastAchievementWrite=Date.now();if(!stealth){try{if(typeof client.gamesPlayed==='function'){const nextPlayed=st.inspectingAppId===id?[id,...st.playedGames.filter(x=>x!==id)].slice(0,32):[id];client.gamesPlayed(nextPlayed);st.playedGames=nextPlayed;}}catch{}}return intent;}});
           if(hasSchema){try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}}
           lastOperations.set(`${acc.id}:${id}`,{selection:writeSelection,at:new Date().toISOString()});
+          if(result.outcome==='confirmed'&&Array.isArray(writeSelection)&&writeSelection.length){
+            const firstItem=writeSelection.find(s=>s.action==='unlock')||writeSelection[0];
+            if(firstItem){
+              emitAchievementUnlockedEvent({
+                accountId:acc.id,
+                appid:id,
+                apiname:firstItem.apiname,
+                name:firstItem.apiname,
+                description:writeSelection.length>1?`${writeSelection.length} achievements modified`:(''),
+                gameTitle:acc.gameNames?.[id]||`AppID ${id}`,
+                action:firstItem.action
+              });
+            }
+          }
           return json(res,200,result);
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }
@@ -1369,6 +1473,16 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             console.log('[Achievement activation requested] '+JSON.stringify(evidence));
           }});
           if(reserved)try{if(mode==='shared')await journal.finishShared(st.steamId64,id,apiName,result);else await journal.finish(st.steamId64,id,apiName,result);}catch{result.historyPersisted=false;result.message+=' The result could not be saved to history; the recorded intent remains pending. Do not retry.';}
+          if(result?.outcome==='confirmed'||result?.after===true){
+            emitAchievementUnlockedEvent({
+              accountId:acc.id,
+              appid:id,
+              apiname:apiName,
+              name:result.name||apiName,
+              gameTitle:acc.gameNames?.[id]||`AppID ${id}`,
+              action:'unlock'
+            });
+          }
           console.log('[Achievement activation result] '+JSON.stringify(result));
           return json(res,200,result);
         } finally {experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}

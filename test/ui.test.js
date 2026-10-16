@@ -982,4 +982,99 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.ok(desktopNotifications.length >= 1, "Native Windows/Browser Notification API must fire at 0ms on achievement unlock");
   assert.match(desktopNotifications.at(-1).title, /Achievement Unlocked/);
   assert.match(desktopNotifications.at(-1).options.body, /DLC Boss/);
+
+  // 12. Verify v53: Local Bridge Status Badge, Dependency Tree filter & "Requiere antes" badges, and Steam Leaderboards tab & upload
+  const depRows = [
+    { apiname: "CHAP_2", name: "Chapter 2", description: "Finish Chapter 2", unlocked: false, percent: 35.0, tier: "Rare", statId: 1, bitIndex: 1, compatibility: { status: "provisional", canUnlock: true } },
+    { apiname: "CHAP_1", name: "Chapter 1", description: "Finish Chapter 1", unlocked: false, percent: 68.0, tier: "Common", statId: 1, bitIndex: 0, compatibility: { status: "provisional", canUnlock: true } }
+  ];
+  let uploadedLbPayload = null;
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    if (url === "/api/status") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          localBridgeConnected: true,
+          accounts: [{
+            id: "acc1",
+            name: "Main",
+            user: "mainuser",
+            connected: true,
+            webSessionReady: true,
+            tokenSource: "environment",
+            tokenAccountMatches: true,
+            isFarming: true,
+            isPaused: false,
+            isCollisionPaused: false,
+            games: [730],
+            gameNames: { 730: "Counter-Strike 2" },
+            runningGames: [730],
+            sleepMode: { enabled: false, start: 3, end: 8 }
+          }],
+          presets: [],
+          timezone: "UTC"
+        })
+      };
+    }
+    if (url.startsWith("/api/leaderboards/entries")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          appid: 730,
+          leaderboardId: 101,
+          topEntries: [{ rank: 1, steamId: "76561198000000001", personaName: "Main", score: uploadedLbPayload?.score || 999999 }],
+          userEntry: { rank: 1, steamId: "76561198000000001", personaName: "Main", score: uploadedLbPayload?.score || 999999 }
+        })
+      };
+    }
+    if (url.startsWith("/api/leaderboards")) {
+      if (opts?.method === "POST" || url === "/api/leaderboards/upload") {
+        uploadedLbPayload = body;
+        return { ok: true, status: 200, json: async () => ({ success: true, newRank: 1, score: body.score, message: "Uploaded score!" }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          appid: 730,
+          leaderboards: [{ id: 101, name: "Global High Score", entryCount: 100 }]
+        })
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ ...response(depRows), readingMethod: "protocol" }) };
+  };
+
+  await w.testUI.load();
+  const bridgeBadge = w.document.getElementById("localBridgeBadge");
+  assert.ok(bridgeBadge);
+  assert.equal(bridgeBadge.classList.contains("online"), true);
+  assert.match(bridgeBadge.textContent, /Local Bridge: Conectado|Local Bridge: Connected/);
+
+  await w.testUI.open(730, "Counter-Strike 2", true, "protocol");
+  // Verify Chapter 2 shows "Requiere antes: Chapter 1" dependency badge
+  const depBadge = w.document.querySelector("#achTableBody .ach-dep-badge.blocked");
+  assert.ok(depBadge);
+  assert.match(depBadge.textContent, /Requiere antes: Chapter 1/);
+
+  // Click Dependency Tree button -> sorts Chapter 1 before Chapter 2
+  const depTreeBtn = w.document.getElementById("btnDependencyTreeFilter");
+  assert.ok(depTreeBtn);
+  depTreeBtn.click();
+  assert.equal(depTreeBtn.classList.contains("active"), true);
+  assert.deepEqual([...w.document.querySelectorAll("#achTableBody .ach-title")].map(e => e.textContent), ["Chapter 1", "Chapter 2"]);
+
+  // Switch to Leaderboards tab and upload a score
+  const tabLbBtn = w.document.getElementById("tabLeaderboardsBtn");
+  assert.ok(tabLbBtn);
+  tabLbBtn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(w.document.getElementById("achLeaderboardsPanel").hidden, false);
+  w.document.getElementById("leaderboardScoreInput").value = "1234567";
+  w.document.getElementById("uploadLeaderboardScoreBtn").click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(uploadedLbPayload?.score, 1234567);
+  assert.match(w.document.getElementById("leaderboardUserRankCard").textContent, /#1 Mundial/);
 });

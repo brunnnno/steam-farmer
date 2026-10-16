@@ -1545,7 +1545,8 @@ textarea:focus {
 }
 
 #achMainPanel:not([hidden]),
-#achStatsPanel:not([hidden]) {
+#achStatsPanel:not([hidden]),
+#achLeaderboardsPanel:not([hidden]) {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -2462,4 +2463,40 @@ body.oled-theme {
     animation: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+.local-bridge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.local-bridge-badge.online {
+  border-color: var(--primary-border);
+  color: var(--primary);
+  background: var(--primary-dim);
+}
+.local-bridge-badge.offline {
+  color: var(--text-muted);
+}
+.ach-dep-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.ach-dep-badge.blocked {
+  color: var(--warning);
+  background: var(--warning-dim);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.ach-dep-badge.satisfied {
+  color: var(--primary);
+  background: var(--primary-dim);
+  border: 1px solid var(--primary-border);
 }

@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=51">
+  <link rel="stylesheet" href="/style.css?v=53">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -84,6 +84,7 @@
           <button id="tabAchievementsBtn" type="button" class="sam-tab-btn active">Achievements</button>
           <button id="tabStatsBtn" type="button" class="sam-tab-btn">Statistics</button>
           <button id="tabToolsBtn" type="button" class="sam-tab-btn">Timed, Timings &amp; Tools</button>
+          <button id="tabLeaderboardsBtn" type="button" class="sam-tab-btn">Leaderboards</button>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
           <button id="undoLastOperationBtn" type="button" class="btn-action-sm" hidden>Undo last change</button>
@@ -109,6 +110,8 @@
             <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10=""><span class="rarity-dot epic"></span>Epic 5-20%</button>
             <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11=""><span class="rarity-dot rare"></span>Rare 20-50%</button>
             <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn"><span class="rarity-dot common"></span>Common &gt;50%</button>
+            <span style="color:rgba(255,255,255,0.2);">|</span>
+            <button class="filter-btn" type="button" id="btnDependencyTreeFilter" data-i18n="dependencyTreeBtn">Árbol de Progresión (Dependency Tree)</button>
           </div>
           
           <div style="display:flex; gap:10px; align-items:center;">
@@ -227,6 +230,39 @@
           </section>
         </div>
       </div>
+
+      <div id="achLeaderboardsPanel" hidden>
+        <div class="sam-stats-toolbar" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 24px; border-bottom:1px solid var(--border);">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <label for="leaderboardSelect" style="font-size:0.82rem; font-weight:700; color:var(--text-muted);">Leaderboard:</label>
+            <select id="leaderboardSelect" aria-label="Select game leaderboard" style="padding:8px 12px; border-radius:8px; background:var(--surface-3); border:1px solid var(--border); color:#fff;"></select>
+            <button id="refreshLeaderboardsBtn" type="button" class="btn-action-sm">Refresh Top 10</button>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input type="number" id="leaderboardScoreInput" placeholder="Score / Time (ms)..." style="width:170px; padding:8px 12px;">
+            <select id="leaderboardMethodSelect" aria-label="Leaderboard upload method" style="padding:8px 12px; border-radius:8px; background:var(--surface-3); border:1px solid var(--border); color:#fff;">
+              <option value="keep_best">Keep Best</option>
+              <option value="force_update">Force Update</option>
+            </select>
+            <button id="uploadLeaderboardScoreBtn" type="button" class="btn-main" data-i18n="uploadLeaderboardBtn">Subir Puntuación al Ranking Mundial de Steam</button>
+          </div>
+        </div>
+        <div style="padding:14px 24px; overflow-y:auto; flex:1;">
+          <div id="leaderboardUserRankCard" class="ach-impact-review" style="margin-bottom:12px; font-size:0.85rem;">Tu puesto actual: selecciona una tabla de clasificación.</div>
+          <div class="ach-table-wrap">
+            <table class="ach-table">
+              <thead>
+                <tr>
+                  <th style="width:80px;">Rank</th>
+                  <th>Player</th>
+                  <th style="width:180px;">Score / Time</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardTopTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -239,6 +275,7 @@
     <button id="btnSoundToggle" type="button" class="acc-pill" title="Mute or unmute achievement unlock sound">Sound: ON</button>
     <button id="btnStreamerMode" type="button" class="acc-pill" title="Hide SteamID and account names on screen">Streamer Mode: OFF</button>
     <button id="btnShowcaseCard" type="button" class="acc-pill" title="Generate downloadable profile showcase card">Showcase Card</button>
+    <span id="localBridgeBadge" class="acc-pill local-bridge-badge offline" title="SteamFarmer Local Bridge Companion status">⚪ Local Bridge: Offline (Modo Nube)</span>
   </nav>
 
   <div class="container">
@@ -562,10 +599,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=51" defer></script>
-  <script src="/achievement-availability.js?v=51" defer></script>
-  <script src="/draft-settings.js?v=51" defer></script>
-  <script src="/achievement-live.js?v=51" defer></script>
-  <script src="/app.js?v=51" defer></script>
+  <script src="/achievement-rarity.js?v=53" defer></script>
+  <script src="/achievement-availability.js?v=53" defer></script>
+  <script src="/draft-settings.js?v=53" defer></script>
+  <script src="/achievement-live.js?v=53" defer></script>
+  <script src="/app.js?v=53" defer></script>
 </body>
 </html>

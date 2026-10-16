@@ -1319,4 +1319,91 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(oct2026Analytics.baseCompletionPercent, 100);
   assert.equal(oct2026Analytics.isCompleted, true, "Game with 100% Base Game unlocked must be marked Completed even with locked DLC");
   assert.equal(oct2026Analytics.isPerfectGame, true);
+
+  // 21. v53 Bloque 1: SteamFarmer Local Bridge Companion & SSE achievement_unlocked event
+  const { buildWindowsToastPowerShell, triggerLocalOverlayNotification } = require("../scripts/steamfarmer-companion");
+  const psToast = buildWindowsToastPowerShell({ title: "Achievement Unlocked", name: "First Blood", description: "Win 1 match", appid: 730 });
+  assert.match(psToast, /ms-winsoundevent:Notification\.Default/);
+  assert.match(psToast, /First Blood/);
+  const simToast = await triggerLocalOverlayNotification({ name: "First Blood", description: "Win 1 match", appid: 730 }, { platform: "darwin" });
+  assert.equal(simToast.ok, true);
+
+  const hbOn = await f.request("/api/local-bridge/heartbeat", { connected: true });
+  assert.equal(hbOn.response.status, 200);
+  assert.equal(hbOn.data.localBridgeConnected, true);
+  const statusWithBridge = await f.request("/api/status");
+  assert.equal(statusWithBridge.data.localBridgeConnected, true);
+  const hbOff = await f.request("/api/local-bridge/heartbeat", { connected: false });
+  assert.equal(hbOff.data.localBridgeConnected, false);
+
+  // 22. v53 Bloque 2: AchievementDependencyGraph (DAG) — never schedules advanced achievements before prerequisites
+  const { AchievementDependencyGraph } = require("../lib/achievement-dependencies");
+  const scrambledAchievements = [
+    { apiname: "PLATINUM_TROPHY", name: "Platinum Master", description: "Unlock all achievements", unlocked: false, percent: 1.2 },
+    { apiname: "FINAL_BOSS", name: "Defeat the Final Boss", description: "Beat the game", unlocked: false, percent: 18.0 },
+    { apiname: "KILL_1000", name: "Slayer III", description: "Kill 1,000 enemies", unlocked: false, percent: 5.0, progressDetails: { statName: "ENEMY_KILLS", maximum: 1000 } },
+    { apiname: "KILL_100", name: "Slayer II", description: "Kill 100 enemies", unlocked: false, percent: 25.0, progressDetails: { statName: "ENEMY_KILLS", maximum: 100 } },
+    { apiname: "KILL_10", name: "Slayer I", description: "Kill 10 enemies", unlocked: false, percent: 70.0, progressDetails: { statName: "ENEMY_KILLS", maximum: 10 } },
+    { apiname: "CHAP_3", name: "Chapter 3", description: "Complete Chapter 3", unlocked: false, percent: 60.0 },
+    { apiname: "CHAP_2", name: "Chapter 2", description: "Complete Chapter 2", unlocked: false, percent: 40.0 },
+    { apiname: "CHAP_1", name: "Chapter 1", description: "Complete Chapter 1", unlocked: false, percent: 35.0 },
+    { apiname: "PROLOGUE", name: "Prologue", description: "Complete the tutorial prologue", unlocked: false, percent: 90.0 }
+  ];
+  const dag = new AchievementDependencyGraph(scrambledAchievements);
+  const topoSorted = dag.topologicalSort();
+  const idxOf = api => topoSorted.findIndex(x => x.apiname === api);
+  assert.ok(idxOf("PROLOGUE") < idxOf("FINAL_BOSS"), "Prologue must come before Final Boss");
+  assert.ok(idxOf("FINAL_BOSS") < idxOf("PLATINUM_TROPHY"), "Final Boss must come before Platinum");
+  assert.ok(idxOf("CHAP_1") < idxOf("CHAP_2"), "Chapter 1 must come before Chapter 2 even if Chapter 2 has higher %");
+  assert.ok(idxOf("CHAP_2") < idxOf("CHAP_3"), "Chapter 2 must come before Chapter 3");
+  assert.ok(idxOf("KILL_10") < idxOf("KILL_100"), "Kill 10 must come before Kill 100 (shared stat ENEMY_KILLS)");
+  assert.ok(idxOf("KILL_100") < idxOf("KILL_1000"), "Kill 100 must come before Kill 1000 (shared stat ENEMY_KILLS)");
+
+  const annotated = dag.annotateAchievements();
+  const kill100Node = annotated.find(a => a.apiname === "KILL_100");
+  assert.equal(kill100Node.dependencyInfo.blockedByDependency, true);
+  assert.match(kill100Node.dependencyInfo.requiresText, /Requiere antes: Slayer I/);
+
+  // 23. v53 Bloque 3: Steam Global Leaderboards (/api/leaderboards, /api/leaderboards/entries, /api/leaderboards/upload)
+  const lbListRes = await f.request("/api/leaderboards?accountId=user2&appid=34830");
+  assert.equal(lbListRes.response.status, 200);
+  assert.ok(Array.isArray(lbListRes.data.leaderboards) && lbListRes.data.leaderboards.length >= 3);
+
+  const lbUploadRes = await f.request("/api/leaderboards/upload", {
+    accountId: "user2",
+    appid: 34830,
+    leaderboardId: 101,
+    score: 1500000,
+    scoreMethod: "keep_best"
+  });
+  assert.equal(lbUploadRes.response.status, 200);
+  assert.equal(lbUploadRes.data.success, true);
+  assert.equal(lbUploadRes.data.newRank, 1);
+  assert.equal(lbUploadRes.data.score, 1500000);
+
+  // Lower score with keep_best must keep 1500000
+  const lbKeepBestRes = await f.request("/api/leaderboards/upload", {
+    accountId: "user2",
+    appid: 34830,
+    leaderboardId: 101,
+    score: 500000,
+    scoreMethod: "keep_best"
+  });
+  assert.equal(lbKeepBestRes.data.score, 1500000);
+  assert.equal(lbKeepBestRes.data.scoreChanged, false);
+
+  // Lower score with force_update must overwrite to 500000
+  const lbForceRes = await f.request("/api/leaderboards/upload", {
+    accountId: "user2",
+    appid: 34830,
+    leaderboardId: 101,
+    score: 500000,
+    scoreMethod: "force_update"
+  });
+  assert.equal(lbForceRes.data.score, 500000);
+  assert.equal(lbForceRes.data.scoreChanged, true);
+
+  const lbEntriesRes = await f.request("/api/leaderboards/entries?accountId=user2&appid=34830&leaderboardId=101");
+  assert.equal(lbEntriesRes.response.status, 200);
+  assert.equal(lbEntriesRes.data.userEntry.score, 500000);
 });
