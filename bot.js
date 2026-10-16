@@ -184,6 +184,30 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
   }));
   let closing = false;
+  const sseListeners = new Set();
+  function buildStatusPayload() {
+    return {
+      accounts: cfg.accounts.map(publicAccount),
+      demoCatalog: DEMO_CATALOG,
+      timezone: cfg.timezone,
+      webhookConfigured: Boolean(cfg.discordWebhook),
+      presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })),
+      achievementHistoryStorage: journal.status(),
+      achievementProbes: stateFor(environmentAccountId).achievementProbes || null,
+      achievementCandidates: stateFor(environmentAccountId).achievementCandidates || null,
+      achievementPersistence: stateFor(environmentAccountId).achievementPersistence || null,
+      capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode: 'individual_and_reviewed', achievementBatchWrite: true, achievementRemove: true, achievementSelectionLimit: 8192, achievementBulkUnlockAll: true, achievementBulkLockAll: true, achievementBulkLimit: 8192, sharedCounterPreview: true, sharedCounterWrite: true, statisticsRead: true, statisticsWrite: true, timedModifications: true, copyUserTimings: true, jsonImportExport: true, analyticsAndUndo: true, multiGameBulk: true }
+    };
+  }
+  function emitStatusChange() {
+    if (!sseListeners.size) return;
+    try {
+      const payload = buildStatusPayload();
+      for (const listener of sseListeners) {
+        try { listener(payload); } catch {}
+      }
+    } catch {}
+  }
   function stateFor(id) {
     if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], inspectPreviousGames: null, inspectingAppId: null, cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', webSessionVersion: 0, linkCheckStarted: false, lastWebRefresh: 0, profileName: '', tokenAccountMatches: false, steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
     const state=states.get(id);if(state.pausedInitialized!==true){state.isPaused=Boolean(cfg.accounts.find(a=>a.id===id)?.paused);state.pausedInitialized=true;}return state;
@@ -223,6 +247,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       if (games.length && !st.isFarming) st.sessionStartTime = Date.now();
       if (!games.length) st.sessionStartTime = null;
       st.isFarming = games.length > 0;
+      emitStatusChange();
     } catch { st.isFarming = false; st.sessionStartTime = null; st.error = 'Could not update Steam activity.'; }
   }
   async function webhook(title, description, extraEmbed = {}) {
@@ -565,7 +590,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         data = await readBody(req);
       }
       if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
-      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action','/api/game/inspect-start','/api/game/inspect-stop'].includes(url.pathname))releaseResource=budget.acquire('small');
+      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action','/api/game/inspect-start','/api/game/inspect-stop','/api/points/claim-daily'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
@@ -577,7 +602,69 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         for (const id of attempts.keys()) cancelAttempt(id);
         sessions.clear(); return json(res, 200, { success: true });
       }
-      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, { accounts: cfg.accounts.map(publicAccount), demoCatalog: DEMO_CATALOG, timezone: cfg.timezone, webhookConfigured: Boolean(cfg.discordWebhook), presets: Object.entries(PRESETS).map(([key, p]) => ({ key, name: p.name, count: p.games.length })), achievementHistoryStorage:journal.status(), achievementProbes:stateFor(environmentAccountId).achievementProbes || null, achievementCandidates:stateFor(environmentAccountId).achievementCandidates || null, achievementPersistence:stateFor(environmentAccountId).achievementPersistence || null, capabilities: { achievementRead: true, achievementWrite: true, achievementWriteMode:'individual_and_reviewed', achievementBatchWrite:true,achievementRemove:true,achievementSelectionLimit:8192,achievementBulkUnlockAll:true,achievementBulkLockAll:true,achievementBulkLimit:8192,sharedCounterPreview:true,sharedCounterWrite:true,statisticsRead:true,statisticsWrite:true,timedModifications:true,copyUserTimings:true,jsonImportExport:true,analyticsAndUndo:true,multiGameBulk:true } });
+      if (url.pathname === '/api/status' && req.method === 'GET') return json(res, 200, buildStatusPayload());
+      if (url.pathname === '/api/events' && req.method === 'GET') {
+        const accountId = url.searchParams.get('account') || url.searchParams.get('accountId') || '';
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no'
+        });
+        res.write(':\n\n');
+        if (accountId && !cfg.accounts.some(a => a.id === accountId)) {
+          res.write('data: {"error":"no_bot"}\n\n');
+          return res.end();
+        }
+        const sendUpdate = (payload = buildStatusPayload()) => {
+          try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch {}
+        };
+        sendUpdate();
+        if (url.searchParams.get('once') === '1') return res.end();
+        sseListeners.add(sendUpdate);
+        const hb = setInterval(() => {
+          try { res.write(':\n\n'); } catch {}
+        }, 20000);
+        hb.unref?.();
+        req.on('close', () => {
+          clearInterval(hb);
+          sseListeners.delete(sendUpdate);
+        });
+        return;
+      }
+      if (url.pathname === '/api/points/claim-daily' && req.method === 'POST') {
+        const acc = getAccount(req, url, data), st = stateFor(acc.id);
+        if (!st.connected || !st.webCookies) {
+          return json(res, 200, { ok: false, error: 'not_connected', message: 'Connect your Steam account and web session first.' });
+        }
+        const sessionId = (st.webCookies.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
+        const claimUrl = 'https://store.steampowered.com/points/claimdailypromotion';
+        try {
+          let resultJson = {};
+          if (typeof options.pointsClaimer === 'function') {
+            resultJson = await options.pointsClaimer({ url: claimUrl, cookies: st.webCookies, sessionId, accountId: acc.id });
+          } else {
+            const resp = await remote(claimUrl, {
+              method: 'POST',
+              headers: {
+                Cookie: st.webCookies,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Referer: 'https://store.steampowered.com/points/shop'
+              },
+              body: new URLSearchParams({ sessionid: sessionId }).toString()
+            });
+            resultJson = JSON.parse(resp.body || '{}');
+          }
+          const ok = resultJson?.success === 1;
+          return json(res, 200, {
+            ok,
+            data: resultJson,
+            message: ok ? 'Daily Points Shop item claimed successfully!' : 'No free daily Points Shop promotion available right now.'
+          });
+        } catch (e) {
+          return json(res, 200, { ok: false, error: e.message || 'claim_failed', message: 'Could not claim daily Points Shop item.' });
+        }
+      }
       if (url.pathname === '/api/steam/login' && req.method === 'POST') return json(res, 200, await startLogin(data, token));
       if (url.pathname === '/api/steam/login-status' && req.method === 'GET') return json(res, 200, attemptView(findAttempt(url.searchParams.get('attemptId'), token)));
       if (url.pathname === '/api/steam/cancel' && req.method === 'POST') { findAttempt(data.attemptId, token); cancelAttempt(data.attemptId); return json(res, 200, { success: true }); }
@@ -615,7 +702,10 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         })().finally(()=>percentagePending.delete(key)));
         return json(res,200,await percentagePending.get(key));
       }
-      if (url.pathname === '/api/achievements' && req.method === 'GET') {
+      const achPathMatch = url.pathname.match(/^\/api\/achievements\/(\d+)$/);
+      if ((url.pathname === '/api/achievements' || achPathMatch) && req.method === 'GET') {
+        if (achPathMatch && !url.searchParams.get('appid')) url.searchParams.set('appid', achPathMatch[1]);
+        if (!url.searchParams.get('accountId') && url.searchParams.get('account')) url.searchParams.set('accountId', url.searchParams.get('account'));
         rate(`ach:${token}`, 40);
         if (url.searchParams.get('accountId') === 'demo') {
           const id = appId(url.searchParams.get('appid'));

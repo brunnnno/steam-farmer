@@ -684,7 +684,8 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
 
   assert.equal(w.document.querySelectorAll(".landing-feature-card").length, 6);
   assert.equal(w.document.querySelectorAll(".floating-card").length, 3);
-  assert.equal(w.document.querySelectorAll(".glow-blob").length, 3);
+  assert.equal(w.document.querySelectorAll(".glow-blob").length, 0);
+  assert.equal(w.document.querySelectorAll(".landing-trust-row .trust-item").length, 4);
   assert.ok(w.document.querySelector(".corner-toolbar #langSelect"));
   assert.ok(w.document.querySelector(".corner-toolbar #btnOledTheme"));
   assert.ok(w.document.querySelector(".corner-toolbar #btnSoundToggle"));
@@ -846,8 +847,49 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.ok(w.document.querySelector('meta[name="twitter:card"]'));
   assert.ok(w.document.querySelector('link[rel="dns-prefetch"][href="https://community.cloudflare.steamstatic.com"]'));
 
+  // 9. Verify v50 Overhaul: SteamDB Achievement Table (#achTableBody), Column Sorting, Achievement Sets (#achSetsNav), Badge Crafter Panel & Claim Daily Points
+  const setRows = [
+    { apiname: "BASE_1", name: "Zulu Base", description: "Base desc", unlocked: false, percent: 55.0, tier: "Common", set_id: "base", set_name: "Base Game", unlockTimestamp: 0 },
+    { apiname: "DLC_1", name: "Alpha DLC", description: "DLC desc", unlocked: true, percent: 4.0, tier: "Mythic", set_id: "dlc_1", set_name: "Expansion Pack 1", unlockTimestamp: 1700000500 }
+  ];
+  w.fetch = async (url, opts) => {
+    if (url === "/api/points/claim-daily") {
+      return { ok: true, status: 200, json: async () => ({ ok: true, message: "Daily Points Shop item claimed!" }) };
+    }
+    return { ok: true, status: 200, json: async () => response(setRows) };
+  };
+  await w.testUI.open(730, "Counter-Strike 2", true, "protocol");
+  assert.ok(w.document.querySelector(".ach-table-wrap table.ach-table tbody#achTableBody"));
+  assert.equal(w.document.getElementById("achSetsNav").hidden, false);
+  assert.equal(w.document.querySelectorAll("#achSetsNav .ach-set-btn").length, 3);
+
+  // Click column header to sort by Achievement Name ascending ('Alpha DLC' first, 'Zulu Base' second)
+  const thName = w.document.querySelector('.ach-table thead th[data-sort="name"]');
+  assert.ok(thName);
+  thName.click();
+  assert.equal(w.document.querySelector('.ach-table thead th[data-sort="name"]').classList.contains("sort-asc"), true);
+  assert.deepEqual([...w.document.querySelectorAll("#achTableBody .ach-title")].map(e => e.textContent), ["Alpha DLC", "Zulu Base"]);
+
+  // Filter by DLC set button
+  const dlcSetBtn = w.document.querySelector('#achSetsNav .ach-set-btn[data-set="dlc_1"]');
+  dlcSetBtn.click();
+  assert.equal(w.document.querySelectorAll("#achTableBody tr.ach-item").length, 1);
+  assert.equal(w.document.querySelector("#achTableBody .ach-title").textContent, "Alpha DLC");
+  w.testUI.close();
+
+  // Verify Badge Crafter <details> panel and Claim Daily Points button
+  assert.ok(w.document.querySelector("details.badge-crafter-panel #craftableBadgesCount"));
+  const claimPointsBtn = w.document.getElementById("claimDailyPointsBtn");
+  assert.ok(claimPointsBtn);
+  claimPointsBtn.click();
+  await new Promise(r => setImmediate(r));
+  assert.match(w.document.getElementById("discoveryQueueStatus").textContent, /Daily Points Shop item claimed/);
+
   const fullCss = fs.readFileSync(path.join(__dirname, "../public/style.css"), "utf8");
   assert.match(fullCss, /max-width:\s*1720px/);
   assert.match(fullCss, /repeat\(auto-fill,\s*minmax\(240px,\s*1fr\)\)/);
   assert.match(fullCss, /\.corner-toolbar/);
+  assert.match(fullCss, /\.utility-bar/);
+  assert.match(fullCss, /\.ach-table/);
+  assert.match(fullCss, /\.landing-trust-row/);
 });

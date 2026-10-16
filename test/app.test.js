@@ -1162,4 +1162,21 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(fastWriteRes.response.status, 200);
   assert.equal(fastWriteRes.data.outcome, "confirmed");
   assert.ok(writeDurationMs < 100, `Direct achievement write took ${writeDurationMs.toFixed(1)}ms (expected < 100ms)`);
+
+  // 18. v50 SSE (/api/events), Hover Prefetch Alias (/api/achievements/:appid), and Points Shop Daily Claimer (/api/points/claim-daily)
+  const sseRes = await fetch(f.base + "/api/events?account=user2&once=1", { headers: { Cookie: autoCookie } });
+  assert.equal(sseRes.status, 200);
+  assert.match(sseRes.headers.get("content-type"), /text\/event-stream/);
+  const sseBody = await sseRes.text();
+  assert.match(sseBody, /^:\n\ndata: \{/);
+  assert.match(sseBody, /"user2"/);
+
+  const prefetchRes = await f.request("/api/achievements/34830?account=user2&method=protocol");
+  assert.equal(prefetchRes.response.status, 200);
+  assert.equal(prefetchRes.data.achievements.length, 3);
+
+  f.app.states.get("user2").webCookies = "sessionid=pts_sess_99; steamLoginSecure=1";
+  const pointsDisconnected = await f.request("/api/points/claim-daily", { accountId: "user2" });
+  assert.equal(pointsDisconnected.response.status, 200);
+  assert.equal(typeof pointsDisconnected.data.ok, "boolean");
 });

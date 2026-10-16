@@ -4,6 +4,10 @@ let csrf = '', activeAccountId = sessionStorage.getItem('sf_account') || '', acc
 let currentAchList = [], currentStatsList = [], currentAchAppId = null, achAccountId = null, currentAchGameName = '', currentAchMethod = 'web';
 let achievementPage=0,achievementRevision='',liveContext=null,currentSamTab='achievements';
 const modifiedStats = new Map();
+const achCache = new Map();
+let achSortState = { col: 'default', dir: 'asc' };
+let currentAchSet = 'all';
+let eventSource = null, sseFailures = 0;
 const observedAchievementChanges=[];
 const seenTimedEvents = new Set();
 let seenTimedEventsInitialized = false;
@@ -33,6 +37,9 @@ const i18n = {
     lockAllBtn: "Bloquear todo",
     quickSellBtn: "Venta rápida de cromos",
     exploreQueueBtn: "Explorar Discovery Queue",
+    claimDailyPointsBtn: "Reclamar Puntos Diarios",
+    startPlatinumBtn: "Modo Platino Realista",
+    craftBadgeBtn: "Fabricar Insignia (5/5 cromos)",
     liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla",
     demoBannerEyebrow: "MODO DEMOSTRACIÓN INTERACTIVO",
     demoBannerTitle: "Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo",
@@ -91,6 +98,9 @@ const i18n = {
     lockAllBtn: "Lock all",
     quickSellBtn: "Quick-Sell Cards on Market",
     exploreQueueBtn: "Explore Discovery Queue (3x)",
+    claimDailyPointsBtn: "Claim Daily Points",
+    startPlatinumBtn: "Realistic Platinum Mode",
+    craftBadgeBtn: "Craft Badge (5/5 sets)",
     liveActionNotice: "Live action: Connect your Steam account to synchronize it",
     demoBannerEyebrow: "INTERACTIVE SHOWCASE · GUEST DEMO MODE",
     demoBannerTitle: "Demo Mode: Connect your Steam account to apply changes live",
@@ -410,6 +420,7 @@ async function loadStatus() {
     draftSettings.apply('sleepEnabled',Boolean(active.sleepMode?.enabled));
     for (const [id,key] of [['sleepStart','start'], ['sleepEnd','end']])draftSettings.apply(id,active.sleepMode?.[key]??'');
     renderGames(active.games);
+    if (!eventSource && sseFailures < 3) connectSSE();
   } catch (e) { if(authSerial===loginSerial&&csrf)notice(e.message); } finally { statusBusy = false;if(csrf&&(statusQueued||authSerial!==loginSerial)){statusQueued=false;queueMicrotask(loadStatus);} }
 }
 let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '',cardsSnapshot='',cardsAccount='';
@@ -702,17 +713,24 @@ function renderDemoCatalog() {
       'card-banner',
       [`https://cdn.akamai.steamstatic.com/steam/apps/${id}/header.jpg`, `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/library_hero.jpg`]
     );
-    art.append(fallback, bannerImg);
+    art.append(fallback, bannerImg, element('div', `#${id}`, 'card-appid'));
     card.append(art);
     const content = element('div', undefined, 'card-content');
     const metaRow = element('div', undefined, 'card-header-info');
-    metaRow.append(element('div', `#${id}`, 'card-appid'), element('span', item.achSummary || '★ 2/4 Achievements', 'card-state active'));
+    metaRow.append(element('span', item.achSummary || '2 / 4 achievements · 50%', 'card-state active'));
     content.append(element('div', title, 'card-title'), metaRow, createExternalBadgesNode(id));
     const actions = element('div', undefined, 'card-actions');
-    actions.append(
-      button('Achievements', () => openAchModal(id, title, false, 'web', 'achievements'), 'btn-card-ach'),
+    const menu = element('details', undefined, 'control-menu');
+    menu.append(element('summary', '⋯'));
+    const menuContent = element('div', undefined, 'control-menu-content');
+    menuContent.append(
       button('Stats', () => openAchModal(id, title, false, 'web', 'stats'), 'btn-action-sm btn-card-stats'),
       button('Timed & Tools', () => openAchModal(id, title, false, 'web', 'tools'), 'btn-action-sm')
+    );
+    menu.append(menuContent);
+    actions.append(
+      button('Achievements', () => openAchModal(id, title, false, 'web', 'achievements'), 'btn-card-ach btn-card-primary'),
+      menu
     );
     content.append(actions);
     card.append(content);
@@ -752,6 +770,9 @@ async function runClusterAction(clusterAction) {
 }
 
 
+function applyI18n(lang) {
+  return applyLanguage(lang);
+}
 function applyLanguage(lang) {
   currentLang = lang === "es" ? "es" : "en";
   try { localStorage.setItem("sf_lang", currentLang); } catch {}
@@ -790,6 +811,10 @@ function applyLanguage(lang) {
   if ($("landingHeroSubtitle")) $("landingHeroSubtitle").textContent = t("landingHeroSubtitle");
   if ($("btnLandingConnect")) $("btnLandingConnect").textContent = t("landingConnectBtn");
   if ($("btnLandingLiveDemo")) $("btnLandingLiveDemo").textContent = t("landingLiveDemoBtn");
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  }
   for (let i = 1; i <= 6; i++) {
     if ($("featTitle" + i)) $("featTitle" + i).textContent = t("featTitle" + i);
     if ($("featDesc" + i)) $("featDesc" + i).textContent = t("featDesc" + i);
@@ -821,7 +846,7 @@ function applyOledTheme(enabled) {
   oledTheme = Boolean(enabled);
   try { localStorage.setItem("sf_theme", oledTheme ? "oled" : "midnight"); } catch {}
   document.body.classList.toggle("oled-theme", oledTheme);
-  if ($("btnOledTheme")) $("btnOledTheme").textContent = oledTheme ? "🌑 OLED: ON" : "🌙 OLED: OFF";
+  if ($("btnOledTheme")) $("btnOledTheme").textContent = oledTheme ? "OLED: ON" : "OLED: OFF";
 }
 
 function toggleOledTheme() {
@@ -839,14 +864,14 @@ function setLibraryViewMode(mode) {
 function toggleSoundMute() {
   soundMuted = !soundMuted;
   try { localStorage.setItem('sf_sound_muted', soundMuted ? '1' : '0'); } catch {}
-  if ($('btnSoundToggle')) $('btnSoundToggle').textContent = soundMuted ? '🔇 Sound: OFF' : '🔊 Sound: ON';
+  if ($('btnSoundToggle')) $('btnSoundToggle').textContent = soundMuted ? 'Sound: OFF' : 'Sound: ON';
 }
 
 function toggleStreamerMode() {
   streamerMode = !streamerMode;
   try { localStorage.setItem('sf_streamer_mode', streamerMode ? '1' : '0'); } catch {}
   document.body.classList.toggle('streamer-mode', streamerMode);
-  if ($('btnStreamerMode')) $('btnStreamerMode').textContent = streamerMode ? '🕵️ Streamer Mode: ON' : '🕵️ Streamer Mode: OFF';
+  if ($('btnStreamerMode')) $('btnStreamerMode').textContent = streamerMode ? 'Streamer Mode: ON' : 'Streamer Mode: OFF';
   tabsSnapshot = '';
   if (active) {
     const dispName = streamerMode ? maskText(active.name, 2) : active.name;
@@ -976,13 +1001,36 @@ function renderGames(games) {
     const art=element('div',undefined,'game-art'),fallback=element('div',undefined,'game-art-placeholder');fallback.setAttribute('aria-hidden','true');
     fallback.append(element('span',title.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(),'game-art-monogram'),element('span',title,'game-art-name'));
     const banner=image(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`,'card-banner',[`https://cdn.akamai.steamstatic.com/steam/apps/${id}/header.jpg`,`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/library_hero.jpg`]);
-    art.append(fallback,banner);card.append(art);
+    art.append(fallback,banner,element('div',`#${id}`,'card-appid'));card.append(art);
     const content = element('div',undefined,'card-content');
     const metaRow=element('div',undefined,'card-header-info');
-    metaRow.append(element('div',`#${id}`,'card-appid'),element('span',isRunning?'● Running in Steam':active?.isPaused?'Standby':'Ready','card-state'+(isRunning?' active':'')));
+    metaRow.append(element('span',isRunning?'Running in Steam':active?.isPaused?'Standby':'Ready','card-state'+(isRunning?' active':'')));
     content.append(element('div',title,'card-title'),metaRow,createExternalBadgesNode(id));
-    const actions = element('div',undefined,'card-actions');const menu=element('details',undefined,'control-menu');menu.append(element('summary','Options'));const menuContent=element('div',undefined,'control-menu-content');menuContent.append(button('Timed & Tools',()=>openAchModal(id,title,false,active?.connected?'auto':'web','tools'),'btn-action-sm'),button('Remove',()=>removeGame(id),'btn-card-remove'));menu.append(menuContent);actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web','achievements'),'btn-card-ach'),button('Stats',()=>openAchModal(id,title,false,active?.connected?'auto':'web','stats'),'btn-action-sm btn-card-stats'),menu);
-    content.append(actions); card.append(content); cards.push(card);
+    const actions = element('div',undefined,'card-actions');
+    const menu=element('details',undefined,'control-menu');
+    menu.append(element('summary','⋯'));
+    const menuContent=element('div',undefined,'control-menu-content');
+    menuContent.append(
+      button('Stats',()=>openAchModal(id,title,false,active?.connected?'auto':'web','stats'),'btn-action-sm btn-card-stats'),
+      button('Timed & Tools',()=>openAchModal(id,title,false,active?.connected?'auto':'web','tools'),'btn-action-sm'),
+      button('Inspect In-Game',()=>{
+        if(!activeAccountId)return;
+        api('/api/game/inspect-start',{accountId:activeAccountId,appid:id,stealth:false}).then(()=>notice(`Inspecting ${title} (#${id}) in Steam.`)).catch(e=>notice(e.message));
+      },'btn-action-sm'),
+      button('Remove',()=>removeGame(id),'btn-card-remove')
+    );
+    menu.append(menuContent);
+    actions.append(button('Achievements',()=>openAchModal(id,title,false,active?.connected?'auto':'web','achievements'),'btn-card-ach btn-card-primary'),menu);
+    content.append(actions); card.append(content);
+    card.addEventListener('mouseenter', () => {
+      const cKey = `${currentAccKey()}:${id}`;
+      if (!active || !id || achCache.has(cKey)) return;
+      fetch(`/api/achievements/${id}?account=${encodeURIComponent(activeAccountId)}`, { headers: { 'x-csrf': csrf } })
+        .then(r => r && r.ok ? r.json() : null)
+        .then(data => { if (data && Array.isArray(data.achievements)) achCache.set(cKey, data); })
+        .catch(() => {});
+    }, { passive: true });
+    cards.push(card);
   }
   grid.replaceChildren(...cards);
 }
@@ -1042,6 +1090,7 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
   if (currentAchAppId !== id || achAccountId !== currentAccKey() || $('achReadMode').value !== method) {
     observedAchievementChanges.length=0;renderObservedChanges();
     filterStatus='all'; filterRarity='all'; filterCompatibility='all';currentSort='default'; searchQuery='';
+    achSortState={col:'default',dir:'asc'};currentAchSet='all';
     $('achCompatibilityFilter').value='all';
     $('achSortSelect').value='default'; $('achSearchInput').value='';
     switchSamTab(initialTab||'achievements');
@@ -1063,7 +1112,14 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
     currentAchMethod='cached';currentAchList=AchievementRarity.normalizeRows(JSON.parse(preview.text).achievements||[]);
     $('achReadMessage').textContent='Previous reading — checking Steam now. Activation is unavailable until verification finishes.';
     $('achPrivacyWarning').style.display='block';$('achievementSource').textContent='Previous reading · Updating…';renderAchModal();
-  }else if(preview)achievementPreviews.delete(cacheKey);
+  }else if(preview){
+    achievementPreviews.delete(cacheKey);
+  }else if(!forceRefresh&&achCache.has(`${account}:${id}`)){
+    const prefetched=achCache.get(`${account}:${id}`);
+    currentAchMethod='cached';
+    currentAchList=AchievementRarity.normalizeRows((prefetched.achievements||[]).map(a=>({...a,name:String(a.name||a.apiname||'Achievement'),description:String(a.description||''),unlocked:typeof a.unlocked==='boolean'?a.unlocked:null})));
+    renderAchModal();
+  }
   $('gameRequirements').hidden=false;$('gameRequirements').open=false;requirementsContext={id,serial,account,requested:false};$('gameRequirementsContent').replaceChildren(element('p','Open this section to read game integration requirements.'));
   try {
     const data=await api(`/api/achievements?accountId=${encodeURIComponent(account)}&appid=${id}${forceRefresh?'&refresh=1':'&live=1'}${method!=='web'?'&method='+encodeURIComponent(method):''}`);
@@ -1075,6 +1131,7 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
     rarityWarning=data.rarityMessage|| (AchievementRarity.uniformHundred(rawRows.map(a=>a.percent))?'Steam returned 100% for every achievement. Rarity is temporarily unverified.':'');
     currentAchList=AchievementRarity.normalizeRows(rawRows.map(a=>({...a,name:String(a.name||a.apiname||'Achievement'),description:String(a.description||''),unlocked:typeof a.unlocked==='boolean'?a.unlocked:null})));
 
+    achCache.set(`${account}:${id}`,{achievements:currentAchList,statistics:currentStatsList});
     rememberAchievements(cacheKey,{achievements:currentAchList});
     $('achReadMessage').textContent=data.message || '';
     $('achPrivacyWarning').style.display=data.message ? 'block':'none';
@@ -1143,8 +1200,28 @@ function setFilter(type,val) {
   if(type==='rarity'&&filterRarity!=='all'&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
 let percentageRequest=null,percentageFetchedSerial=-1,rarityWarning='';
+function groupAchievementsBySet(list) {
+  const sets = new Map();
+  for (const ach of list) {
+    const setId = ach.set_id || 'base';
+    if (!sets.has(setId)) sets.set(setId, { id: setId, name: ach.set_name || (setId === 'base' ? 'Base Game' : setId), achievements: [] });
+    sets.get(setId).achievements.push(ach);
+  }
+  return [...sets.values()];
+}
+function sortAchievementTable(col) {
+  if (!['name', 'pct', 'date'].includes(col)) return;
+  if (achSortState.col === col) {
+    achSortState.dir = achSortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    achSortState = { col, dir: col === 'pct' || col === 'date' ? 'desc' : 'asc' };
+  }
+  achievementPage = 0;
+  renderAchModal(0);
+  if (col === 'pct' && currentAchList.some(a => a.percent === null)) loadAchievementPercentages();
+}
 function setSort(val) {
-  achievementPage=0;currentSort=val;renderAchModal();
+  achievementPage=0;currentSort=val;achSortState={col:'default',dir:'asc'};renderAchModal();
   if(['percentage_desc','rarity_common','rarity_rare'].includes(val)&&currentAchList.some(a=>a.percent===null))loadAchievementPercentages();
 }
 async function loadAchievementPercentages(force=false){
@@ -1171,7 +1248,7 @@ function onSearchInput(val) { achievementPage=0;searchQuery=val.trim().toLowerCa
 function renderAchModal(page=achievementPage) {
   const liveProto=isLiveProtocol();
   const rarityMissing=currentAchList.filter(a=>a.percent===null).length,rarityLoading=percentageRequest===achSerial+':'+achAccountId+':'+currentAchAppId;
-  const rarityRelevant=filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort);
+  const rarityRelevant=filterRarity!=='all'||['percentage_desc','rarity_common','rarity_rare'].includes(currentSort)||achSortState.col==='pct';
   $('achRarityMessage').hidden=!rarityWarning&&!rarityLoading&&(!rarityRelevant||!rarityMissing);
   $('retryAchievementRarity').hidden=!currentAchList.length||!rarityMissing&&!rarityWarning;$('retryAchievementRarity').disabled=rarityLoading||experimentBusy;
   $('achRarityMessage').textContent=rarityWarning||(rarityLoading?'Loading community unlock percentages from Steam…':rarityMissing===currentAchList.length?'Steam rarity percentages are unavailable. Unknown rarity is not treated as 0%.':`${rarityMissing} achievements have unknown rarity and ${filterRarity!=='all'?'are excluded from rarity filters':'remain last in percentage sorting'}.`);
@@ -1184,62 +1261,151 @@ function renderAchModal(page=achievementPage) {
   const remaining=[...availability.values()].filter((v,i)=>currentAchList[i].unlocked!==true),count=status=>remaining.filter(v=>v.status===status).length;
   $('achCompatibilitySummary').textContent=liveProto?'':(currentAchList.length?(remaining.length===0?'All achievements are already unlocked.':`Pending: ${remaining.filter(v=>v.canAttempt).length} eligible to attempt · ${count('protected')} protected · ${count('unsupported')} unsupported · ${count('unknown')} unknown · ${count('rejected')+count('review')} need review. Eligibility is provisional; only a fresh Steam read can confirm a write.`):'');
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===(b.dataset.filter==='status'?filterStatus:filterRarity)));
-  let list=currentAchList.filter(a=>(!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<20||filterRarity==='rare'&&a.percent>=20&&a.percent<=50||filterRarity==='common'&&a.percent>50)));
+
+  // Achievement Sets (Steam Oct 2026 update: Base Game blue + DLC purple)
+  const sets = groupAchievementsBySet(currentAchList);
+  const setsNav = $('achSetsNav');
+  if (setsNav) {
+    if (sets.length > 1) {
+      setsNav.hidden = false;
+      const setBtns = [
+        button('All Sets', () => { currentAchSet = 'all'; achievementPage = 0; renderAchModal(0); }, 'ach-set-btn' + (currentAchSet === 'all' ? ' active' : ''))
+      ];
+      setBtns[0].dataset.set = 'all';
+      for (const s of sets) {
+        const cls = 'ach-set-btn ' + (s.id === 'base' ? 'set-blue' : 'set-purple') + (currentAchSet === s.id ? ' active' : '');
+        const b = button(s.name, () => { currentAchSet = s.id; achievementPage = 0; renderAchModal(0); }, cls);
+        b.dataset.set = s.id;
+        setBtns.push(b);
+      }
+      setsNav.replaceChildren(...setBtns);
+    } else {
+      setsNav.hidden = true;
+      setsNav.replaceChildren();
+    }
+  }
+
+  let list=currentAchList.filter(a=>(currentAchSet==='all'||(a.set_id||'base')===currentAchSet) && (!searchQuery || (a.name+' '+a.description).toLowerCase().includes(searchQuery)) && (filterStatus==='all'||filterStatus==='unlocked'&&a.unlocked===true||filterStatus==='locked'&&a.unlocked===false) && (filterRarity==='all'||a.percent!==null && (filterRarity==='mythic'&&a.percent<5||filterRarity==='epic'&&a.percent>=5&&a.percent<20||filterRarity==='rare'&&a.percent>=20&&a.percent<=50||filterRarity==='common'&&a.percent>50)));
   if(currentSort==='alpha') list.sort((a,b)=>a.name.localeCompare(b.name));
   list=list.filter(a=>{const v=availability.get(a);return filterCompatibility==='all'||filterCompatibility==='attemptable'&&v.canAttempt||filterCompatibility==='unavailable'&&a.unlocked===false&&!['unknown','review'].includes(v.status)&&!v.canAttempt||filterCompatibility==='unknown'&&(v.status==='unknown'||v.status==='review');});
   if(['rarity_rare','rarity_common','percentage_desc'].includes(currentSort)) list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*(currentSort==='rarity_rare'?1:-1));
   if(currentSort==='locked_first'||currentSort==='unlocked_first'){const rank=a=>a.unlocked===null?2:(a.unlocked===(currentSort==='unlocked_first')?0:1);list.sort((a,b)=>rank(a)-rank(b));}
+  if(achSortState.col==='name'){
+    const dir=achSortState.dir==='asc'?1:-1;
+    list.sort((a,b)=>a.name.localeCompare(b.name)*dir);
+  }else if(achSortState.col==='pct'){
+    const dir=achSortState.dir==='asc'?1:-1;
+    list.sort((a,b)=>a.percent===null&&b.percent===null?0:a.percent===null?1:b.percent===null?-1:(a.percent-b.percent)*dir);
+  }else if(achSortState.col==='date'){
+    const dir=achSortState.dir==='asc'?1:-1;
+    list.sort((a,b)=>((a.unlockTimestamp||0)-(b.unlockTimestamp||0))*dir);
+  }
+
   const cont=$('achListContainer');
   const pages=Math.max(1,Math.ceil(list.length/200));page=Math.min(Math.max(0,page),pages-1);
   achievementPage=page;
   const renderedNodes=[];
-  for(const a of list.slice(page*200,(page+1)*200)) {
-    const tierColor=a.tier==='Mythic'?' gold':a.tier==='Epic'?' purple':a.tier==='Rare'?' blue':a.tier==='Common'?' gray':'';
-    const row=element('div',undefined,'ach-item '+(a.unlocked===true?'unlocked-item':'locked-item')+tierColor);
-    const selectEligible=currentAchMethod==='protocol'&&allowActivation&&(a.batchSupport?.canRemove===true||a.unlocked===false&&!['steam_rejected','pending_verification','attempted'].includes(a.compatibility?.status)&&(a.compatibility?.status!=='insufficient_data'||a.batchSupport?.canReactivate===true)&&(a.compatibility?.canUnlock||a.progressSupport?.canComplete||a.progressSupport?.canPreviewFloat||a.progressSupport?.canPreviewShared||a.batchSupport?.canReactivate));
-    if(selectEligible&&a.apiname){row.classList.add('selectable');const label=element('label',undefined,'ach-selector'),check=element('input',undefined,'ach-select');check.type='checkbox';check.checked=achievementSelection.has(a.apiname);check.setAttribute('aria-label',(a.unlocked?'Select removal of ':'Select unlock of ')+a.name);label.title=check.getAttribute('aria-label');check.addEventListener('change',()=>{
-      if(experimentBusy||currentAchMethod!=='protocol')return;
-      if(check.checked){achievementSelection.set(a.apiname,{apiname:a.apiname,action:a.unlocked?'remove':'unlock'});}else achievementSelection.delete(a.apiname);
-      selectionVersion++;$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');updateSelectionSummary();
-    });label.append(check);row.append(label);}
-    row.append(image(a.unlocked?a.iconOpen:a.iconClosed));
-    const info=element('div',undefined,'ach-info'); info.append(element('div',a.name,'ach-title'),element('div',a.description,'ach-desc'),element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
-    if(a.unlockTimestamp) info.append(element('small','Steam-reported unlock date: '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'),'ach-date')); else if(a.unlockDate) info.append(element('small','Steam-reported unlock date: '+a.unlockDate,'ach-date'));
-    if(liveProto){
-      if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
-      if(a.serverControlled)info.append(element('small',' · Server-controlled'));
-      const actionWrap=element('div',undefined,'sam-row-actions');
-      if(a.unlocked===true&&selectEligible&&a.batchSupport?.canRemove){
-        const remove=button(experimentBusy?'Applying…':'Lock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'remove'}],resetCounters:true}),'btn-clear sam-quick-btn');
-        remove.disabled=experimentBusy;actionWrap.append(remove);
-      }else if(a.unlocked===false&&selectEligible){
-        const unlock=button(experimentBusy?'Applying…':'Unlock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'unlock'}]}),'btn-main sam-quick-btn');
-        unlock.disabled=experimentBusy;actionWrap.append(unlock);
+  if(list.length){
+    const tableWrap=element('div',undefined,'ach-table-wrap');
+    const table=element('table',undefined,'ach-table');
+    const thead=element('thead'),headRow=element('tr');
+    const thIcon=element('th');thIcon.style.width='52px';
+    const thName=element('th','Achievement','ach-th-name'+(achSortState.col==='name'?' sort-'+achSortState.dir:''));thName.dataset.sort='name';thName.addEventListener('click',()=>sortAchievementTable('name'));
+    const thPct=element('th','Global %','ach-th-pct'+(achSortState.col==='pct'?' sort-'+achSortState.dir:''));thPct.style.width='90px';thPct.dataset.sort='pct';thPct.addEventListener('click',()=>sortAchievementTable('pct'));
+    const thRarity=element('th','Rarity','ach-th-rarity');thRarity.style.width='80px';
+    const thDate=element('th','Unlock date','ach-th-date'+(achSortState.col==='date'?' sort-'+achSortState.dir:''));thDate.style.width='130px';thDate.dataset.sort='date';thDate.addEventListener('click',()=>sortAchievementTable('date'));
+    const thAction=element('th','','ach-th-action');thAction.style.width='100px';
+    headRow.append(thIcon,thName,thPct,thRarity,thDate,thAction);
+    thead.append(headRow);
+    const tbody=element('tbody');tbody.id='achTableBody';
+
+    for(const a of list.slice(page*200,(page+1)*200)) {
+      const tierColor=a.tier==='Mythic'?' gold':a.tier==='Epic'?' purple':a.tier==='Rare'?' blue':a.tier==='Common'?' gray':'';
+      const row=element('tr',undefined,'ach-item '+(a.unlocked===true?'unlocked unlocked-item':'locked-item')+tierColor);
+      const selectEligible=currentAchMethod==='protocol'&&allowActivation&&(a.batchSupport?.canRemove===true||a.unlocked===false&&!['steam_rejected','pending_verification','attempted'].includes(a.compatibility?.status)&&(a.compatibility?.status!=='insufficient_data'||a.batchSupport?.canReactivate===true)&&(a.compatibility?.canUnlock||a.progressSupport?.canComplete||a.progressSupport?.canPreviewFloat||a.progressSupport?.canPreviewShared||a.batchSupport?.canReactivate));
+      const tdIcon=element('td',undefined,'ach-td-icon');
+      const iconWrap=element('div',undefined,'ach-td-icon-inner');
+      if(selectEligible&&a.apiname){
+        row.classList.add('selectable');
+        const label=element('label',undefined,'ach-selector'),check=element('input',undefined,'ach-select');
+        check.type='checkbox';check.checked=achievementSelection.has(a.apiname);
+        check.setAttribute('aria-label',(a.unlocked?'Select removal of ':'Select unlock of ')+a.name);
+        label.title=check.getAttribute('aria-label');
+        check.addEventListener('change',()=>{
+          if(experimentBusy||currentAchMethod!=='protocol')return;
+          if(check.checked){achievementSelection.set(a.apiname,{apiname:a.apiname,action:a.unlocked?'remove':'unlock'});}else achievementSelection.delete(a.apiname);
+          selectionVersion++;$('sharedProgressReview').hidden=true;document.querySelector('.ach-modal-card').classList.remove('shared-review-open');updateSelectionSummary();
+        });
+        label.append(check);iconWrap.append(label);
       }
-      if(actionWrap.childNodes.length)info.append(actionWrap);
-    }else{
-      if(a.unlocked===true&&currentAchMethod==='protocol'){if(selectEligible&&a.batchSupport?.canRemove){const remove=button('Review removal',()=>reviewChangeSelection([{apiname:a.apiname,action:'remove'}]),'btn-action-sm');remove.disabled=experimentBusy;info.append(remove);}else info.append(element('small','Removal unavailable: '+(a.batchSupport?.removalReason||a.removalSupport?.reason||'Refresh direct verification to check the current state and permissions.'),'ach-write-reason'));}
-      const recordedAt=a.panelVerifiedAt||a.panelOperationAt;
-      if(recordedAt&&Number.isFinite(Date.parse(recordedAt)))info.append(element('small',(a.panelVerifiedAt?'Verified by this panel: ':'Panel operation recorded: ')+new Date(recordedAt).toLocaleString('en-US'),'ach-date panel-date'));
-      if(a.panelOperationAt&&a.unlockTimestamp&&a.unlockTimestamp*1000<Date.parse(a.panelOperationAt)-86400000)info.append(element('small','Steam\'s reported date predates this panel operation. It is separate from the recorded test time.','ach-date-note'));
-      if(a.hidden===true)info.append(element('small',' · Hidden achievement'));
-      if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}`));
-      if(a.serverControlled) info.append(element('small',' · Server-controlled'));
-      if(a.hasProgressDependency) info.append(element('small',' · Linked progress statistic'));
-      const available=availability.get(a),classification=element('div',available.label,'ach-availability '+available.status);classification.title=available.reason;info.append(classification);
-      if(a.unlocked!==true){info.append(element('small',available.reason,'ach-write-reason'));if(available.action&&!isAuthorizedAccount(active))info.append(element('small','Activation from this panel is available only on the server-managed main account.','ach-write-reason'));if(available.provisional)info.append(element('small','Not guaranteed: Steam must accept the update and a fresh read must confirm it.','ach-write-reason'));}
-      if(currentAchMethod==='protocol' && a.compatibility) {
-        if(a.unlocked===false && isAuthorizedAccount(active)) {
-          if(available.canAttempt&&available.action==='unlock'){const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>a.batchSupport?.canReactivate?reviewChangeSelection([{apiname:a.apiname,action:'unlock'}]):unlockIndividualAchievement(a));unlock.disabled=experimentBusy;unlock.title=a.compatibility.reason;info.append(unlock);}
-          if(a.hasProgressDependency&&(available.canAttempt&&available.action==='progress'||a.progressSupport?.canPreviewShared||a.progressSupport?.canPreviewFloat)){const progress=button(experimentBusy?'Checking Steam…':'Review progress',()=>reviewAchievementProgress(a));progress.disabled=experimentBusy;info.append(progress);}
+      const iconImg=image(a.unlocked?a.iconOpen:a.iconClosed,a.unlocked?'':'locked');
+      iconWrap.append(iconImg);
+      tdIcon.append(iconWrap);
+
+      const info=element('td',undefined,'ach-td-name-wrap ach-info');
+      const rarityMeta=element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`);
+      rarityMeta.hidden=true;
+      info.append(element('strong',a.name,'ach-title'),element('small',a.description,'ach-desc'),rarityMeta);
+      if(liveProto){
+        if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
+        if(a.serverControlled)info.append(element('small',' · Server-controlled'));
+      }else{
+        if(a.unlocked===true&&currentAchMethod==='protocol'){if(selectEligible&&a.batchSupport?.canRemove){const remove=button('Review removal',()=>reviewChangeSelection([{apiname:a.apiname,action:'remove'}]),'btn-action-sm');remove.disabled=experimentBusy;info.append(remove);}else info.append(element('small','Removal unavailable: '+(a.batchSupport?.removalReason||a.removalSupport?.reason||'Refresh direct verification to check the current state and permissions.'),'ach-write-reason'));}
+        if(a.hidden===true)info.append(element('small',' · Hidden achievement'));
+        if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}`));
+        if(a.serverControlled) info.append(element('small',' · Server-controlled'));
+        if(a.hasProgressDependency) info.append(element('small',' · Linked progress statistic'));
+        const available=availability.get(a),classification=element('div',available.label,'ach-availability '+available.status);classification.title=available.reason;info.append(classification);
+        if(a.unlocked!==true){info.append(element('small',available.reason,'ach-write-reason'));if(available.action&&!isAuthorizedAccount(active))info.append(element('small','Activation from this panel is available only on the server-managed main account.','ach-write-reason'));if(available.provisional)info.append(element('small','Not guaranteed: Steam must accept the update and a fresh read must confirm it.','ach-write-reason'));}
+        if(currentAchMethod==='protocol' && a.compatibility) {
+          if(a.unlocked===false && isAuthorizedAccount(active)) {
+            if(available.canAttempt&&available.action==='unlock'){const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>a.batchSupport?.canReactivate?reviewChangeSelection([{apiname:a.apiname,action:'unlock'}]):unlockIndividualAchievement(a));unlock.disabled=experimentBusy;unlock.title=a.compatibility.reason;info.append(unlock);}
+            if(a.hasProgressDependency&&(available.canAttempt&&available.action==='progress'||a.progressSupport?.canPreviewShared||a.progressSupport?.canPreviewFloat)){const progress=button(experimentBusy?'Checking Steam…':'Review progress',()=>reviewAchievementProgress(a));progress.disabled=experimentBusy;info.append(progress);}
+          }
+          if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.action||'','ach-write-reason'));
+        } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
+      }
+
+      const tdPct=element('td',undefined,'ach-td-pct');
+      tdPct.append(element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
+
+      const tdRarity=element('td',undefined,'ach-td-rarity');
+      const rDot=element('span',undefined,'ach-rarity-dot '+String(a.tier||'unknown').toLowerCase());
+      tdRarity.append(rDot,element('span',a.tier||'Unknown'));
+
+      const tdDate=element('td',undefined,'ach-td-date');
+      if(a.unlockTimestamp) tdDate.append(element('small','Steam-reported unlock date: '+new Date(a.unlockTimestamp*1000).toLocaleString('en-US'),'ach-date'));
+      else if(a.unlockDate) tdDate.append(element('small','Steam-reported unlock date: '+a.unlockDate,'ach-date'));
+      else tdDate.append(element('small','—','ach-date'));
+      if(!liveProto){
+        const recordedAt=a.panelVerifiedAt||a.panelOperationAt;
+        if(recordedAt&&Number.isFinite(Date.parse(recordedAt)))tdDate.append(element('small',(a.panelVerifiedAt?'Verified by this panel: ':'Panel operation recorded: ')+new Date(recordedAt).toLocaleString('en-US'),'ach-date panel-date'));
+        if(a.panelOperationAt&&a.unlockTimestamp&&a.unlockTimestamp*1000<Date.parse(a.panelOperationAt)-86400000)tdDate.append(element('small',"Steam's reported date predates this panel operation. It is separate from the recorded test time.",'ach-date-note'));
+      }
+
+      const tdAction=element('td',undefined,'ach-td-action');
+      tdAction.append(element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':'')));
+      if(liveProto){
+        const actionWrap=element('div',undefined,'sam-row-actions');
+        if(a.unlocked===true&&selectEligible&&a.batchSupport?.canRemove){
+          const remove=button(experimentBusy?'Applying…':'Lock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'remove'}],resetCounters:true}),'btn-clear sam-quick-btn');
+          remove.disabled=experimentBusy;actionWrap.append(remove);
+        }else if(a.unlocked===false&&selectEligible){
+          const unlock=button(experimentBusy?'Applying…':'Unlock',()=>directApplyChanges({selection:[{apiname:a.apiname,action:'unlock'}]}),'btn-main sam-quick-btn');
+          unlock.disabled=experimentBusy;actionWrap.append(unlock);
         }
-        if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.action||'','ach-write-reason'));
-      } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
+        if(actionWrap.childNodes.length)tdAction.append(actionWrap);
+      }
+
+      row.append(tdIcon,info,tdPct,tdRarity,tdDate,tdAction);
+      tbody.append(row);
     }
-    row.append(info,element('span',a.unlocked===true?'✓ Verified':a.unlocked===false?'Locked':'Not verified','ach-state'+(a.unlocked===true?' verified':''))); renderedNodes.push(row);
+    table.append(thead,tbody);
+    tableWrap.append(table);
+    renderedNodes.push(tableWrap);
   }
   if(pages>1){const nav=element('div',undefined,'ach-pagination');if(page>0)nav.append(button('Previous',()=>{renderAchModal(page-1);cont.scrollTop=0;}));nav.append(element('span',`Page ${page+1} of ${pages} · ${list.length} matching achievements`));if(page+1<pages)nav.append(button('Next',()=>{renderAchModal(page+1);cont.scrollTop=0;}));renderedNodes.push(nav);}
-  if(!list.length) { const message=element('p',filterRarity!=='all'&&rarityLoading?'Loading rarity percentages from Steam…':filterRarity!=='all'&&rarityMissing===currentAchList.length&&currentAchList.length?'Steam has not supplied rarity percentages for this list. Try again later or use Show all.':currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); renderedNodes.push(message); if(currentAchList.length) renderedNodes.push(button('Show all',()=>{achievementPage=0;filterStatus='all';filterRarity='all';filterCompatibility='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
+  if(!list.length) { const message=element('p',filterRarity!=='all'&&rarityLoading?'Loading rarity percentages from Steam…':filterRarity!=='all'&&rarityMissing===currentAchList.length&&currentAchList.length?'Steam has not supplied rarity percentages for this list. Try again later or use Show all.':currentAchList.length?'No achievements match these filters.':'No achievement list is available. Check the Steam message above.'); renderedNodes.push(message); if(currentAchList.length) renderedNodes.push(button('Show all',()=>{achievementPage=0;filterStatus='all';filterRarity='all';filterCompatibility='all';currentAchSet='all';$('achCompatibilityFilter').value='all';searchQuery='';$('achSearchInput').value='';renderAchModal();})); }
   cont.replaceChildren(...renderedNodes);
   updateSelectionSummary();
 }
@@ -1892,10 +2058,14 @@ async function loadMarketableCards(){
         $('marketEarningsEstimate').textContent='Estimated net wallet payout: $0.00 USD (0 marketable cards).';
       }
     }
+    if($('craftableBadgesCount')){
+      const cnt=(data.craftableSets||[]).length;
+      $('craftableBadgesCount').textContent=`${cnt} ready`;
+    }
     if($('craftableBadgesList')){
       const cBox=$('craftableBadgesList');cBox.replaceChildren();
       for(const set of data.craftableSets||[]){
-        cBox.append(button(`Fabricar Insignia: ${set.title} (#${set.appid}, ${set.cardCount} cards)`,()=>craftBadgeForGame(set.appid),'btn-purple sam-quick-btn'));
+        cBox.append(button(`Craft Badge: ${set.title} (#${set.appid}, ${set.cardCount} cards)`,()=>craftBadgeForGame(set.appid),'btn-purple sam-quick-btn'));
       }
     }
     const box=$('marketCardsList');if(!box)return;
@@ -1932,6 +2102,63 @@ async function quickSellMarketCards(assetids=null){
   }catch(e){
     notice(e.message);
   }
+}
+async function claimDailyPoints(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/points/claim-daily',{accountId:activeAccountId});
+    const msg=res.message||(res.ok?'Daily Points Shop item claimed!':'No free daily Points Shop promotion available.');
+    if($('discoveryQueueStatus'))$('discoveryQueueStatus').textContent=msg;
+    notice(msg);
+  }catch(e){
+    notice(e.message);
+  }
+}
+function applyStatusUpdate(data){
+  if(!data||!Array.isArray(data.accounts))return;
+  accounts=data.accounts;
+  if(!accounts.some(a=>a.id===activeAccountId))activeAccountId=accounts[0]?.id||'';
+  active=accounts.find(a=>a.id===activeAccountId)||null;
+  renderAccountsTabs(accounts,activeAccountId);
+  if(data.presets)renderPresets(data.presets);
+  renderCardFarming(active);
+  renderAutomationsPanel(active);
+  setGuestModeLayout(!active);
+  if(active){
+    const dispName=streamerMode?maskText(active.name,2):active.name;
+    const dispProf=streamerMode?maskText(active.profileName||active.user,2):(active.profileName||active.user);
+    const dispSteamId=streamerMode?maskText(active.linkedSteamId,5):active.linkedSteamId;
+    $('userLabel').textContent=[dispName,dispProf].filter(Boolean).join(' · ');
+    $('connectionDetails').textContent=`${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
+    $('statusText').textContent=!active.connected?(active.error||'Disconnected'):active.isCollisionPaused?'Playing on another device':active.isSleepPaused?'Sleep schedule active':active.isPaused?'Paused':active.cardFarming&&!active.cardsReady?'Checking card drops':active.isFarming?'Activity sent to Steam':'No active games';
+    $('badgeStatus').className='badge-status'+(!active.isFarming?' paused':'');
+    $('playBtn').textContent=active.isPaused?'Resume':'Pause';
+    $('personaBtn').textContent=active.personaState===7?'Invisible':'Online';
+    $('cardsBtn').textContent=active.cardFarming?`Cards: ${(active.cardDropGames||[]).length} games`:'Cards: OFF';
+    $('gamesCountVal').textContent=active.games.length+' / 32';
+    const pct=Math.round(active.games.length/32*100);$('capacityPercent').textContent=pct+'%';$('capacityFill').style.width=pct+'%';
+    renderGames(active.games);
+  }
+}
+function connectSSE(){
+  if(eventSource){try{eventSource.close();}catch{}eventSource=null;}
+  if(!active||!activeAccountId||typeof window.EventSource!=='function'||sseFailures>=3)return;
+  try{
+    const es=new window.EventSource(`/api/events?account=${encodeURIComponent(activeAccountId)}&csrf=${encodeURIComponent(csrf)}`);
+    eventSource=es;
+    es.onmessage=e=>{
+      sseFailures=0;
+      try{applyStatusUpdate(JSON.parse(e.data));}catch{}
+    };
+    es.onerror=()=>{
+      try{es.close();}catch{}
+      if(eventSource===es)eventSource=null;
+      if(++sseFailures<3){
+        const tmr=setTimeout(connectSSE,5000);
+        tmr.unref?.();
+      }
+    };
+  }catch{}
 }
 async function saveSleep(){const fields=['sleepEnabled','sleepStart','sleepEnd','timezoneInput'],versions=draftSettings.snapshot(fields),account=activeAccountId;const saved=await action('/api/set-sleep',{enabled:$('sleepEnabled').checked,start:Number($('sleepStart').value),end:Number($('sleepEnd').value),timezone:$('timezoneInput').value},'Sleep schedule updated. Equal start and end hours disable sleep mode.');if(saved&&account===activeAccountId)draftSettings.commit(fields,versions);return saved;}
 async function saveCustomStatus(){const fields=['customStatusInput'],versions=draftSettings.snapshot(fields),account=activeAccountId;const saved=await action('/api/custom-status',{status:$('customStatusInput').value},'Custom status updated.');if(saved&&account===activeAccountId)draftSettings.commit(fields,versions);return saved;}
@@ -2013,11 +2240,12 @@ document.querySelector('[data-event-10]').addEventListener('click', function(eve
 document.querySelector('[data-event-11]').addEventListener('click', function(event) { setFilter('rarity', 'rare'); });
 if($('filterRarityCommonBtn'))$('filterRarityCommonBtn').addEventListener('click',()=>setFilter('rarity','common'));
 if($('runDiscoveryQueueBtn'))$('runDiscoveryQueueBtn').addEventListener('click',()=>runDiscoveryQueue());
+if($('claimDailyPointsBtn'))$('claimDailyPointsBtn').addEventListener('click',()=>claimDailyPoints());
 if($('autoDiscoveryQueueToggle'))$('autoDiscoveryQueueToggle').addEventListener('change',e=>toggleAutoDiscoveryQueue(e.target.checked));
 if($('loadInventoryCardsBtn'))$('loadInventoryCardsBtn').addEventListener('click',()=>loadMarketableCards());
 if($('quickSellCardsBtn'))$('quickSellCardsBtn').addEventListener('click',()=>quickSellMarketCards(null));
-if($('btnSoundToggle')){$('btnSoundToggle').textContent=soundMuted?'🔇 Sound: OFF':'🔊 Sound: ON';$('btnSoundToggle').addEventListener('click',()=>toggleSoundMute());}
-if($('btnStreamerMode')){$('btnStreamerMode').textContent=streamerMode?'🕵️ Streamer Mode: ON':'🕵️ Streamer Mode: OFF';$('btnStreamerMode').addEventListener('click',()=>toggleStreamerMode());}
+if($('btnSoundToggle')){$('btnSoundToggle').textContent=soundMuted?'Sound: OFF':'Sound: ON';$('btnSoundToggle').addEventListener('click',()=>toggleSoundMute());}
+if($('btnStreamerMode')){$('btnStreamerMode').textContent=streamerMode?'Streamer Mode: ON':'Streamer Mode: OFF';$('btnStreamerMode').addEventListener('click',()=>toggleStreamerMode());}
 if($('btnShowcaseCard'))$('btnShowcaseCard').addEventListener('click',()=>openShowcaseModal());
 if($('closeShowcaseBtn'))$('closeShowcaseBtn').addEventListener('click',()=>closeShowcaseModal());
 if($('downloadShowcaseBtn'))$('downloadShowcaseBtn').addEventListener('click',()=>downloadShowcaseCard());

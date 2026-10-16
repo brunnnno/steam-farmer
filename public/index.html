@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=49">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=50">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -105,10 +105,10 @@
             <button class="filter-btn" data-filter="status" data-val="locked" data-event-8="">Locked</button>
             
             <span style="color:rgba(255,255,255,0.2);">|</span>
-            <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9="">🟡 Mythic (&lt;5%)</button>
-            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10="">🟣 Epic (5-20%)</button>
-            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11="">🔵 Rare (20-50%)</button>
-            <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn">⚪ Common (&gt;50%)</button>
+            <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9=""><span class="rarity-dot mythic"></span>Mythic &lt;5%</button>
+            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10=""><span class="rarity-dot epic"></span>Epic 5-20%</button>
+            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11=""><span class="rarity-dot rare"></span>Rare 20-50%</button>
+            <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn"><span class="rarity-dot common"></span>Common &gt;50%</button>
           </div>
           
           <div style="display:flex; gap:10px; align-items:center;">
@@ -138,6 +138,7 @@
           <summary>Game integration &amp; activation limits</summary>
           <div id="gameRequirementsContent"></div>
         </details>
+        <div id="achSetsNav" class="ach-sets-nav" hidden></div>
         <div class="ach-list" id="achListContainer"></div>
       </div>
 
@@ -177,7 +178,7 @@
                 <option value="hours">Hours</option>
               </select>
               <select id="timedSpacingSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-                <option value="platinum">🏆 Realistic Platinum (1–3h sessions + 10–20h rest)</option>
+                <option value="platinum">Realistic Platinum (1–3h sessions + 10–20h rest)</option>
                 <option value="natural" selected>Natural (Gaussian + breaks)</option>
                 <option value="random">Random (Gaussian)</option>
                 <option value="even">Even spacing</option>
@@ -190,7 +191,7 @@
             </div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
               <button id="startTimedBtn" type="button" class="btn-main">Start timed schedule</button>
-              <button id="startPlatinumBtn" type="button" class="btn-purple">🏆 Modo Platino Realista</button>
+              <button id="startPlatinumBtn" type="button" class="btn-purple" data-i18n="startPlatinumBtn">Realistic Platinum Mode</button>
               <button id="stopTimedBtn" type="button" class="btn-clear" hidden>Stop schedule</button>
             </div>
             <p id="timedStatusText" style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"></p>
@@ -226,15 +227,15 @@
     </div>
   </div>
 
-  <nav class="corner-toolbar" aria-label="Global utilities">
-    <select id="langSelect" aria-label="Language selector" class="acc-pill lang-select" style="width:auto; padding:7px 12px;">
-      <option value="es">🇪🇸 Español</option>
-      <option value="en">🇺🇸 English</option>
+  <nav class="utility-bar corner-toolbar" aria-label="Global utilities">
+    <select id="langSelect" aria-label="Language selector" class="acc-pill lang-select">
+      <option value="es">ES · Español</option>
+      <option value="en">EN · English</option>
     </select>
-    <button id="btnOledTheme" type="button" class="acc-pill" title="Alternar tema Midnight Blue / OLED Pure Black">🌙 OLED: OFF</button>
-    <button id="btnSoundToggle" type="button" class="acc-pill" title="Mute or unmute achievement unlock sound">🔊 Sound: ON</button>
-    <button id="btnStreamerMode" type="button" class="acc-pill" title="Hide SteamID and account names on screen">🕵️ Streamer Mode: OFF</button>
-    <button id="btnShowcaseCard" type="button" class="acc-pill" title="Generate downloadable profile showcase card">✨ Showcase Card</button>
+    <button id="btnOledTheme" type="button" class="acc-pill" title="Toggle Midnight / OLED Pure Black theme">OLED: OFF</button>
+    <button id="btnSoundToggle" type="button" class="acc-pill" title="Mute or unmute achievement unlock sound">Sound: ON</button>
+    <button id="btnStreamerMode" type="button" class="acc-pill" title="Hide SteamID and account names on screen">Streamer Mode: OFF</button>
+    <button id="btnShowcaseCard" type="button" class="acc-pill" title="Generate downloadable profile showcase card">Showcase Card</button>
   </nav>
 
   <div class="container">
@@ -255,7 +256,7 @@
         <p id="userLabel">Connecting account...</p><p id="connectionDetails" style="font-size:.8rem;color:var(--text-muted);overflow-wrap:anywhere"></p>
       </div>
       <div class="header-actions">
-        <button class="btn-main" id="headerGuestConnectBtn" type="button" hidden>+ Conectar Cuenta de Steam</button>
+        <button class="btn-main" id="headerGuestConnectBtn" type="button" data-i18n="landingConnectBtn" hidden>+ Connect Steam Account</button>
         <button class="btn-main session-play" id="playBtn" data-event-24="">Resume / Play Now</button>
         <button class="btn-purple" id="cardsBtn" data-event-19="">Cards: OFF</button>
         <button class="btn-action-sm" id="personaBtn" data-event-21="">Mode: Online</button>
@@ -307,12 +308,20 @@
         </div>
         <p id="marketEarningsEstimate" class="cards-panel-status" style="margin-top:8px; font-weight:600; color:var(--primary);">Estimated net wallet payout: check inventory to calculate (-5% Valve fee &amp; -10% developer fee).</p>
         <div id="marketCardsList" class="cards-list" style="margin-top:8px;"></div>
-        <div id="badgeCrafterSection" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
-          <span class="eyebrow" style="margin-right:6px;">AUTO BADGE CRAFTER (5/5 SETS)</span>
-          <input id="craftBadgeAppIdInput" type="number" placeholder="AppID (e.g. 730)" style="width:140px; padding:8px 12px; font-size:0.8rem;">
-          <button id="craftBadgeBtn" type="button" class="btn-purple">Fabricar Insignia (Craft Badge)</button>
-          <div id="craftableBadgesList" style="display:flex; gap:6px; flex-wrap:wrap; width:100%; margin-top:4px;"></div>
-        </div>
+        <details id="badgeCrafterSection" class="badge-crafter-panel">
+          <summary class="cards-panel-heading">
+            <div>
+              <span class="eyebrow">AUTO BADGE CRAFTER</span>
+              <h3>Craft Badges <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+            </div>
+            <span id="craftableBadgesCount" class="cards-summary">0 ready</span>
+          </summary>
+          <div id="craftableBadgesList" class="craftable-list" style="display:flex; gap:6px; flex-wrap:wrap; width:100%; margin-top:8px;"></div>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+            <input id="craftBadgeAppIdInput" type="number" placeholder="AppID" style="width:120px;">
+            <button id="craftBadgeBtn" type="button" class="btn-purple" data-i18n="craftBadgeBtn">Craft Badge (5/5 sets)</button>
+          </div>
+        </details>
         <small id="cardsUpdated" class="cards-footnote"></small>
         <small class="cards-footnote">Pending counts come from Steam badges (games &lt;2h farm in parallel; games &ge;2h farm 1 at a time for maximum drop rate). This automatic list does not replace your saved manual games.</small>
       </details>
@@ -368,7 +377,7 @@
       </div></details>
 
       <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
-        <section class="ach-impact-review"><h3>Panel, licenses &amp; Sale Discovery Queue</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button">Explore Discovery Queue (3x)</button><label style="font-size:0.82rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Requests Steam licenses for five supported free games, or explores 3 daily Steam Store Discovery Queues for event trading cards.</p></section>
+        <section class="ach-impact-review"><h3>Panel, licenses &amp; Sale Discovery Queue</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button" data-i18n="exploreQueueBtn">Explore Discovery Queue (3x)</button><button class="btn-action-sm" id="claimDailyPointsBtn" type="button" data-i18n="claimDailyPointsBtn">Claim Daily Points</button><label style="font-size:0.82rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Requests Steam licenses for five supported free games, or explores 3 daily Steam Store Discovery Queues for event trading cards.</p></section>
         <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
         <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
       <div class="tools-grid">
@@ -403,21 +412,20 @@
 
     <section id="saasLandingSection" class="saas-landing" aria-label="SteamFarmer Promotional Showcase">
       <div class="landing-hero">
-        <div class="glow-blob blob-emerald" aria-hidden="true"></div>
-        <div class="glow-blob blob-cyan" aria-hidden="true"></div>
-        <div class="glow-blob blob-purple" aria-hidden="true"></div>
         <div class="landing-hero-copy">
-          <span id="landingHeroEyebrow" class="landing-eyebrow">⚡ AUTONOMOUS STEAM CLOUD ENGINE · v2.4.0</span>
-          <h2 id="landingHeroTitle" class="landing-hero-title">Tu Centro de Control Autónomo para Steam</h2>
-          <p id="landingHeroSubtitle" class="landing-hero-subtitle">Farmea cromos con la regla óptima de 2 horas de ASF, desbloquea logros con distribución gaussiana humanizada, gestiona estadísticas INT/FLOAT con SamRewritten Web y mantén tus cuentas activas 24/7 en la nube sin encender tu PC.</p>
+          <span id="landingHeroEyebrow" class="landing-eyebrow">AUTONOMOUS STEAM CLOUD ENGINE · v2.4.0</span>
+          <h2 id="landingHeroTitle" class="landing-hero-title" data-i18n="landingHeroTitle">Autonomous Steam Cloud Control Room</h2>
+          <p id="landingHeroSubtitle" class="landing-hero-subtitle" data-i18n="landingHeroSubtitle">Farm trading cards with ASF's 2-hour optimal rule, unlock achievements with humanized Gaussian schedules, manage INT/FLOAT stats, and keep your accounts active 24/7 in the cloud.</p>
           <div class="landing-cta-row">
-            <button id="btnLandingConnect" type="button" class="btn-main btn-glow-cta">+ Conectar Cuenta de Steam</button>
-            <button id="btnLandingLiveDemo" type="button" class="btn-action-sm btn-secondary-cta">Ver Demostración en Vivo ↓</button>
+            <button id="btnLandingConnect" type="button" class="btn-main" data-i18n="landingConnectBtn">+ Connect Steam Account</button>
+            <button id="btnLandingLiveDemo" type="button" class="btn-action-sm" data-i18n="landingLiveDemoBtn">View Live Demo ↓</button>
           </div>
         </div>
-        <div class="floating-showcase-deck" aria-hidden="true">
+        <div class="hero-mockup floating-showcase-deck" aria-hidden="true">
           <div class="floating-card float-ach">
-            <div class="float-card-icon">🏆</div>
+            <div class="float-card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            </div>
             <div>
               <span class="eyebrow">MYTHIC ACHIEVEMENT · 2.4%</span>
               <strong>Clutch Maestro · Counter-Strike 2</strong>
@@ -425,15 +433,19 @@
             </div>
           </div>
           <div class="floating-card float-card-holo">
-            <div class="float-card-icon">🃏</div>
+            <div class="float-card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 6h8"/><path d="M8 10h8"/><path d="M8 14h4"/></svg>
+            </div>
             <div>
-              <span class="eyebrow">HOLOGRAPHIC TRADING CARD DROP</span>
+              <span class="eyebrow">TRADING CARD DROP ENGINE</span>
               <strong>Portal 2 · 4/5 Set Collected (+100 XP)</strong>
               <small>ASF 2-Hour Optimal Rule · Est. Net Payout $0.42 USD</small>
             </div>
           </div>
           <div class="floating-card float-badge">
-            <div class="float-card-icon">🎖️</div>
+            <div class="float-card-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
             <div>
               <span class="eyebrow">CLOUD 24/7 · POSTGRESQL PERSISTENCE</span>
               <strong>Multi-Account Idle Cluster · 3/3 Bots Online</strong>
@@ -443,36 +455,73 @@
         </div>
       </div>
 
+      <div class="landing-trust-row">
+        <div class="trust-item">
+          <span class="trust-val">32</span>
+          <span class="trust-label">Max parallel games</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-val">Gaussian</span>
+          <span class="trust-label">Box-Muller timing</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-val">24/7</span>
+          <span class="trust-label">Cloud session</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-val">PostgreSQL</span>
+          <span class="trust-label">Persistence layer</span>
+        </div>
+      </div>
+
       <div class="landing-features-grid">
         <article class="landing-feature-card">
-          <div class="feature-card-top"><span class="feature-icon">⚡</span><span class="feature-badge">ASF 2H RULE</span></div>
-          <h3 id="featTitle1">Farming de Cromos Inteligente</h3>
-          <p id="featDesc1">Acumula 2 horas en paralelo en juegos nuevos y luego farmea 1 juego a la vez pasadas las 2 horas para maximizar la velocidad de drops de Valve.</p>
+          <div class="feature-card-top">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+            <span class="feature-badge feat-tag feat-tag-asf"><span class="status-dot green"></span>ASF Rule</span>
+          </div>
+          <h3 id="featTitle1" data-i18n="featTitle1">Smart Card Farming (ASF 2h Rule)</h3>
+          <p id="featDesc1" data-i18n="featDesc1">Accumulates 2 hours in parallel on new games, then farms 1 game at a time past 2 hours for maximum Valve drop frequency.</p>
         </article>
         <article class="landing-feature-card">
-          <div class="feature-card-top"><span class="feature-icon">🏆</span><span class="feature-badge">NATIVE PROTOCOL</span></div>
-          <h3 id="featTitle2">SamRewritten Web Edition</h3>
-          <p id="featDesc2">Manipulación directa de logros y estadísticas INT/FLOAT vía CMsgClientStoreUserStats2 con filtros de rareza, historial auditable y deshacer en 1 clic.</p>
+          <div class="feature-card-top">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span>
+            <span class="feature-badge feat-tag"><span class="status-dot blue"></span>Native Protocol</span>
+          </div>
+          <h3 id="featTitle2" data-i18n="featTitle2">SamRewritten Web Edition</h3>
+          <p id="featDesc2" data-i18n="featDesc2">Direct achievement and INT/FLOAT statistics management via CMsgClientStoreUserStats2 with rarity filters, audit log, and 1-click Undo.</p>
         </article>
         <article class="landing-feature-card">
-          <div class="feature-card-top"><span class="feature-icon">⏱️</span><span class="feature-badge">BOX-MULLER + DB</span></div>
-          <h3 id="featTitle3">Automatización &amp; Curva de Gauss</h3>
-          <p id="featDesc3">Desbloqueo programado con tiempos humanizados por campana de Gauss, pausas de sesión reales y persistencia en PostgreSQL contra reinicios de Render.</p>
+          <div class="feature-card-top">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+            <span class="feature-badge feat-tag"><span class="status-dot purple"></span>Box-Muller + DB</span>
+          </div>
+          <h3 id="featTitle3" data-i18n="featTitle3">Gaussian Automation &amp; DB Persistence</h3>
+          <p id="featDesc3" data-i18n="featDesc3">Scheduled unlocking with Box-Muller normal distribution, real gameplay breaks, and PostgreSQL persistence across Render container restarts.</p>
         </article>
         <article class="landing-feature-card">
-          <div class="feature-card-top"><span class="feature-icon">🛒</span><span class="feature-badge">2FA QUICK-SELL</span></div>
-          <h3 id="featTitle4">Venta Rápida en el Mercado</h3>
-          <p id="featDesc4">Estimador de ganancias netas descontando comisiones de Valve (5% + 10%), protección anti Rate-Limit (HTTP 429) y auto-confirmación Steam Guard.</p>
+          <div class="feature-card-top">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>
+            <span class="feature-badge feat-tag"><span class="status-dot green"></span>2FA Quick-Sell</span>
+          </div>
+          <h3 id="featTitle4" data-i18n="featTitle4">Quick-Sell Market &amp; Net Estimator</h3>
+          <p id="featDesc4" data-i18n="featDesc4">Net wallet payout estimator deducting Valve (5%) and publisher (10%) fees, HTTP 429 backoff, and Steam Guard 2FA auto-confirmation.</p>
         </article>
         <article class="landing-feature-card">
-          <div class="feature-card-top"><span class="feature-icon">🧭</span><span class="feature-badge">AUTO QUEUE</span></div>
-          <h3 id="featTitle5">Auto Discovery Queue</h3>
-          <p id="featDesc5">Explora automáticamente las 3 listas de descubrimientos diarias de la tienda de Steam para reclamar cromos gratuitos en eventos de rebajas.</p>
+          <div class="feature-card-top">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span>
+            <span class="feature-badge feat-tag"><span class="status-dot blue"></span>Auto Queue</span>
+          </div>
+          <h3 id="featTitle5" data-i18n="featTitle5">Auto Discovery Queue</h3>
+          <p id="featDesc5" data-i18n="featDesc5">Automatically explores 3 daily Steam Store Discovery Queues to claim free event trading cards during seasonal sales.</p>
         </article>
         <article class="landing-feature-card">
-          <div class="feature-card-top"><span class="feature-icon">☁️</span><span class="feature-badge">24/7 CLOUD</span></div>
-          <h3 id="featTitle6">Cloud 24/7 Sin Descargas</h3>
-          <p id="featDesc6">Opera 100% en la nube con detección automática de colisión si abres un juego en tu PC, sin consumir recursos ni dejar tu computadora encendida.</p>
+          <div class="feature-card-top">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg></span>
+            <span class="feature-badge feat-tag"><span class="status-dot green"></span>24/7 Cloud</span>
+          </div>
+          <h3 id="featTitle6" data-i18n="featTitle6">24/7 Cloud · Zero PC Load</h3>
+          <p id="featDesc6" data-i18n="featDesc6">Runs autonomously in the cloud with automatic session collision detection when you launch a game on your desktop PC.</p>
         </article>
       </div>
     </section>
@@ -483,34 +532,34 @@
         <div class="pro-footer-brand-row">
           <strong class="pro-footer-logo">SteamFarmer<span class="brand-dot">.</span></strong>
           <span class="footer-version-badge">v2.4.0</span>
-          <span id="footerServerStatus" class="footer-status-badge"><span class="status-dot green"></span> <span id="footerStatusText">🟢 Sistema Operativo</span></span>
+          <span id="footerServerStatus" class="footer-status-badge"><span class="status-dot green"></span> <span id="footerStatusText" data-i18n="footerStatus">System Operational</span></span>
         </div>
-        <p id="footerLegalText" class="footer-legal">SteamFarmer no está afiliado con Valve Corporation. Steam es una marca registrada de Valve.</p>
+        <p id="footerLegalText" class="footer-legal" data-i18n="footerLegal">SteamFarmer is not affiliated with Valve Corporation. Steam is a registered trademark of Valve.</p>
       </div>
       <div class="pro-footer-col">
-        <h4 id="footerQuickToolsTitle">Herramientas Rápidas</h4>
+        <h4 id="footerQuickToolsTitle" data-i18n="footerQuickTools">Quick Tools</h4>
         <ul class="pro-footer-links">
-          <li><a href="#gamesGrid" id="footerLinkSam">Gestor de Logros (SAM)</a></li>
-          <li><a href="#cardsPanel" id="footerLinkAsf">Farmeo de Cromos (ASF)</a></li>
-          <li><a href="#automationsPanel" id="footerLinkTasks">Centro de Tareas</a></li>
-          <li><a href="https://github.com/brunnnno/steam-farmer#readme" target="_blank" rel="noopener noreferrer" id="footerLinkDocs">Documentación</a></li>
+          <li><a href="#gamesGrid" id="footerLinkSam" data-i18n="footerToolSam">Achievement Manager (SAM)</a></li>
+          <li><a href="#cardsPanel" id="footerLinkAsf" data-i18n="footerToolAsf">Card Farming (ASF)</a></li>
+          <li><a href="#automationsPanel" id="footerLinkTasks" data-i18n="footerToolTasks">Task Center</a></li>
+          <li><a href="https://github.com/brunnnno/steam-farmer#readme" target="_blank" rel="noopener noreferrer" id="footerLinkDocs" data-i18n="footerToolDocs">Documentation</a></li>
         </ul>
       </div>
       <div class="pro-footer-col">
-        <h4 id="footerCommunityTitle">Enlaces Comunitarios</h4>
+        <h4 id="footerCommunityTitle" data-i18n="footerCommunity">Community Links</h4>
         <ul class="pro-footer-links">
           <li><a href="https://github.com/brunnnno/steam-farmer" target="_blank" rel="noopener noreferrer">GitHub (github.com/brunnnno/steam-farmer) ↗</a></li>
-          <li><a href="https://steamstat.us/" target="_blank" rel="noopener noreferrer" id="footerLinkSteamStatus">Estado de la Red de Steam (Steam Status) ↗</a></li>
-          <li><a href="https://github.com/brunnnno/steam-farmer/issues" target="_blank" rel="noopener noreferrer" id="footerLinkIssues">Reporte de Problemas ↗</a></li>
+          <li><a href="https://steamstat.us/" target="_blank" rel="noopener noreferrer" id="footerLinkSteamStatus" data-i18n="footerSteamStatus">Steam Network Status ↗</a></li>
+          <li><a href="https://github.com/brunnnno/steam-farmer/issues" target="_blank" rel="noopener noreferrer" id="footerLinkIssues" data-i18n="footerReportIssue">Report an Issue ↗</a></li>
         </ul>
       </div>
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=49" defer></script>
-  <script src="/achievement-availability.js?v=49" defer></script>
-  <script src="/draft-settings.js?v=49" defer></script>
-  <script src="/achievement-live.js?v=49" defer></script>
-  <script src="/app.js?v=49" defer></script>
+  <script src="/achievement-rarity.js?v=50" defer></script>
+  <script src="/achievement-availability.js?v=50" defer></script>
+  <script src="/draft-settings.js?v=50" defer></script>
+  <script src="/achievement-live.js?v=50" defer></script>
+  <script src="/app.js?v=50" defer></script>
 </body>
 </html>
