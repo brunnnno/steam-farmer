@@ -343,7 +343,10 @@
             <div id="taskCenterCards" class="task-center-body">Ready to scan card drops &amp; sets.</div>
           </div>
           <div id="taskCardTimed" class="task-center-box status-blue">
-            <span class="eyebrow"><span class="status-dot blue"></span> 3. SCHEDULED ACHIEVEMENTS</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span class="eyebrow"><span class="status-dot blue"></span> 3. SCHEDULED ACHIEVEMENTS</span>
+              <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancelar todas las programaciones activas</button>
+            </div>
             <div id="taskCenterTimedList" class="task-center-body">No active timed schedules.</div>
           </div>
           <div id="taskCardDiscovery" class="task-center-box">

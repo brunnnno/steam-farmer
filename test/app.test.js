@@ -232,7 +232,10 @@ test('login Steam Guard, persistencia sin contraseña, renovación y anticolisi�
   const disk=fs.readFileSync(path.join(f.directory,'config.json'),'utf8');assert.ok(!disk.includes('never-save-this'));assert.ok(!disk.includes('refreshToken'));assert.equal(f.app.vault.get(aid),token());
   await f.request('/api/add',{accountId:aid,appid:730});assert.deepEqual(FakeUser.latest.calls.at(-1),[730]);
   FakeUser.latest.emit('playingState',true,730);assert.deepEqual(FakeUser.latest.calls.at(-1),[]);
-  await f.request('/api/toggle',{accountId:aid});await f.request('/api/toggle',{accountId:aid});assert.deepEqual(FakeUser.latest.calls.at(-1),[]);
+  await f.request('/api/toggle',{accountId:aid});assert.deepEqual(FakeUser.latest.calls.at(-1),[730]);
+  FakeUser.latest.emit('playingState',true,730);assert.deepEqual(FakeUser.latest.calls.at(-1),[]);
+  FakeUser.latest.emit('user',{getSteamID64:()=>'76561198000000001'},{gameid:'0',game_name:'',game_extra_info:''});assert.deepEqual(FakeUser.latest.calls.at(-1),[730]);
+  FakeUser.latest.emit('playingState',true,730);assert.deepEqual(FakeUser.latest.calls.at(-1),[]);
   FakeUser.latest.emit('playingState',false,0);assert.deepEqual(FakeUser.latest.calls.at(-1),[730]);
   FakeUser.latest.emit('refreshToken',token()+'new');assert.equal(f.app.vault.get(aid),token()+'new');
   const licenses=await f.request('/api/claim-free',{accountId:aid});assert.deepEqual(licenses.data.granted,{packages:[10],apps:[730]});
@@ -1179,4 +1182,117 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const pointsDisconnected = await f.request("/api/points/claim-daily", { accountId: "user2" });
   assert.equal(pointsDisconnected.response.status, 200);
   assert.equal(typeof pointsDisconnected.data.ok, "boolean");
+
+  // 19. Non-Steam Collision Fix (/api/clear-collision & user persona event) & Ghost Re-unlock Prevention (DiRT Rally 2.0)
+  // 19b. Explicit /api/clear-collision endpoint
+  client.playingState = { blocked: true };
+  f.app.states.get("user2").isCollisionPaused = true;
+  assert.equal(f.app.states.get("user2").isCollisionPaused, true);
+  const clearColRes = await f.request("/api/clear-collision", { accountId: "user2" });
+  assert.equal(clearColRes.response.status, 200);
+  assert.equal(clearColRes.data.success, true);
+  assert.equal(f.app.states.get("user2").isCollisionPaused, false);
+  assert.equal(client.playingState.blocked, false);
+
+  // 19c. Manual achievement modification (/api/achievement/changes) automatically cancels active timed schedule
+  const ghostSchedule = await f.request("/api/achievement/timed", {
+    accountId: "user2",
+    appid: 34830,
+    selection: [{ apiname: "ACT_1", action: "unlock" }],
+    amount: 30,
+    units: "minutes"
+  });
+  assert.equal(ghostSchedule.data.active, true);
+  assert.equal(f.app.timedManager.status("user2", 34830).active, true);
+
+  const manualLockRes = await f.request("/api/achievement/changes", {
+    accountId: "user2",
+    appid: 34830,
+    confirmed: true,
+    directApply: true,
+    bulk: true,
+    selection: [{ apiname: "ACT_1", action: "remove" }]
+  });
+  assert.equal(manualLockRes.response.status, 200);
+  assert.equal(f.app.timedManager.status("user2", 34830).active, false);
+
+  // 19d. makeTimedItemExecutor skips write if achievement is already in target state (unlock when unlocked, remove when locked)
+  // Right now ACT_1 is locked (unlocked === false). Start a timed job to "remove" ACT_1 with a short custom delay -> should skip write!
+  const crcBefore = crc;
+  await f.request("/api/achievement/timed", {
+    accountId: "user2",
+    appid: 34830,
+    selection: [{ apiname: "ACT_1", action: "remove" }],
+    amount: 1,
+    units: "seconds",
+    stealth: true
+  });
+  await new Promise(r => setTimeout(r, 1150));
+  assert.equal(crc, crcBefore, "Timed executor must NOT send StoreUserStats2 when achievement is already in desired state");
+
+  // 19e. Avalanche protection in rehydrate(): expired run_at in past gets 120000ms spacing instead of 50ms
+  const expiredJobs = new Map([
+    ["job-dirt", { job_id: "job-dirt", account_id: "user2", appid: 690790, status: "active", config: {}, started_at: new Date(Date.now() - 86400000).toISOString() }]
+  ]);
+  const expiredQueue = new Map([
+    ["job-dirt", [
+      { job_id: "job-dirt", item_index: 0, apiname: "DIRT_ACH_1", action: "unlock", run_at: new Date(Date.now() - 3600000).toISOString(), completed: false },
+      { job_id: "job-dirt", item_index: 1, apiname: "DIRT_ACH_2", action: "unlock", run_at: new Date(Date.now() - 1800000).toISOString(), completed: false }
+    ]]
+  ]);
+  const expiredPool = {
+    query: async (sql, params = []) => {
+      const s = String(sql).trim();
+      if (/SELECT job_id, account_id, appid, status, config, started_at FROM steamfarmer_timed_jobs/i.test(s)) {
+        return { rows: [...expiredJobs.values()].filter(j => ["active", "paused_collision"].includes(j.status)) };
+      }
+      if (/SELECT item_index, apiname, action, run_at, completed FROM steamfarmer_timed_queue/i.test(s)) {
+        return { rows: expiredQueue.get(params[0]) || [] };
+      }
+      if (/UPDATE steamfarmer_timed_jobs SET status = 'cancelled'/i.test(s)) {
+        for (const j of expiredJobs.values()) j.status = "cancelled";
+        return { rows: [] };
+      }
+      if (/DELETE FROM steamfarmer_timed_queue/i.test(s)) {
+        for (const [k, list] of expiredQueue.entries()) {
+          expiredQueue.set(k, list.filter(x => x.completed));
+        }
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+  const mgrExpired = new TimedModificationManager({ pool: expiredPool });
+  const firedImmediately = [];
+  await mgrExpired.rehydrate({
+    accountId: "user2",
+    executeItemFactory: () => async item => { firedImmediately.push(item.apiname); }
+  });
+  await new Promise(r => setTimeout(r, 120));
+  assert.equal(firedImmediately.length, 0, "Expired rehydrated items must not fire in a 50ms avalanche");
+  const dirtStatus = mgrExpired.status("user2", 690790);
+  assert.equal(dirtStatus.active, true);
+  assert.ok(Date.parse(dirtStatus.remaining[0].runAt) - Date.now() >= 100000, "First expired item must be scheduled ~2 minutes in the future");
+  assert.ok(Date.parse(dirtStatus.remaining[1].runAt) - Date.now() >= 220000, "Second expired item must be scheduled ~4 minutes in the future");
+
+  // Verify cancel() purges uncompleted items from PostgreSQL steamfarmer_timed_queue
+  mgrExpired.cancel("user2", 690790);
+  await mgrExpired.flush();
+  assert.equal(expiredJobs.get("job-dirt").status, "cancelled");
+  assert.equal(expiredQueue.get("job-dirt").length, 0);
+
+  // 19f. POST /api/achievement/timed/cancel-all cancels all active schedules
+  await f.request("/api/achievement/timed", {
+    accountId: "user2",
+    appid: 34830,
+    selection: [{ apiname: "ACT_1", action: "unlock" }],
+    amount: 20,
+    units: "minutes"
+  });
+  assert.equal(f.app.timedManager.listForAccount("user2").length, 1);
+  const cancelAllRes = await f.request("/api/achievement/timed/cancel-all", { accountId: "user2" });
+  assert.equal(cancelAllRes.response.status, 200);
+  assert.equal(cancelAllRes.data.success, true);
+  assert.equal(cancelAllRes.data.cancelledCount, 1);
+  assert.equal(f.app.timedManager.listForAccount("user2").length, 0);
 });

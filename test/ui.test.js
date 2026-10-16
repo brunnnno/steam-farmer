@@ -892,4 +892,51 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.match(fullCss, /\.utility-bar/);
   assert.match(fullCss, /\.ach-table/);
   assert.match(fullCss, /\.landing-trust-row/);
+
+  // 10. Verify Force Resume (Clear Collision) on #playBtn and Cancel All Active Schedules (#cancelAllTimedBtn)
+  const uiActionCalls = [];
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    uiActionCalls.push({ url, body });
+    if (url === "/api/status") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          accounts: [{
+            id: "acc1",
+            name: "Main",
+            user: "mainuser",
+            connected: true,
+            webSessionReady: true,
+            tokenSource: "environment",
+            tokenAccountMatches: true,
+            isFarming: false,
+            isPaused: false,
+            isCollisionPaused: true,
+            games: [730],
+            gameNames: { 730: "Counter-Strike 2" },
+            runningGames: [],
+            activeTimedJobs: [{ appid: 690790, totalCount: 10, completedCount: 3, pausedByCollision: true }],
+            sleepMode: { enabled: false, start: 3, end: 8 }
+          }],
+          presets: [],
+          timezone: "UTC"
+        })
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ success: true, cancelledCount: 1, message: "OK" }) };
+  };
+  await w.testUI.load();
+  const playBtn = w.document.getElementById("playBtn");
+  assert.match(playBtn.textContent, /Forzar Reanudar|Force Resume/);
+  playBtn.click();
+  await new Promise(r => setImmediate(r));
+  assert.ok(uiActionCalls.some(c => c.url === "/api/clear-collision" && c.body?.accountId === "acc1"));
+
+  const cancelAllBtn = w.document.getElementById("cancelAllTimedBtn");
+  assert.ok(cancelAllBtn);
+  cancelAllBtn.click();
+  await new Promise(r => setImmediate(r));
+  assert.ok(uiActionCalls.some(c => c.url === "/api/achievement/timed/cancel-all" && c.body?.accountId === "acc1"));
 });

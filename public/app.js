@@ -38,6 +38,8 @@ const i18n = {
     quickSellBtn: "Venta rápida de cromos",
     exploreQueueBtn: "Explorar Discovery Queue",
     claimDailyPointsBtn: "Reclamar Puntos Diarios",
+    cancelAllTimedBtn: "Cancelar todas las programaciones activas",
+    forceResumeCollisionBtn: "⚠️ Forzar Reanudar (Limpiar Colisión)",
     startPlatinumBtn: "Modo Platino Realista",
     craftBadgeBtn: "Fabricar Insignia (5/5 cromos)",
     liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla",
@@ -99,6 +101,8 @@ const i18n = {
     quickSellBtn: "Quick-Sell Cards on Market",
     exploreQueueBtn: "Explore Discovery Queue (3x)",
     claimDailyPointsBtn: "Claim Daily Points",
+    cancelAllTimedBtn: "Cancel all active schedules",
+    forceResumeCollisionBtn: "⚠️ Force Resume (Clear Collision)",
     startPlatinumBtn: "Realistic Platinum Mode",
     craftBadgeBtn: "Craft Badge (5/5 sets)",
     liveActionNotice: "Live action: Connect your Steam account to synchronize it",
@@ -410,7 +414,7 @@ async function loadStatus() {
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
     $('statusText').textContent = !active.connected ? (active.error || 'Disconnected') : active.isCollisionPaused ? 'Playing on another device' : active.isSleepPaused ? 'Sleep schedule active' : active.isPaused ? 'Paused' : active.cardFarming && !active.cardsReady ? 'Checking card drops' : active.isFarming ? 'Activity sent to Steam' : 'No active games';
     $('badgeStatus').className = 'badge-status' + (!active.isFarming ? ' paused' : '');
-    $('playBtn').textContent = active.isPaused ? 'Resume' : 'Pause';
+    $('playBtn').textContent = active.isCollisionPaused ? (currentLang === 'es' ? '⚠️ Forzar Reanudar (Limpiar Colisión)' : '⚠️ Force Resume (Clear Collision)') : (active.isPaused ? 'Resume' : 'Pause');
     $('personaBtn').textContent = active.personaState === 7 ? 'Invisible' : 'Online';
     $('cardsBtn').textContent = active.cardFarming ? `Cards: ${(active.cardDropGames||[]).length} games` : 'Cards: OFF';
     $('cardsBtn').title = active.cardError || '';
@@ -568,6 +572,13 @@ function renderAutomationsPanel(account) {
         item.append(btnRow);
         timedBox.append(item);
       }
+      timedBox.append(
+        button(
+          currentLang === 'es' ? 'Cancelar todas las programaciones activas' : 'Cancel all active schedules',
+          () => cancelAllTimedSchedules(),
+          'btn-clear sam-quick-btn'
+        )
+      );
     }
   }
   const dqBox = $('taskCenterDiscovery');
@@ -2034,7 +2045,27 @@ async function addGame(id,name) {
 function removeGame(id){return action('/api/remove',{appid:id});}
 function clearAll(){if(confirm('Remove all games from the manual list?'))return action('/api/clear-all');}
 function applyPreset(key){return action('/api/apply-preset',{presetKey:key});}
-function togglePause(){return action('/api/toggle');}
+const poll = loadStatus;
+function togglePause() {
+  if (active?.isCollisionPaused) {
+    return action('/api/clear-collision', {}, 'Collision cleared. Farming resumed.');
+  }
+  return action('/api/toggle');
+}
+async function cancelAllTimedSchedules() {
+  if (!activeAccountId) {
+    notice(t('liveActionNotice'));
+    openAddAccModal();
+    return;
+  }
+  try {
+    const res = await api('/api/achievement/timed/cancel-all', { accountId: activeAccountId });
+    notice(res.message || 'Cancelled all active scheduled tasks.');
+    await loadStatus();
+  } catch (e) {
+    notice(e.message);
+  }
+}
 function togglePersona(){return action('/api/persona');}
 function toggleCards(){return action('/api/toggle-cards');}
 async function claimFreeGames(){const r=await action('/api/claim-free');if(r)notice(`Steam granted ${r.granted.apps.length} apps and ${r.granted.packages.length} packages.`);}
@@ -2132,7 +2163,7 @@ function applyStatusUpdate(data){
     $('connectionDetails').textContent=`${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
     $('statusText').textContent=!active.connected?(active.error||'Disconnected'):active.isCollisionPaused?'Playing on another device':active.isSleepPaused?'Sleep schedule active':active.isPaused?'Paused':active.cardFarming&&!active.cardsReady?'Checking card drops':active.isFarming?'Activity sent to Steam':'No active games';
     $('badgeStatus').className='badge-status'+(!active.isFarming?' paused':'');
-    $('playBtn').textContent=active.isPaused?'Resume':'Pause';
+    $('playBtn').textContent=active.isCollisionPaused?(currentLang==='es'?'⚠️ Forzar Reanudar (Limpiar Colisión)':'⚠️ Force Resume (Clear Collision)'):(active.isPaused?'Resume':'Pause');
     $('personaBtn').textContent=active.personaState===7?'Invisible':'Online';
     $('cardsBtn').textContent=active.cardFarming?`Cards: ${(active.cardDropGames||[]).length} games`:'Cards: OFF';
     $('gamesCountVal').textContent=active.games.length+' / 32';
@@ -2241,6 +2272,7 @@ document.querySelector('[data-event-11]').addEventListener('click', function(eve
 if($('filterRarityCommonBtn'))$('filterRarityCommonBtn').addEventListener('click',()=>setFilter('rarity','common'));
 if($('runDiscoveryQueueBtn'))$('runDiscoveryQueueBtn').addEventListener('click',()=>runDiscoveryQueue());
 if($('claimDailyPointsBtn'))$('claimDailyPointsBtn').addEventListener('click',()=>claimDailyPoints());
+if($('cancelAllTimedBtn'))$('cancelAllTimedBtn').addEventListener('click',()=>cancelAllTimedSchedules());
 if($('autoDiscoveryQueueToggle'))$('autoDiscoveryQueueToggle').addEventListener('change',e=>toggleAutoDiscoveryQueue(e.target.checked));
 if($('loadInventoryCardsBtn'))$('loadInventoryCardsBtn').addEventListener('click',()=>loadMarketableCards());
 if($('quickSellCardsBtn'))$('quickSellCardsBtn').addEventListener('click',()=>quickSellMarketCards(null));

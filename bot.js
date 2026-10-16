@@ -130,13 +130,22 @@ function createApp(options = {}) {
       const st = stateFor(accountId), client = clients.get(accountId), identity = client?.steamID?.toString();
       if (!acc || !st.connected || !client || !identity) throw fail('Steam disconnected.');
       const [snap, recs] = await Promise.all([progressSnapshotRead(client, id), operations.latest(identity, id)]);
+      const view = parseSnapshot(snap, id);
+      const currentAch = view.achievements.find(a => a.apiname === item.apiname);
+      if (item.action === 'unlock' && currentAch?.unlocked === true) {
+        console.log(`[TimedExecutor] Achievement ${item.apiname} on ${id} is ALREADY UNLOCKED. Skipping write.`);
+        return;
+      }
+      if (item.action === 'remove' && currentAch?.unlocked === false) {
+        console.log(`[TimedExecutor] Achievement ${item.apiname} on ${id} is ALREADY LOCKED. Skipping write.`);
+        return;
+      }
       const singleSel = [{ apiname: item.apiname, action: item.action }];
       const plan = prepareChanges(snap, id, singleSel, recs, undefined, { bulk: true, resetCounters: item.action === 'remove', allowRetoggle: true });
       const hasSchema = await operations.schema();
       const r = await changesWrite(client, id, singleSel, { expectedRevision: plan.revision, bulk: true, resetCounters: item.action === 'remove', allowRetoggle: true, overrideCooldown: true, stealth: Boolean(stealth), readHistory: () => operations.latest(identity, id), beforeSend: async p => hasSchema ? operations.reserve(identity, p, { overrideCooldown: true }) : cleanOperation({ ...p, operationId: crypto.randomUUID(), checkedAt: new Date().toISOString(), outcome: 'requested' }) });
       if (hasSchema) try { await operations.finish(identity, r); } catch {}
       try {
-        const view = parseSnapshot(snap, id);
         const achRow = view.achievements.find(a => a.apiname === item.apiname);
         const pctCached = percentageCache.get(String(id) + ':api') || percentageCache.get(String(id) + ':titles');
         const pct = pctCached?.percentages?.[item.apiname] ?? achRow?.percent ?? null;
@@ -372,6 +381,21 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       else timedManager.resumeAccount(acc.id);
       if (changed) farming(acc);
     });
+    client.on('user', (sid, user) => {
+      if (!isCurrent()) return;
+      const sidStr = typeof sid?.getSteamID64 === 'function' ? sid.getSteamID64() : sid?.toString?.();
+      if (sidStr && sidStr === st.steamId64) {
+        const hasGameId = Boolean(user?.gameid && String(user.gameid) !== '0');
+        const isPlayingAnything = Boolean(hasGameId || user?.game_name || user?.game_extra_info);
+        if (!isPlayingAnything && st.isCollisionPaused) {
+          console.log(`[Collision] Detected PC user stopped playing (${acc.id}). Auto-resuming farming.`);
+          st.isCollisionPaused = false;
+          if (client.playingState) client.playingState.blocked = false;
+          timedManager.resumeAccount(acc.id);
+          farming(acc, true);
+        }
+      }
+    });
     function offline(err) {
       if (!isCurrent()) return;
       st.connected = false; st.isFarming = false; st.sessionStartTime = null; st.playedGames = []; st.webCookies = ''; st.cardsReady = false;
@@ -589,7 +613,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         if (req.headers['x-csrf-token'] !== session.csrf) throw fail('Invalid session. Reload the dashboard.', 403);
         data = await readBody(req);
       }
-      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
+      if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement/changes','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
       else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action','/api/game/inspect-start','/api/game/inspect-stop','/api/points/claim-daily'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
@@ -938,6 +962,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         rate(`stats-write:${acc.id}`,20,60000);
         const id=appId(data.appid),resetAll=Boolean(data.resetAll),stealth=Boolean(data.stealth);
         if(experimentBusy.has(acc.id))throw fail('An operation is already running.',409);
+        const existingUndoJob=timedManager.status(acc.id,id);
+        if(existingUndoJob?.active)console.log(`[TimedSync] Manual achievement undo detected on app ${id}. Cancelling pending timed schedule.`);
+        timedManager.cancel(acc.id,id);
         experimentBusy.add(acc.id);
         try{
           assertPanelSession();
@@ -1027,16 +1054,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           customDelaysMs,
           spacing:'copied',
           order:'copied',
-          executeItem:async item=>{
-            if(!st.connected||clients.get(acc.id)!==client)throw fail('Steam disconnected.');
-            const [snap,recs]=await Promise.all([progressSnapshotRead(client,id),operations.latest(identity,id)]);
-            const singleSel=[{apiname:item.apiname,action:'unlock'}];
-            const plan=prepareChanges(snap,id,singleSel,recs,undefined,{bulk:true,resetCounters:false,allowRetoggle:true});
-            const hasSchema=await operations.schema();
-            const r=await changesWrite(client,id,singleSel,{expectedRevision:plan.revision,bulk:true,resetCounters:false,allowRetoggle:true,overrideCooldown:true,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async p=>hasSchema?operations.reserve(identity,p,{overrideCooldown:true}):cleanOperation({...p,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'})});
-            if(hasSchema)try{await operations.finish(identity,r);}catch{}
-            st.webSessionVersion++;achievementCache.clear();farming(acc,true);
-          }
+          stealth,
+          pausedByCollision:Boolean(st.isCollisionPaused),
+          executeItem:makeTimedItemExecutor(acc.id,id,stealth)
         });
         return json(res,200,{...status,copiedCount:items.length,message:`Copied unlock timings for ${items.length} achievement${items.length===1?'':'s'} and started replay schedule.`});
       }
@@ -1055,6 +1075,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           const hasSchema=await operations.schema();
           for(const id of targetApps){
             try{
+              const existingBulkJob=timedManager.status(acc.id,id);
+              if(existingBulkJob?.active)console.log(`[TimedSync] Manual bulk achievement changes detected on app ${id}. Cancelling pending timed schedule.`);
+              timedManager.cancel(acc.id,id);
               const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id,{timeoutMs:6000}),operations.latest(identity,id)]);
               const sel=buildBulkSelection(snapshot,id,mode,receipts,{allowRetoggle:true});
               const resetCounters=mode==='lock_all';
@@ -1084,6 +1107,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         rate(`ach-import:${acc.id}`,10,60000);
         const id=appId(data.appid),stealth=Boolean(data.stealth);
         if(experimentBusy.has(acc.id))throw fail('An operation is already running.',409);
+        const existingImportJob=timedManager.status(acc.id,id);
+        if(existingImportJob?.active)console.log(`[TimedSync] Manual achievement import detected on app ${id}. Cancelling pending timed schedule.`);
+        timedManager.cancel(acc.id,id);
         experimentBusy.add(acc.id);
         try{
           let achievementsApplied=0,statsApplied=0;
@@ -1115,6 +1141,13 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           }
           return json(res,200,{appid:id,outcome:'confirmed',achievementsApplied,statsApplied,message:`Imported ${achievementsApplied} achievement changes and ${statsApplied} statistics.`});
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
+      }
+      if(url.pathname==='/api/achievement/timed/cancel-all'&&req.method==='POST'){
+        const acc=getAccount(req,url,data);
+        const cancelledCount=timedManager.cancelAllForAccount(acc.id);
+        await timedManager.flush();
+        farming(acc,true);
+        return json(res,200,{success:true,cancelledCount,message:`Cancelled all active scheduled tasks (${cancelledCount} stopped).`});
       }
       if(url.pathname==='/api/achievement/timed'&&req.method==='GET'){
         const id=appId(url.searchParams.get('appid'));
@@ -1196,7 +1229,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const [legacy,recent]=identity?await Promise.all([journal.list(identity,{before}),operations.list(identity,before)]):[[],[]];
         return json(res,200,{storage:journal.status(),entries:[...legacy,...recent].sort((a,b)=>Date.parse(b.checkedAt)-Date.parse(a.checkedAt)).slice(0,100),limit:100});
       }
-      if(['/api/achievement/change-preview','/api/achievement/change'].includes(url.pathname)&&req.method==='POST'){
+      if(['/api/achievement/change-preview','/api/achievement/change','/api/achievement/changes'].includes(url.pathname)&&req.method==='POST'){
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Reviewed changes require the available connected main Steam account.',409);
         const id=appId(data.appid),preview=url.pathname.endsWith('change-preview'),directApply=Boolean(data.directApply);
@@ -1218,6 +1251,11 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         if(experimentBusy.has(acc.id))throw fail('An achievement operation is already running.',409);
         const hasSchema=await operations.schema();
         if(!hasSchema&&!directApply)throw fail('Persistent reviewed-operation reservations must be installed first.',503);
+        const existingJob=timedManager.status(acc.id,id);
+        if(existingJob?.active){
+          console.log(`[TimedSync] Manual achievement changes detected on app ${id}. Cancelling pending timed schedule.`);
+        }
+        timedManager.cancel(acc.id,id);
         experimentBusy.add(acc.id);
         try{
           try {
@@ -1308,6 +1346,11 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const client=clients.get(acc.id);if(!client)throw fail('Steam is not connected.',409);
         const identity=client.steamID?.toString();
         if(mode==='float'&&identity!==st.steamId64)throw fail('The Steam identity could not be verified for this progress update.',409);
+        const existingUnlockJob=timedManager.status(acc.id,id);
+        if(existingUnlockJob?.active){
+          console.log(`[TimedSync] Manual achievement unlock detected on app ${id}. Cancelling pending timed schedule.`);
+        }
+        timedManager.cancel(acc.id,id);
         experimentBusy.add(acc.id);
         let reserved=false;
         try {
@@ -1368,7 +1411,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         if (target && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(target)) throw fail('Enter an official HTTPS Discord webhook URL.');
         cfg.discordWebhook = target; save(); if (target) await webhook('SteamFarmer connected', 'Webhook configured directly with Discord.'); return json(res, 200, { success: true });
       }
-      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/load-owned', '/api/discovery-queue', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
+      const routes = ['/api/account/remove', '/api/steam/logout', '/api/steam/web-session', '/api/add', '/api/load-owned', '/api/discovery-queue', '/api/remove', '/api/clear-all', '/api/apply-preset', '/api/toggle', '/api/clear-collision', '/api/persona', '/api/custom-status', '/api/toggle-cards', '/api/claim-free', '/api/set-sleep', '/api/chat-admins'];
       if (req.method !== 'POST' || !routes.includes(url.pathname)) throw fail('Route not found.', 404);
       const acc = getAccount(req, url, data); const st = stateFor(acc.id);
       if (isEnvironmentAccount(acc) && ['/api/account/remove', '/api/steam/logout'].includes(url.pathname)) throw fail('To forget this account, remove STEAM_REFRESH_TOKEN in Render and redeploy. Use Pause to stop activity.', 409);
@@ -1414,7 +1457,33 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         case '/api/remove': { const id = appId(data.appid); acc.games = acc.games.filter(g => g !== id); delete acc.gameNames[id]; save(); farming(acc); break; }
         case '/api/clear-all': acc.games = []; acc.gameNames = {}; save(); farming(acc); break;
         case '/api/apply-preset': { const p = PRESETS[data.presetKey]; if (!p) throw fail('Invalid preset.'); acc.games = [...new Set([...acc.games, ...p.games])].slice(0, 32); save(); farming(acc); resolveNames(acc).catch(() => {}); break; }
-        case '/api/toggle': st.isPaused = !st.isPaused; acc.paused=st.isPaused;save();farming(acc); break;
+        case '/api/toggle': {
+          const client = clients.get(acc.id);
+          if (st.isCollisionPaused) {
+            console.log(`[Collision] Manual override: clearing collision pause for ${acc.id}`);
+            st.isCollisionPaused = false;
+            if (client?.playingState) client.playingState.blocked = false;
+            timedManager.resumeAccount(acc.id);
+            st.isPaused = false;
+          } else {
+            st.isPaused = !st.isPaused;
+          }
+          acc.paused = st.isPaused;
+          save();
+          farming(acc, true);
+          break;
+        }
+        case '/api/clear-collision': {
+          const client = clients.get(acc.id);
+          st.isCollisionPaused = false;
+          if (client?.playingState) client.playingState.blocked = false;
+          st.isPaused = false;
+          acc.paused = false;
+          timedManager.resumeAccount(acc.id);
+          save();
+          farming(acc, true);
+          return json(res, 200, { success: true, message: 'Collision cleared. Farming resumed.' });
+        }
         case '/api/persona': acc.personaState = acc.personaState === 7 ? 1 : 7; if (st.connected) clients.get(acc.id).setPersona(acc.personaState); save(); break;
         case '/api/custom-status': acc.customStatus = text(data.status || '', 64); save(); farming(acc); break;
         case '/api/toggle-cards': acc.cardFarming = !acc.cardFarming; save(); farming(acc); if (acc.cardFarming) scan(acc).catch(() => {}); break;
