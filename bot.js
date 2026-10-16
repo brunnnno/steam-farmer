@@ -182,7 +182,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
   }));
   let closing = false;
   function stateFor(id) {
-    if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', webSessionVersion: 0, linkCheckStarted: false, lastWebRefresh: 0, profileName: '', tokenAccountMatches: false, steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
+    if (!states.has(id)) states.set(id, { connected: false, isPaused: false, isFarming: false, isCollisionPaused: false, isSleepPaused: false, sessionStartTime: null, playedGames: [], inspectPreviousGames: null, inspectingAppId: null, cardDropGames: [], cardsReady: false, scanning: false, webCookies: '', webSessionVersion: 0, linkCheckStarted: false, lastWebRefresh: 0, profileName: '', tokenAccountMatches: false, steamId64: '', error: '', reconnectTimer: null, retryCount: 0 });
     const state=states.get(id);if(state.pausedInitialized!==true){state.isPaused=Boolean(cfg.accounts.find(a=>a.id===id)?.paused);state.pausedInitialized=true;}return state;
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
@@ -208,6 +208,10 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       : acc.cardFarming
         ? (st.cardsReady ? selectOptimalCardGames(st.cardDropGames, acc.games) : [])
         : acc.games.slice(0, 32);
+    if (st.inspectingAppId && st.connected && !st.isPaused && !st.isCollisionPaused && !st.isSleepPaused) {
+      const baseGames = Array.isArray(st.inspectPreviousGames) && st.inspectPreviousGames.length ? st.inspectPreviousGames : games;
+      games = [st.inspectingAppId, ...baseGames.filter(x => x !== st.inspectingAppId)].slice(0, 32);
+    }
     if (!st.connected || st.isPaused || st.isCollisionPaused || st.isSleepPaused) games = [];
     const list = [...games]; if (games.length && acc.customStatus && list.length < 32) list.push(acc.customStatus);
     if (!force && JSON.stringify(list) === JSON.stringify(st.playedGames)) return;
@@ -553,7 +557,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         data = await readBody(req);
       }
       if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
-      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action'].includes(url.pathname))releaseResource=budget.acquire('small');
+      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action','/api/game/inspect-start','/api/game/inspect-stop'].includes(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
@@ -689,7 +693,44 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         }
         return json(res, 200, reply(await achievementPending.get(key)));
       }
-            if(url.pathname==='/api/cards/estimate'&&req.method==='GET'){
+                  if(url.pathname==='/api/game/inspect-start'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id);
+        const id=appId(data.appid);
+        if(Boolean(data.stealth))return json(res,200,{success:true,stealth:true,appid:id,playedGames:st.playedGames});
+        if(!st.connected||!client||st.isCollisionPaused||st.isSleepPaused)return json(res,200,{success:false,appid:id,playedGames:st.playedGames});
+        if(!Array.isArray(st.inspectPreviousGames))st.inspectPreviousGames=[...st.playedGames];
+        st.inspectingAppId=id;
+        const merged=[id,...st.playedGames.filter(x=>x!==id)].slice(0,32);
+        try{
+          client.gamesPlayed(merged);
+          st.playedGames=merged;
+          if(!st.isFarming)st.sessionStartTime=Date.now();
+          st.isFarming=merged.filter(x=>typeof x==='number').length>0;
+        }catch{}
+        return json(res,200,{success:true,inspecting:true,appid:id,playedGames:st.playedGames});
+      }
+      if(url.pathname==='/api/game/inspect-stop'&&req.method==='POST'){
+        const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id);
+        st.inspectingAppId=null;
+        if(Array.isArray(st.inspectPreviousGames)){
+          const restored=st.inspectPreviousGames;
+          st.inspectPreviousGames=null;
+          if(st.connected&&client&&!st.isCollisionPaused&&!st.isSleepPaused){
+            try{
+              client.gamesPlayed(restored);
+              st.playedGames=restored;
+              st.isFarming=restored.filter(x=>typeof x==='number').length>0;
+              if(!st.isFarming)st.sessionStartTime=null;
+            }catch{}
+          }else{
+            farming(acc,true);
+          }
+        }else{
+          farming(acc,true);
+        }
+        return json(res,200,{success:true,restored:true,playedGames:st.playedGames});
+      }
+      if(url.pathname==='/api/cards/estimate'&&req.method==='GET'){
         const acc=getAccount(req,url),st=stateFor(acc.id);
         const steamid=st.steamId64||acc.mySteamID;
         if(!st.connected||!st.webCookies||!steamid)throw fail('Connect to Steam with an active web session to estimate card earnings.',409);
@@ -1078,7 +1119,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
               expectedRevision=autoPlan.revision;
             }
           }
-          const result=await changesWrite(client,id,writeSelection,{expectedRevision,bulk,resetCounters,allowRetoggle,overrideCooldown,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=hasSchema?await operations.reserve(identity,plan,{overrideCooldown}):cleanOperation({...plan,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'});current();st.lastAchievementWrite=Date.now();if(!stealth){try{if(typeof client.gamesPlayed==='function'){client.gamesPlayed([id]);st.playedGames=[id];}}catch{}}return intent;}});
+          const result=await changesWrite(client,id,writeSelection,{expectedRevision,bulk,resetCounters,allowRetoggle,overrideCooldown,stealth,readHistory:()=>operations.latest(identity,id),beforeSend:async plan=>{await persistence?.flush();current();const intent=hasSchema?await operations.reserve(identity,plan,{overrideCooldown}):cleanOperation({...plan,operationId:crypto.randomUUID(),checkedAt:new Date().toISOString(),outcome:'requested'});current();st.lastAchievementWrite=Date.now();if(!stealth){try{if(typeof client.gamesPlayed==='function'){const nextPlayed=st.inspectingAppId===id?[id,...st.playedGames.filter(x=>x!==id)].slice(0,32):[id];client.gamesPlayed(nextPlayed);st.playedGames=nextPlayed;}}catch{}}return intent;}});
           if(hasSchema){try{await operations.finish(identity,result);}catch{result.historyPersisted=false;result.message+=' History saving failed. The durable intent must be reviewed; do not retry.';}}
           lastOperations.set(`${acc.id}:${id}`,{selection:writeSelection,at:new Date().toISOString()});
           return json(res,200,result);

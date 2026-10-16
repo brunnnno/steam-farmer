@@ -627,18 +627,35 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   w.testUI.activate(null);
   await w.testUI.load();
 
-  // 1. Verify SaaS Promotional Landing Page (#saasLandingSection) + Guest Demo / Showcase Mode when !active
+  // 1. Verify Guest Page Reorganization (No fake metrics, session controls hidden, library directly below 6 feature cards) & Pure i18n
   const saasLanding = w.document.getElementById("saasLandingSection");
-  assert.ok(saasLanding);
+  const libSection = w.document.getElementById("librarySection");
+  assert.ok(saasLanding && libSection);
   assert.equal(saasLanding.hidden, false);
-  assert.match(w.document.getElementById("landingHeroTitle").textContent, /Tu Centro de Control Autónomo para Steam/);
+  const mainEls = saasLanding.parentNode.children; assert.equal(mainEls[mainEls.indexOf(saasLanding) + 1], libSection);
+  assert.equal(w.document.getElementById("playBtn").hidden, true);
+  assert.equal(w.document.getElementById("cardsBtn").hidden, true);
+  assert.equal(w.document.getElementById("personaBtn").hidden, true);
+  assert.equal(w.document.getElementById("sessionOverviewPanel").hidden, true);
+  assert.equal(w.document.getElementById("accountsBarSection").hidden, true);
+  assert.equal(w.document.getElementById("gameControlsSection").hidden, true);
+  assert.equal(w.document.getElementById("headerGuestConnectBtn").hidden, false);
+
+  // Verify pure English default (no mixed Spanish+English) and immediate pure Spanish translation via #langSelect
+  assert.equal(w.document.getElementById("landingHeroTitle").textContent, "Autonomous Steam Cloud Control Room");
+  assert.match(w.document.getElementById("demoBannerContainer").textContent, /Demo Mode: Connect your Steam account to apply changes live/);
+  const langSelect = w.document.getElementById("langSelect");
+  langSelect.value = "es";
+  langSelect.dispatchEvent(new w.Event("change"));
+  assert.equal(w.document.getElementById("landingHeroTitle").textContent, "Tu Centro de Control Autónomo para Steam");
+  assert.match(w.document.getElementById("demoBannerContainer").textContent, /Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo/);
+
   assert.equal(w.document.querySelectorAll(".landing-feature-card").length, 6);
   assert.equal(w.document.querySelectorAll(".floating-card").length, 3);
   assert.equal(w.document.querySelectorAll(".glow-blob").length, 3);
   assert.ok(w.document.querySelector(".corner-toolbar #langSelect"));
   assert.ok(w.document.querySelector(".corner-toolbar #btnOledTheme"));
   assert.ok(w.document.querySelector(".corner-toolbar #btnSoundToggle"));
-  assert.match(w.document.getElementById("demoBannerContainer").textContent, /Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo/);
   const demoCards = w.document.querySelectorAll("#gamesGrid .demo-card");
   assert.equal(demoCards.length, 4);
   assert.match(w.document.getElementById("gamesGrid").textContent, /Team Fortress 2/);
@@ -749,6 +766,54 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.ok(w.document.querySelector("footer.pro-footer"));
   assert.match(w.document.querySelector("footer.pro-footer").textContent, /v2\.4\.0/);
   assert.match(w.document.querySelector("footer.pro-footer").textContent, /github\.com\/brunnnno\/steam-farmer/);
+  // 8. Verify Connected Layout Visibility, SAM In-Game inspect-start/inspect-stop, SEO Meta tags, Keyboard Shortcuts ('/' & Escape), and Offline/Online Banner
+  assert.equal(w.document.getElementById("playBtn").hidden, false);
+  assert.equal(w.document.getElementById("cardsBtn").hidden, false);
+  assert.equal(w.document.getElementById("personaBtn").hidden, false);
+  assert.equal(w.document.getElementById("sessionOverviewPanel").hidden, false);
+  assert.equal(w.document.getElementById("accountsBarSection").hidden, false);
+  assert.equal(w.document.getElementById("gameControlsSection").hidden, false);
+  assert.equal(w.document.getElementById("headerGuestConnectBtn").hidden, true);
+
+  const inspectCalls = [];
+  w.fetch = async (url, opts) => {
+    inspectCalls.push({ url, body: opts?.body ? JSON.parse(opts.body) : null });
+    return { ok: true, status: 200, json: async () => response(demoRows) };
+  };
+  await w.testUI.open(730, "Counter-Strike 2", false, "protocol");
+  assert.ok(inspectCalls.some(c => c.url === "/api/game/inspect-start" && c.body?.accountId === "acc1" && c.body?.appid === 730));
+
+  // Verify '/' shortcut focuses #achSearchInput when achievement modal is open
+  w.document.body.focus();
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+  assert.equal(w.document.activeElement, w.document.getElementById("achSearchInput"));
+
+  // Verify Escape closes the modal and triggers /api/game/inspect-stop
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(w.document.getElementById("achModal").style.display, "none");
+  assert.ok(inspectCalls.some(c => c.url === "/api/game/inspect-stop" && c.body?.accountId === "acc1"));
+
+  // Verify '/' shortcut focuses #searchInput when modal is closed
+  w.document.body.focus();
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+  assert.equal(w.document.activeElement, w.document.getElementById("searchInput"));
+
+  // Verify Offline / Online network detector banner
+  const netBanner = w.document.getElementById("networkStatusBanner");
+  assert.ok(netBanner);
+  assert.equal(netBanner.hidden, true);
+  w.dispatchEvent(new w.Event("offline"));
+  assert.equal(netBanner.hidden, false);
+  assert.equal(netBanner.classList.contains("offline"), true);
+  w.dispatchEvent(new w.Event("online"));
+  assert.equal(netBanner.classList.contains("online"), true);
+
+  // Verify SEO, OpenGraph, Twitter Card & Network preconnect tags in <head>
+  assert.ok(w.document.querySelector('meta[property="og:title"]'));
+  assert.ok(w.document.querySelector('meta[property="og:image"]'));
+  assert.ok(w.document.querySelector('meta[name="twitter:card"]'));
+  assert.ok(w.document.querySelector('link[rel="dns-prefetch"][href="https://community.cloudflare.steamstatic.com"]'));
+
   const fullCss = fs.readFileSync(path.join(__dirname, "../public/style.css"), "utf8");
   assert.match(fullCss, /max-width:\s*1720px/);
   assert.match(fullCss, /repeat\(auto-fill,\s*minmax\(240px,\s*1fr\)\)/);

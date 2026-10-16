@@ -1026,4 +1026,46 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const clusterAction = await f.request("/api/cluster/action", { action: "start_all" });
   assert.equal(clusterAction.response.status, 200);
   assert.equal(clusterAction.data.affected, 1);
+
+  // 15. SAM In-Game Mode (/api/game/inspect-start & /api/game/inspect-stop) with 32-Game Priority Rule
+  const thirtyTwoGames = Array.from({ length: 32 }, (_, idx) => 1000 + idx);
+  f.app.states.get("user2").playedGames = [...thirtyTwoGames];
+  f.app.states.get("user2").inspectPreviousGames = null;
+  f.app.states.get("user2").inspectingAppId = null;
+
+  // Stealth mode does not alter playedGames
+  const stealthInspect = await f.request("/api/game/inspect-start", { accountId: "user2", appid: 34830, stealth: true });
+  assert.equal(stealthInspect.response.status, 200);
+  assert.equal(stealthInspect.data.stealth, true);
+  assert.deepEqual(f.app.states.get("user2").playedGames, thirtyTwoGames);
+
+  // Non-stealth mode puts appid first and caps at 32 while preserving the other 31 games
+  const liveInspect = await f.request("/api/game/inspect-start", { accountId: "user2", appid: 34830, stealth: false });
+  assert.equal(liveInspect.response.status, 200);
+  assert.equal(liveInspect.data.inspecting, true);
+  assert.equal(liveInspect.data.playedGames.length, 32);
+  assert.equal(liveInspect.data.playedGames[0], 34830);
+  assert.deepEqual(liveInspect.data.playedGames.slice(1), thirtyTwoGames.slice(0, 31));
+  assert.deepEqual(f.app.states.get("user2").inspectPreviousGames, thirtyTwoGames);
+
+  // Unlocking an achievement while inspecting preserves all 32 games in gamesPlayed
+  await f.request("/api/achievement/change", {
+    accountId: "user2",
+    appid: 34830,
+    confirmed: true,
+    directApply: true,
+    bulk: true,
+    selection: [{ apiname: "ACT_1", action: "unlock" }],
+    stealth: false
+  });
+  assert.equal(f.app.states.get("user2").playedGames.length, 32);
+  assert.equal(f.app.states.get("user2").playedGames[0], 34830);
+
+  // Closing the modal (/api/game/inspect-stop) cleanly restores the original 32 farmed games
+  const stopInspect = await f.request("/api/game/inspect-stop", { accountId: "user2" });
+  assert.equal(stopInspect.response.status, 200);
+  assert.equal(stopInspect.data.restored, true);
+  assert.deepEqual(f.app.states.get("user2").playedGames, thirtyTwoGames);
+  assert.equal(f.app.states.get("user2").inspectPreviousGames, null);
+  assert.equal(f.app.states.get("user2").inspectingAppId, null);
 });

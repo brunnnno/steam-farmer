@@ -24,14 +24,24 @@ const i18n = {
     achVerificationLabel: "Verificación de logros",
     automationsTitle: "Automatizaciones y Tareas",
     gameControlsTitle: "Controles de juegos",
+    libraryEyebrowGuest: "BIBLIOTECA DE JUEGOS DEMO",
+    libraryEyebrowAuth: "TU COLECCIÓN",
     libraryTitle: "Biblioteca de juegos",
     libraryNote: "Abre un juego para explorar o modificar sus logros",
+    searchPlaceholder: "Buscar juegos de Steam o pegar AppIDs (ej. 730, 440, 570)...",
     unlockAllBtn: "Desbloquear todo",
     lockAllBtn: "Bloquear todo",
     quickSellBtn: "Venta rápida de cromos",
     exploreQueueBtn: "Explorar Discovery Queue",
     liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla",
+    demoBannerEyebrow: "MODO DEMOSTRACIÓN INTERACTIVO",
     demoBannerTitle: "Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo",
+    demoBannerDesc: "Explora la interfaz de SamRewritten, filtros de rareza (Mítico, Épico, Raro, Común), editor de estadísticas INT/FLOAT, Tiempos Programados y el buscador público de Steam sin iniciar sesión.",
+    guestUserLabel: "Modo Invitado",
+    guestConnectionDetails: "Explora la biblioteca de demostración o conecta tu cuenta de Steam para operar en vivo.",
+    guestStatusText: "Invitado",
+    offlineBannerText: "⚠️ Sin conexión a internet: Las actualizaciones en vivo están en pausa.",
+    onlineBannerText: "🟢 Conexión a internet restablecida.",
     footerStatus: "🟢 Sistema Operativo",
     footerLegal: "SteamFarmer no está afiliado con Valve Corporation. Steam es una marca registrada de Valve.",
     footerQuickTools: "Herramientas Rápidas",
@@ -40,10 +50,10 @@ const i18n = {
     footerToolTasks: "Centro de Tareas",
     footerToolDocs: "Documentación",
     footerCommunity: "Enlaces Comunitarios",
-    footerSteamStatus: "Estado de la Red de Steam (Steam Status) ↗",
+    footerSteamStatus: "Estado de la Red de Steam ↗",
     footerReportIssue: "Reporte de Problemas ↗",
     landingHeroTitle: "Tu Centro de Control Autónomo para Steam",
-    landingHeroSubtitle: "Farmea cromos con la regla óptima de 2 horas de ASF, desbloquea logros con distribución gaussiana humanizada, gestiona estadísticas INT/FLOAT con SamRewritten Web y mantén tus cuentas activas 24/7 en la nube sin encender tu PC.",
+    landingHeroSubtitle: "Farmea cromos con la regla de 2 horas de ASF, desbloquea logros con tiempos humanizados por campana de Gauss, edita estadísticas INT/FLOAT y mantén tus cuentas 24/7 en la nube.",
     landingConnectBtn: "+ Conectar Cuenta de Steam",
     landingLiveDemoBtn: "Ver Demostración en Vivo ↓",
     featTitle1: "Farming de Cromos Inteligente",
@@ -72,14 +82,24 @@ const i18n = {
     achVerificationLabel: "Achievement verification",
     automationsTitle: "Active Automations & Tasks",
     gameControlsTitle: "Game controls",
+    libraryEyebrowGuest: "DEMO GAME LIBRARY",
+    libraryEyebrowAuth: "YOUR COLLECTION",
     libraryTitle: "Game library",
     libraryNote: "Open a game to verify its achievements",
+    searchPlaceholder: "Search Steam games or paste AppIDs (e.g. 730, 440, 570)...",
     unlockAllBtn: "Unlock all",
     lockAllBtn: "Lock all",
     quickSellBtn: "Quick-Sell Cards on Market",
     exploreQueueBtn: "Explore Discovery Queue (3x)",
-    liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla (Live action: Connect your Steam account to synchronize it)",
-    demoBannerTitle: "Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo",
+    liveActionNotice: "Live action: Connect your Steam account to synchronize it",
+    demoBannerEyebrow: "INTERACTIVE SHOWCASE · GUEST DEMO MODE",
+    demoBannerTitle: "Demo Mode: Connect your Steam account to apply changes live",
+    demoBannerDesc: "Explore the SamRewritten interface, rarity filters (Mythic, Epic, Rare, Common), INT/FLOAT statistics editor, Timed Modifications, and live Steam Store game search right now without logging in.",
+    guestUserLabel: "Guest Mode",
+    guestConnectionDetails: "Explore the demo catalog or connect your Steam account to operate live.",
+    guestStatusText: "Guest",
+    offlineBannerText: "⚠️ Connection lost: You are currently offline. Live updates are paused.",
+    onlineBannerText: "🟢 Connection restored: Back online.",
     footerStatus: "🟢 System Operational",
     footerLegal: "SteamFarmer is not affiliated with Valve Corporation. Steam is a registered trademark of Valve.",
     footerQuickTools: "Quick Tools",
@@ -90,8 +110,8 @@ const i18n = {
     footerCommunity: "Community Links",
     footerSteamStatus: "Steam Network Status ↗",
     footerReportIssue: "Report an Issue ↗",
-    landingHeroTitle: "Tu Centro de Control Autónomo para Steam · Autonomous Steam Cloud",
-    landingHeroSubtitle: "Farm trading cards with ASF's optimal 2-hour rule, unlock achievements with humanized Gaussian schedules, edit INT/FLOAT stats via SamRewritten Web, and keep your accounts active 24/7 in the cloud.",
+    landingHeroTitle: "Autonomous Steam Cloud Control Room",
+    landingHeroSubtitle: "Farm trading cards with ASF's 2-hour optimal rule, unlock achievements with humanized Gaussian schedules, manage INT/FLOAT stats, and keep your accounts active 24/7 in the cloud.",
     landingConnectBtn: "+ Connect Steam Account",
     landingLiveDemoBtn: "View Live Demo ↓",
     featTitle1: "Smart Card Farming (ASF 2h Rule)",
@@ -321,6 +341,22 @@ function image(src, className, alternatives=[]) {
   img.addEventListener('error',()=>{while(next<alternatives.length){try{const u=new URL(alternatives[next++]);if(u.protocol==='https:'){img.src=u.href;img.hidden=false;return;}}catch{}}img.hidden=true;});
   return img;
 }
+function setGuestModeLayout(isGuest) {
+  const guest = Boolean(isGuest);
+  if ($('saasLandingSection')) $('saasLandingSection').hidden = !guest;
+  if ($('headerGuestConnectBtn')) {
+    $('headerGuestConnectBtn').hidden = !guest;
+    $('headerGuestConnectBtn').textContent = t('landingConnectBtn');
+  }
+  if ($('playBtn')) $('playBtn').hidden = guest;
+  if ($('cardsBtn')) $('cardsBtn').hidden = guest;
+  if ($('personaBtn')) $('personaBtn').hidden = guest;
+  if ($('badgeStatus')) $('badgeStatus').hidden = guest;
+  if ($('accountsBarSection')) $('accountsBarSection').hidden = guest;
+  if ($('sessionOverviewPanel')) $('sessionOverviewPanel').hidden = guest;
+  if ($('gameControlsSection')) $('gameControlsSection').hidden = guest;
+  if ($('libraryEyebrow')) $('libraryEyebrow').textContent = t(guest ? 'libraryEyebrowGuest' : 'libraryEyebrowAuth');
+}
 async function loadStatus() {
   if(!csrf)return;if(statusBusy){statusQueued=true;return;} statusBusy = true;const authSerial=loginSerial,requestedAccount=activeAccountId;
   try {
@@ -347,22 +383,13 @@ async function loadStatus() {
     if (Array.isArray(data.demoCatalog) && data.demoCatalog.length && guestDemoGames.length === DEFAULT_DEMO_GAMES.length) {
       guestDemoGames = data.demoCatalog.map(g => ({ id: Number(g.id), name: String(g.name) }));
     }
-    if ($('saasLandingSection')) $('saasLandingSection').hidden = Boolean(active);
+    setGuestModeLayout(!active);
     if (!active) {
-      $('connectionDetails').textContent = 'Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo · Interactive Public Showcase.';
-      $('userLabel').textContent = currentLang === 'es' ? 'Sesión Interactiva · Panel Operativo en Vivo' : 'Interactive Showcase · Live Operational Preview';
-      $('statusText').textContent = currentLang === 'es' ? 'Activo · Demo' : 'Active · Showcase';
-      $('badgeStatus').className = 'badge-status';
-      $('playBtn').textContent = currentLang === 'es' ? 'Pausar / Reanudar' : 'Resume / Play Now';
-      $('cardsBtn').textContent = 'Cards: 4 games';
-      $('personaBtn').textContent = 'Mode: Online';
+      $('connectionDetails').textContent = t('guestConnectionDetails');
+      $('userLabel').textContent = t('guestUserLabel');
+      $('statusText').textContent = t('guestStatusText');
       renderDemoCatalog();
       gamesSnapshot = '';
-      $('timerVal').textContent = '01h 14m 22s';
-      $('hoursVal').textContent = '4.8 estimated hrs';
-      $('gamesCountVal').textContent = '12 / 32';
-      $('capacityPercent').textContent = '38%';
-      $('capacityFill').style.width = '38%';
       return;
     }
     if ($('demoBannerContainer')) $('demoBannerContainer').replaceChildren();
@@ -405,7 +432,7 @@ function renderAutomationsPanel(account) {
       cardsBox.replaceChildren(
         element('strong', 'Card Farming ON · 8 drops left'),
         element('small', 'Portal 2 (4/5 cards · Est. $0.07 to complete badge)'),
-        button('Fabricar Insignia (Craft Badge)', () => { notice(t('liveActionNotice')); openAddAccModal(); }, 'btn-purple sam-quick-btn')
+        button(currentLang === 'es' ? 'Fabricar Insignia' : 'Craft Badge', () => { notice(t('liveActionNotice')); openAddAccModal(); }, 'btn-purple sam-quick-btn')
       );
     }
     const timedBox = $('taskCenterTimedList');
@@ -645,11 +672,11 @@ function renderDemoCatalog() {
     const banner = element('div', undefined, 'demo-showcase-banner');
     const copy = element('div');
     copy.append(
-      element('span', 'INTERACTIVE SHOWCASE · GUEST DEMO MODE', 'eyebrow'),
-      element('h3', 'Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo'),
-      element('p', 'Explore the SamRewritten interface, rarity filters (Mythic, Epic, Rare, Common), INT/FLOAT statistics editor, Timed Modifications, and live Steam Store game search right now without logging in.')
+      element('span', t('demoBannerEyebrow'), 'eyebrow'),
+      element('h3', t('demoBannerTitle')),
+      element('p', t('demoBannerDesc'))
     );
-    const cta = button('+ Connect Steam Account', () => openAddAccModal(), 'btn-main');
+    const cta = button(t('landingConnectBtn'), () => openAddAccModal(), 'btn-main');
     banner.append(copy, cta);
     bannerBox.append(banner);
   }
@@ -764,6 +791,18 @@ function applyLanguage(lang) {
   for (let i = 1; i <= 6; i++) {
     if ($("featTitle" + i)) $("featTitle" + i).textContent = t("featTitle" + i);
     if ($("featDesc" + i)) $("featDesc" + i).textContent = t("featDesc" + i);
+  }
+  if ($("headerGuestConnectBtn")) $("headerGuestConnectBtn").textContent = t("landingConnectBtn");
+  if ($("searchInput")) $("searchInput").placeholder = t("searchPlaceholder");
+  if ($("libraryEyebrow")) $("libraryEyebrow").textContent = t(active ? "libraryEyebrowAuth" : "libraryEyebrowGuest");
+  if (!active) {
+    if ($("userLabel")) $("userLabel").textContent = t("guestUserLabel");
+    if ($("connectionDetails")) $("connectionDetails").textContent = t("guestConnectionDetails");
+    if ($("statusText")) $("statusText").textContent = t("guestStatusText");
+  }
+  if ($("networkStatusBanner") && !$("networkStatusBanner").hidden) {
+    const isOffline = $("networkStatusBanner").classList.contains("offline");
+    $("networkStatusBanner").textContent = t(isOffline ? "offlineBannerText" : "onlineBannerText");
   }
   cardsSnapshot = "";
   gamesSnapshot = "";
@@ -1010,6 +1049,9 @@ async function openAchModal(id,title,forceRefresh=false,method=active?.connected
   document.body.classList.add('achievement-open');
   $('achListContainer').scrollTop=0; document.querySelector('.ach-modal-card').scrollTop=0;
   rarityWarning='';currentAchMethod=method; currentAchAppId=id; currentAchGameName=title; achAccountId=currentAccKey(); currentAchList=[]; currentStatsList=[];
+  if (activeAccountId && active?.id && active?.connected && !$('stealthModeToggle')?.checked) {
+    api('/api/game/inspect-start', { accountId: activeAccountId, appid: id, stealth: false }).catch(() => {});
+  }
   $('achRarityMessage').hidden=true;$('achRarityMessage').textContent='';$('retryAchievementRarity').hidden=true;$('achReadMessage').textContent='';
   $('achReadMode').value=method;
   $('achModal').style.display='flex'; $('achGameTitle').textContent=title; if($('achExternalMeta')){$('achExternalMeta').replaceChildren(createExternalBadgesNode(id));} $('achProgressText').textContent='Loading Steam achievements…'; $('achProgressFill').style.width='0%'; $('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren(); $('achPrivacyWarning').style.display='none'; $('achievementSource').textContent='';updateSelectionSummary();
@@ -1057,7 +1099,11 @@ async function loadGameRequirements(id,serial,account) {
 }
 let requirementsContext=null;
 $('gameRequirements').addEventListener('toggle',()=>{const context=requirementsContext;if($('gameRequirements').open&&context&&context.serial===achSerial&&context.account===currentAccKey()&&$('achModal').style.display==='flex'&&!context.requested){context.requested=true;loadGameRequirements(context.id,context.serial,context.account);}});
-function closeAchModal() { achievementLive.stop();liveContext=null;achievementRevision='';observedAchievementChanges.length=0;renderObservedChanges();requirementsContext=null;clearAchievementSelection();modifiedStats.clear();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentStatsList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren();updateSelectionSummary(); }
+function closeAchModal() {
+  if (activeAccountId && active?.id && currentAchAppId !== null && active?.connected) {
+    api('/api/game/inspect-stop', { accountId: activeAccountId }).catch(() => {});
+  }
+  achievementLive.stop();liveContext=null;achievementRevision='';observedAchievementChanges.length=0;renderObservedChanges();requirementsContext=null;clearAchievementSelection();modifiedStats.clear();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentStatsList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren();updateSelectionSummary(); }
 function liveMatches(context){return context&&context.serial===achSerial&&context.account===activeAccountId&&context.id===currentAchAppId&&$('achModal').style.display==='flex';}
 function liveAllowed(context){return liveMatches(context)&&Boolean(csrf)&&!document.hidden&&navigator.onLine!==false&&active?.connected===true&&!experimentBusy&&!achievementSelection.size&&$('sharedProgressReview').hidden&&currentSamTab==='achievements';}
 function renderObservedChanges(){
@@ -1814,13 +1860,51 @@ $('searchInput').addEventListener('keydown',event=>{
 });
 $('pinInput').addEventListener('keydown',event=>{if(event.key==='Enter')unlock();});
 document.addEventListener('click',event=>{if(!$('searchResults').contains(event.target)&&event.target!==$('searchInput'))$('searchResults').style.display='none';});
-setInterval(()=>{if(document.hidden)return;if(!active){const sec=Math.max(0,Math.floor((Date.now()-DEMO_SESSION_START)/1000));$('timerVal').textContent=`${String(Math.floor(sec/3600)).padStart(2,'0')}h ${String(Math.floor(sec%3600/60)).padStart(2,'0')}m ${String(sec%60).padStart(2,'0')}s`;$('hoursVal').textContent='4.8 estimated hrs';return;}const start=active?.sessionStartTime, count=active?.runningGames?.length||0;const seconds=start&&active.isFarming?Math.max(0,Math.floor((Date.now()-start)/1000)):0;$('timerVal').textContent=`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m ${seconds%60}s`;$('hoursVal').textContent=(seconds/3600*count).toFixed(1)+' estimated hrs';},1000);
-document.addEventListener('keydown',event=>{if(event.key==='Escape' && $('achModal').style.display==='flex')closeAchModal();});
+setInterval(()=>{if(document.hidden||!active)return;const start=active?.sessionStartTime, count=active?.runningGames?.length||0;const seconds=start&&active.isFarming?Math.max(0,Math.floor((Date.now()-start)/1000)):0;$('timerVal').textContent=`${Math.floor(seconds/3600)}h ${Math.floor(seconds%3600/60)}m ${seconds%60}s`;$('hoursVal').textContent=(seconds/3600*count).toFixed(1)+' estimated hrs';},1000);
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){
+    if($('achModal')?.style.display==='flex')closeAchModal();
+    if($('addAccModal')?.style.display==='flex')closeAddAccModal();
+    if($('showcaseModal')?.style.display==='flex')closeShowcaseModal();
+    return;
+  }
+  if(event.key==='/'&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
+    const tag=(document.activeElement?.tagName||'').toUpperCase();
+    const isEditable=tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||document.activeElement?.isContentEditable;
+    if(!isEditable){
+      event.preventDefault();
+      if($('achModal')?.style.display==='flex'&&$('achSearchInput'))$('achSearchInput').focus();
+      else if($('searchInput'))$('searchInput').focus();
+    }
+  }
+});
 $('achModal').addEventListener('click',event=>{if(event.target===$('achModal'))closeAchModal();});
 setInterval(()=>{if(!document.hidden)return loadStatus();},10000);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){achievementLive.stop();return;}loadStatus();if(liveContext){achievementLive.start(liveContext);achievementLive.wake();}});
-window.addEventListener('offline',()=>achievementLive.stop());
-window.addEventListener('online',()=>{if(liveContext){achievementLive.start(liveContext);achievementLive.wake();}});
+let networkBannerTimer=null;
+function handleNetworkStatusChange(isOnline){
+  const banner=$('networkStatusBanner');
+  clearTimeout(networkBannerTimer);
+  if(!isOnline){
+    achievementLive.stop();
+    if(banner){
+      banner.textContent=t('offlineBannerText');
+      banner.className='network-status-banner offline';
+      banner.hidden=false;
+    }
+  }else{
+    if(banner){
+      banner.textContent=t('onlineBannerText');
+      banner.className='network-status-banner online';
+      banner.hidden=false;
+      networkBannerTimer=setTimeout(()=>{banner.hidden=true;},4000);
+      networkBannerTimer.unref?.();
+    }
+    if(liveContext){achievementLive.start(liveContext);achievementLive.wake();}
+  }
+}
+window.addEventListener('offline',()=>handleNetworkStatusChange(false));
+window.addEventListener('online',()=>handleNetworkStatusChange(true));
 window.addEventListener('focus',()=>{if(!document.hidden)achievementLive.wake();});
 document.querySelector('[data-event-0]').addEventListener('click', function(event) { unlock(); });
 document.querySelector('[data-event-1]').addEventListener('click', function(event) { submitGuard(); });
@@ -1855,6 +1939,7 @@ if($('btnViewList'))$('btnViewList').addEventListener('click',()=>setLibraryView
 if($('langSelect')){$('langSelect').value=currentLang;$('langSelect').addEventListener('change',e=>applyLanguage(e.target.value));}
 if($('btnOledTheme'))$('btnOledTheme').addEventListener('click',()=>toggleOledTheme());
 if($('btnLandingConnect'))$('btnLandingConnect').addEventListener('click',()=>openAddAccModal());
+if($('headerGuestConnectBtn'))$('headerGuestConnectBtn').addEventListener('click',()=>openAddAccModal());
 if($('btnLandingLiveDemo'))$('btnLandingLiveDemo').addEventListener('click',()=>{
   try{$('gamesGrid')?.scrollIntoView?.({behavior:'smooth'});}catch{}
   openAchModal(730,'Counter-Strike 2',false,'web','achievements');

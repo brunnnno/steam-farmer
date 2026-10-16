@@ -1682,3 +1682,25 @@ body {
     padding-top: 20px;
   }
 }
+
+/* v48: Network Connectivity Banner & Clean Guest Header */
+.network-status-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3500;
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  background: rgba(244, 63, 94, 0.95);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+}
+.network-status-banner.online {
+  background: rgba(16, 185, 129, 0.95);
+  color: #03150e;
+}
