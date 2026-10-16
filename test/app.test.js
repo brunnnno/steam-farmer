@@ -809,4 +809,38 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(qsRes.soldCount,1);
   assert.equal(qsRes.requiresConfirmationCount,1);
   assert.ok(marketCalls.some(c=>c.url==='https://steamcommunity.com/market/sellitem/'&&c.body.includes('assetid=9001')&&c.body.includes('price=8')));
+
+  // 12. Audit Fixes: 429 rate-limit backoff + 1.8s-3.2s delay + 2FA mobileconf auto-confirm + minutes playtime parsing
+  const minsHtml='<div class="badge_row"><a class="badge_row_overlay" href="https://steamcommunity.com/my/gamecards/440/"></a><div class="badge_title">TF2</div><div class="badge_title_stats_playtime">45 mins on record</div><span class="progress_info_bold">2 card drops remaining</span></div>';
+  assert.equal(parseCards(minsHtml)[0].hoursPlayed,0.8);
+
+  const {ownedFloatLibrary}=require('../lib/float-discovery');
+  const libWithMins=await ownedFloatLibrary({steamID:{toString:()=>'76561198000000001'},_currentJobID:1,_jobs:{delete:()=>{}},getUserOwnedApps:async()=>({apps:[{appid:440,name:'TF2',playtime_forever:90}]})});
+  assert.equal(libWithMins.games[0].playtimeMinutes,90);
+
+  const delays=[];
+  let sellAttempts9002=0;
+  const qsRetryRes=await quickSellCards('76561198000000001','sessionid=sess999; steamLoginSecure=1',{
+    identitySecret:Buffer.from('0123456789abcdef0123').toString('base64'),
+    delayFn:async ms=>{delays.push(ms);},
+    request:async(url,opts)=>{
+      if(url.includes('/inventory/'))return {body:JSON.stringify({
+        assets:[{assetid:'9001',classid:'100',instanceid:'0',amount:'1'},{assetid:'9002',classid:'100',instanceid:'0',amount:'1'}],
+        descriptions:[{classid:'100',instanceid:'0',marketable:1,name:'Card',market_hash_name:'730-Card',type:'Trading Card',market_fee_app:730}]
+      })};
+      if(url.includes('/market/priceoverview/'))return {body:JSON.stringify({success:true,lowest_price:'$0.10'})};
+      if(url.includes('/market/sellitem/')){
+        if(opts.body.includes('assetid=9002')&&++sellAttempts9002===1)throw new Error('Steam/Discord returned HTTP 429.');
+        return {body:JSON.stringify({success:true,requires_confirmation:1})};
+      }
+      if(url.includes('/mobileconf/getlist'))return {body:JSON.stringify({success:true,conf:[{id:'c1',key:'k1'},{id:'c2',key:'k2'}]})};
+      if(url.includes('/mobileconf/ajaxop'))return {body:JSON.stringify({success:true})};
+      return {body:'{}'};
+    }
+  });
+  assert.equal(qsRetryRes.soldCount,2);
+  assert.equal(qsRetryRes.rateLimitRetries,1);
+  assert.equal(qsRetryRes.autoConfirmedCount,2);
+  assert.ok(delays.some(d=>d>=1800&&d<=3200));
+  assert.ok(delays.includes(15000));
 });

@@ -5,6 +5,56 @@ let currentAchList = [], currentStatsList = [], currentAchAppId = null, achAccou
 let achievementPage=0,achievementRevision='',liveContext=null,currentSamTab='achievements';
 const modifiedStats = new Map();
 const observedAchievementChanges=[];
+const seenTimedEvents = new Set();
+let seenTimedEventsInitialized = false;
+
+function playAchievementSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const notes = [587.33, 880.0]; // D5 -> A5 console achievement chime
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+      gain.gain.setValueAtTime(0.001, now + idx * 0.11);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + idx * 0.11 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.11 + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.11);
+      osc.stop(now + idx * 0.11 + 0.46);
+    });
+    setTimeout(() => { try { ctx.close?.(); } catch {} }, 1000);
+  } catch {}
+}
+
+function showAchievementToast({ name, gameName, iconUrl, action = 'unlock' } = {}) {
+  const cont = $('achToastContainer');
+  if (!cont) return;
+  playAchievementSound();
+  const toast = element('div', undefined, 'ach-toast');
+  if (iconUrl && /^https:/i.test(iconUrl)) {
+    toast.append(image(iconUrl, 'ach-toast-icon'));
+  } else {
+    const badge = element('div', action === 'remove' ? '🔒' : '🏆', 'ach-toast-fallback');
+    toast.append(badge);
+  }
+  const copy = element('div', undefined, 'ach-toast-copy');
+  copy.append(
+    element('span', action === 'remove' ? 'ACHIEVEMENT LOCKED' : 'ACHIEVEMENT UNLOCKED', 'eyebrow'),
+    element('strong', String(name || 'Steam Achievement')),
+    element('small', String(gameName || 'Steam Game'))
+  );
+  toast.append(copy);
+  cont.append(toast);
+  while (cont.childNodes.length > 4) cont.firstChild.remove();
+  const t = setTimeout(() => { try { toast.remove(); } catch {} }, 5500);
+  t.unref?.();
+}
 const settingIds=['timezoneInput','customStatusInput','sleepEnabled','sleepStart','sleepEnd'];
 const draftSettings=DraftSettings.create({document,ids:settingIds});
 function resetSettingsDrafts(){if(settingIds.includes(document.activeElement?.id))document.activeElement.blur();draftSettings.reset();}
@@ -119,6 +169,7 @@ async function loadStatus() {
     $('resourceUsage').textContent=data.resources?`Process RAM: ${(data.resources.rssBytes/1048576).toFixed(1)} MiB · Heap: ${(data.resources.heapUsedBytes/1048576).toFixed(1)} MiB · ${data.resources.steamConnections}/3 Steam connections · ${data.resources.activeHeavy}/1 heavy operations`:'Server resource data unavailable.';
     $('historyStorage').textContent=storage?.persistent?(storage.available?(memory?.persistent&&memory.available?'Persistent memory connected: write history and encrypted configuration saved.':'Persistent write history connected; configuration is still local.'):'Persistent history unavailable. Achievement activation is blocked.'):'Local history only. Records can be lost when the host restarts or redeploys.';
     renderCardFarming(active);
+    renderAutomationsPanel(active);
     if (!active) {
       $('connectionDetails').textContent = 'Sign in with your Steam account and Steam Guard to manage games, achievements and statistics.';
       $('userLabel').textContent = 'Add your Steam account to get started';
@@ -156,6 +207,125 @@ async function loadStatus() {
   } catch (e) { if(authSerial===loginSerial&&csrf)notice(e.message); } finally { statusBusy = false;if(csrf&&(statusQueued||authSerial!==loginSerial)){statusQueued=false;queueMicrotask(loadStatus);} }
 }
 let tabsSnapshot = '', presetsSnapshot = '', gamesSnapshot = '',cardsSnapshot='',cardsAccount='';
+function renderAutomationsPanel(account) {
+  const panel = $('automationsPanel');
+  if (!panel) return;
+  if (!account) {
+    if ($('automationsSummary')) $('automationsSummary').textContent = 'No account';
+    if ($('taskCenterFarming')) $('taskCenterFarming').textContent = 'Connect a Steam account to start.';
+    if ($('taskCenterTimedList')) $('taskCenterTimedList').textContent = 'No active timed schedules.';
+    if ($('taskCenterDiscovery')) $('taskCenterDiscovery').textContent = 'Sign in to enable daily queue exploration.';
+    return;
+  }
+  if (Array.isArray(account.recentTimedEvents)) {
+    for (const ev of account.recentTimedEvents) {
+      if (!ev?.eventId) continue;
+      if (seenTimedEventsInitialized && !seenTimedEvents.has(ev.eventId)) {
+        const gTitle = account.gameNames?.[ev.appid] || `AppID ${ev.appid}`;
+        showAchievementToast({ name: ev.apiname, gameName: gTitle, action: ev.action });
+      }
+      seenTimedEvents.add(ev.eventId);
+    }
+    seenTimedEventsInitialized = true;
+  }
+  const runningIds = Array.isArray(account.runningGames) ? account.runningGames : [];
+  const timedJobs = Array.isArray(account.activeTimedJobs) ? account.activeTimedJobs : [];
+  const phaseLabels = {
+    timed_sync: 'Playtime-Sync (accumulating hours while unlocking achievements)',
+    accumulating_2h: 'Accumulating 2 hours (parallel farming · ASF rule)',
+    dropping_single: 'Dropping cards (1 game at a time · ASF >2h optimal rule)',
+    manual: 'Manual hour farming',
+    paused: 'Paused / Standby',
+    idle: 'Idle (no games running)'
+  };
+  const phaseText = phaseLabels[account.farmingPhase] || 'Active';
+  if ($('automationsSummary')) {
+    $('automationsSummary').textContent = `${runningIds.length} running · ${timedJobs.length} timed task${timedJobs.length === 1 ? '' : 's'}`;
+  }
+  const farmBox = $('taskCenterFarming');
+  if (farmBox) {
+    farmBox.replaceChildren();
+    farmBox.append(element('strong', phaseText));
+    if (runningIds.length) {
+      const dropMap = new Map((account.cardDropGames || []).map(g => [g.appid, g]));
+      for (const id of runningIds.slice(0, 6)) {
+        const dropInfo = dropMap.get(id);
+        const name = dropInfo?.name || account.gameNames?.[id] || `AppID ${id}`;
+        const hrs = typeof dropInfo?.hoursPlayed === 'number' ? ` · ${dropInfo.hoursPlayed.toFixed(1)} hrs` : '';
+        const rem = typeof dropInfo?.remaining === 'number' ? ` · ${dropInfo.remaining} cards left` : '';
+        farmBox.append(element('small', `● ${name} (#${id})${hrs}${rem}`));
+      }
+    } else {
+      farmBox.append(element('small', 'No games currently running in Steam.'));
+    }
+  }
+  const timedBox = $('taskCenterTimedList');
+  if (timedBox) {
+    timedBox.replaceChildren();
+    if (!timedJobs.length) {
+      timedBox.append(element('small', 'No scheduled achievement tasks running.'));
+    } else {
+      for (const job of timedJobs) {
+        const gTitle = account.gameNames?.[job.appid] || `AppID ${job.appid}`;
+        const pct = job.totalCount ? Math.round((job.completedCount / job.totalCount) * 100) : 0;
+        const item = element('div', undefined, 'task-timed-item');
+        item.append(element('strong', `${gTitle} (#${job.appid}) — ${job.completedCount}/${job.totalCount} (${pct}%)`));
+        const barBg = element('div', undefined, 'progress-bar-bg');
+        const barFill = element('div', undefined, 'progress-bar-fill');
+        barFill.style.width = `${pct}%`;
+        barBg.append(barFill);
+        item.append(barBg);
+        const isPaused = job.pausedManually || job.pausedByCollision;
+        const nextText = job.pausedByCollision
+          ? 'Paused (playing on PC)'
+          : job.pausedManually
+            ? 'Paused manually'
+            : job.nextRunAt
+              ? `Next achievement at ${new Date(job.nextRunAt).toLocaleTimeString('en-US')}`
+              : 'Pending';
+        item.append(element('small', nextText));
+        const btnRow = element('div', undefined, 'sam-row-actions');
+        const toggleBtn = button(
+          isPaused ? 'Resume' : 'Pause',
+          async () => {
+            try {
+              await api('/api/achievement/timed', { accountId: account.id, appid: job.appid, action: isPaused ? 'resume' : 'pause' });
+              await loadStatus();
+            } catch (e) { notice(e.message); }
+          },
+          'btn-action-sm sam-quick-btn'
+        );
+        const cancelBtn = button(
+          'Cancel',
+          async () => {
+            try {
+              await api('/api/achievement/timed', { accountId: account.id, appid: job.appid, action: 'cancel' });
+              await loadStatus();
+            } catch (e) { notice(e.message); }
+          },
+          'btn-clear sam-quick-btn'
+        );
+        btnRow.append(toggleBtn, cancelBtn);
+        item.append(btnRow);
+        timedBox.append(item);
+      }
+    }
+  }
+  const dqBox = $('taskCenterDiscovery');
+  if (dqBox) {
+    dqBox.replaceChildren();
+    if ($('autoDiscoveryQueueToggle')) $('autoDiscoveryQueueToggle').checked = Boolean(account.autoDiscoveryQueue);
+    const lastMs = Date.parse(account.lastDiscoveryQueueAt || '');
+    const nextMs = Number.isFinite(lastMs) ? lastMs + 24 * 3600000 : null;
+    const remHours = nextMs && nextMs > Date.now() ? ((nextMs - Date.now()) / 3600000).toFixed(1) : null;
+    dqBox.append(
+      element('strong', account.autoDiscoveryQueue ? 'Daily Auto-Queue: ON' : 'Daily Auto-Queue: OFF'),
+      element('small', remHours ? `Next automatic exploration in ${remHours} hrs` : 'Ready to explore 3 daily queues now.'),
+      button('Explore 3x Now', () => runDiscoveryQueue(), 'btn-action-sm sam-quick-btn')
+    );
+  }
+}
+
 function renderCardFarming(account){
   const panel=$('cardsPanel');panel.hidden=!account?.cardFarming;
   if(panel.hidden){panel.open=false;cardsSnapshot='';cardsAccount='';$('cardsList').replaceChildren();return;}
@@ -1025,7 +1195,13 @@ async function loadMarketableCards(){
 async function quickSellMarketCards(assetids=null){
   if(!activeAccountId)return;
   try{
-    const res=await api('/api/cards/sell',{accountId:activeAccountId,...(Array.isArray(assetids)?{assetids}:{})});
+    const identitySecret=($('marketIdentitySecretInput')?.value||'').trim();
+    const res=await api('/api/cards/sell',{
+      accountId:activeAccountId,
+      ...(Array.isArray(assetids)?{assetids}:{}),
+      ...(identitySecret?{identitySecret}:{})
+    });
+    if($('marketIdentitySecretInput')&&identitySecret)$('marketIdentitySecretInput').value='';
     notice(res.message||'Market quick-sell completed.');
     await loadMarketableCards();
   }catch(e){

@@ -561,4 +561,7 @@ test('SamRewritten tabs, live 1-click controls, Invert page, Statistics editor, 
   assert.match(cssText,/#lockModal\s*\{[^}]*display:\s*none\s*!important/);
   const cfgJson=JSON.parse(fs.readFileSync(path.join(__dirname,'../config.json'),'utf8'));
   assert.deepEqual(cfgJson.accounts,[]);
+  assert.ok(w.document.getElementById('automationsPanel'));
+  assert.ok(w.document.getElementById('achToastContainer'));
+  assert.ok(w.document.getElementById('marketIdentitySecretInput'));
 });

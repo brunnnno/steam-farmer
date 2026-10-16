@@ -245,7 +245,13 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
         try {
           const lib = await ownedFloatLibrary(client);
           for (const g of lib.games) {
-            if (found.has(g.appid) && !found.get(g.appid).name) found.get(g.appid).name = g.name;
+            if (found.has(g.appid)) {
+              const entry = found.get(g.appid);
+              if (!entry.name && g.name) entry.name = g.name;
+              if (entry.hoursPlayed === undefined && typeof g.playtimeMinutes === 'number') {
+                entry.hoursPlayed = Math.round((g.playtimeMinutes / 60) * 10) / 10;
+              }
+            }
           }
         } catch {}
       }
@@ -373,7 +379,18 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
   }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
-return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, gameCount: acc.games.length };
+    const timedSyncApps = timedManager.activeNonStealthApps(acc.id);
+    const under2hCount = (st.cardDropGames || []).filter(g => typeof g.hoursPlayed === 'number' && g.hoursPlayed < 2.0).length;
+    const farmingPhase = !st.connected || st.isPaused || st.isCollisionPaused || st.isSleepPaused
+      ? 'paused'
+      : timedSyncApps.length
+        ? 'timed_sync'
+        : acc.cardFarming && st.cardsReady && (st.cardDropGames || []).length
+          ? (under2hCount > 0 ? 'accumulating_2h' : 'dropping_single')
+          : st.isFarming
+            ? 'manual'
+            : 'idle';
+    return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
@@ -669,15 +686,19 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         const steamid=st.steamId64||acc.mySteamID;
         if(!st.connected||!st.webCookies||!steamid)throw fail('Connect to Steam with an active web session to sell trading cards.',409);
         rate(`cards-sell:${acc.id}`,10,60000);
+        const rawSecret=typeof data.identitySecret==='string'&&data.identitySecret.trim()?text(data.identitySecret.trim(),128):'';
+        if(rawSecret)vault.set(acc.id+':identity_secret',rawSecret);
+        const identitySecret=rawSecret||vault.get(acc.id+':identity_secret')||'';
         const result=await cardsQuickSell(steamid,st.webCookies,{
           assetids:Array.isArray(data.assetids)?data.assetids:null,
           customPriceCents:data.priceCents?Number(data.priceCents):null,
           currency:Number(data.currency)||1,
-          maxCards:Number(data.maxCards)||25
+          maxCards:Number(data.maxCards)||25,
+          identitySecret
         });
         return json(res,200,{
           ...result,
-          message:`Listed ${result.soldCount}/${result.processedCount} card${result.processedCount===1?'':'s'} on the Steam Market${result.requiresConfirmationCount?` (${result.requiresConfirmationCount} awaiting Steam Guard mobile confirmation)`:''}.`
+          message:`Listed ${result.soldCount}/${result.processedCount} card${result.processedCount===1?'':'s'} on the Steam Market${result.autoConfirmedCount?` (${result.autoConfirmedCount} auto-confirmed via 2FA)`:result.requiresConfirmationCount?` (${result.requiresConfirmationCount} awaiting Steam Guard mobile confirmation)`:''}.`
         });
       }
       if(url.pathname==='/api/stats'&&req.method==='GET'){
@@ -879,6 +900,14 @@ return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local
         if(data.action==='cancel'){
           const cancelled=timedManager.cancel(acc.id,id);
           return json(res,200,{active:false,cancelled,appid:id,message:'Timed modification schedule stopped.'});
+        }
+        if(data.action==='pause'){
+          const paused=timedManager.pauseJob(acc.id,id);
+          return json(res,200,{...timedManager.status(acc.id,id),paused,message:'Timed modification schedule paused.'});
+        }
+        if(data.action==='resume'){
+          const resumed=timedManager.resumeJob(acc.id,id);
+          return json(res,200,{...timedManager.status(acc.id,id),resumed,message:'Timed modification schedule resumed.'});
         }
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Timed modifications require the available connected main Steam account.',409);
         rate(`ach-timed:${acc.id}`,15,60000);
