@@ -1,13 +1,13 @@
 {
   "name": "steam-farmer",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "Personal Steam session dashboard with verified achievement and statistics management",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "start": "node --max-old-space-size=192 --max-semi-space-size=8 bot.js",
+    "start": "node --max-old-space-size=384 --max-semi-space-size=16 bot.js",
     "test": "node --test --test-concurrency=2",
     "check": "node --check bot.js && node --check public/app.js && node --check public/achievement-availability.js && node --check lib/core.js && node --check lib/steam-data.js && node --check lib/cache.js && node --check lib/steam-protocol.js && node --check lib/achievement-experiment.js && node --check lib/achievement-writer.js && node --check lib/achievement-compatibility.js && node --check lib/game-requirements.js && node --check lib/achievement-candidates.js && node --check lib/achievement-progress.js && node --check lib/float-progress.js && node --check lib/float-discovery.js && node --check lib/achievement-probes.js && node --check lib/achievement-journal.js && node --check lib/app-state.js && node --check lib/resources.js && node --check lib/steam-percentages.js && node --check scripts/memory-smoke.js && node --check lib/achievement-changes.js && node --check lib/achievement-history.js && node --check lib/achievement-operations.js && node --check scripts/changes-memory-smoke.js && node --check public/achievement-rarity.js && node --check lib/rarity-history.js && node --check lib/achievement-sync.js && node --check public/achievement-live.js && node --check public/draft-settings.js && node --check scripts/live-sync-memory-smoke.js",
     "test:memory": "node --max-old-space-size=192 --max-semi-space-size=8 scripts/changes-memory-smoke.js && node --max-old-space-size=192 --max-semi-space-size=8 scripts/live-sync-memory-smoke.js"

@@ -330,8 +330,18 @@ test('respuesta lenta anterior no reemplaza el juego recién abierto',async t=>{
 test('catalog with only unknown personal states does not claim zero unlocked achievements',async t=>{
   const w=ui(t,()=>response([{name:'One',unlocked:null,percent:null}]));await w.testUI.open(550,'Left 4 Dead 2');assert.match(w.document.getElementById('achProgressText').textContent,/Personal state not verified/);assert.doesNotMatch(w.document.getElementById('achProgressText').textContent,/0\/1/);
 });
-test('built-in panel options and messages are in English',()=>{
-  const root=path.join(__dirname,'../public');for(const file of ['index.html','app.js']){const content=fs.readFileSync(path.join(root,file),'utf8');assert.doesNotMatch(content,/Horas estimadas|no verificadas|Sin verificar|Pausado|Contraseña|desbloqueados|Cromos|Reanudar|Catálogo|Ingresá|Guardar|Cuenta principal/);}
+test('built-in panel supports English default and dynamic Spanish i18n switching',t=>{
+  const w=ui(t,()=>response([]));
+  const langSelect=w.document.getElementById('langSelect');
+  assert.ok(langSelect);
+  langSelect.value='es';
+  langSelect.dispatchEvent(new w.Event('change'));
+  assert.match(w.document.querySelector('.dashboard-panel .section-heading h2').textContent,/Resumen de sesión/);
+  assert.match(w.document.getElementById('unlockAllAchievements').textContent,/Desbloquear todo/);
+  langSelect.value='en';
+  langSelect.dispatchEvent(new w.Event('change'));
+  assert.match(w.document.querySelector('.dashboard-panel .section-heading h2').textContent,/Session overview/);
+  assert.match(w.document.getElementById('unlockAllAchievements').textContent,/Unlock all/);
 });
 test('polling skips hidden tabs and unchanged game cards keep their DOM nodes', async t => {
   let requests=0;
@@ -705,4 +715,27 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.match(canvas.dataset.summary, /100% Games:/);
   w.document.getElementById("closeShowcaseBtn").click();
   assert.equal(w.document.getElementById("showcaseModal").style.display, "none");
+
+  // 7. Verify v46: 384MB RAM config, OLED Pure Black theme, SteamDB + Steam Deck badges, Badge Crafting Calculator, and 3-column Pro Footer
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), "utf8"));
+  assert.match(pkgJson.scripts.start, /--max-old-space-size=384/);
+  assert.match(pkgJson.scripts.start, /--max-semi-space-size=16/);
+  const { ResourceBudget } = require("../lib/resources");
+  assert.equal(new ResourceBudget().softLimit, 420 * 1024 * 1024);
+
+  const oledBtn = w.document.getElementById("btnOledTheme");
+  assert.ok(oledBtn);
+  oledBtn.click();
+  assert.equal(w.document.body.classList.contains("oled-theme"), true);
+  assert.match(oledBtn.textContent, /OLED: ON/);
+  oledBtn.click();
+  assert.equal(w.document.body.classList.contains("oled-theme"), false);
+
+  assert.ok(w.document.querySelector(".steamdb-badge"));
+  assert.ok(w.document.querySelector(".deck-badge"));
+  assert.ok(w.document.querySelector(".badge-set-pill"));
+  assert.ok(w.document.querySelector(".badge-calc-btn"));
+  assert.ok(w.document.querySelector("footer.pro-footer"));
+  assert.match(w.document.querySelector("footer.pro-footer").textContent, /v2\.4\.0/);
+  assert.match(w.document.querySelector("footer.pro-footer").textContent, /github\.com\/brunnnno\/steam-farmer/);
 });
