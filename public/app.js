@@ -22,12 +22,22 @@ let currentLang = localStorage.getItem("sf_lang") || ((typeof navigator !== "und
 const i18n = {
   es: {
     controlRoomEyebrow: "CENTRO DE CONTROL",
+    liveActivityEyebrow: "ACTIVIDAD EN VIVO",
+    makeItYoursEyebrow: "PERSONALIZA TU SESIÓN",
+    activeProfileLabel: "Perfil Activo:",
+    addAccountBtn: "+ Agregar Cuenta",
+    accountOptionsLabel: "Opciones de cuenta",
+    refreshSessionBtn: "Renovar sesión de Steam",
+    signOutSteamBtn: "Cerrar sesión de Steam",
+    deleteProfileBtn: "Eliminar perfil",
+    managedAccountNote: "La cuenta principal es administrada por el servidor; cerrar sesión o eliminarla desde aquí no está disponible.",
     sessionOverviewTitle: "Resumen de sesión",
     sessionOverviewNote: "Tu sesión de Steam en tiempo real",
     sessionTimeLabel: "Tiempo de sesión",
     estimatedHoursLabel: "Horas estimadas · Sin verificar",
     parallelGamesLabel: "Juegos paralelos",
-    achVerificationLabel: "Verificación de logros",
+    achVerificationLabel: "Estado de Automatizaciones y Cromos",
+    gameSlotsMaxLabel: "Ranuras de juego · Máximo 32",
     automationsTitle: "Automatizaciones y Tareas",
     gameControlsTitle: "Controles de juegos",
     libraryEyebrowGuest: "BIBLIOTECA DE JUEGOS DEMO",
@@ -35,9 +45,14 @@ const i18n = {
     libraryTitle: "Biblioteca de juegos",
     libraryNote: "Abre un juego para explorar o modificar sus logros",
     searchPlaceholder: "Buscar juegos de Steam o pegar AppIDs (ej. 730, 440, 570)...",
+    achSearchPlaceholder: "Buscar logro...",
+    statsSearchPlaceholder: "Buscar estadística...",
+    leaderboardScorePlaceholder: "Puntuación / Tiempo (ms)...",
     unlockAllBtn: "Desbloquear todo",
     lockAllBtn: "Bloquear todo",
+    checkMarketableCardsBtn: "Revisar Cromos Vendibles",
     quickSellBtn: "Venta rápida de cromos",
+    marketEstimateDefault: "Ganancia neta estimada en billetera: revisa el inventario para calcular (-5% comisión Valve y -10% comisión editor).",
     exploreQueueBtn: "Explorar Discovery Queue",
     claimDailyPointsBtn: "Reclamar Puntos Diarios",
     cancelAllTimedBtn: "Cancelar todas las programaciones activas",
@@ -45,9 +60,17 @@ const i18n = {
     completedGamesLabel: "JUEGOS COMPLETADOS (100%)",
     completedBadgeText: "Completado ★",
     dependencyTreeBtn: "Árbol de Progresión (Dependency Tree)",
+    achSetAllBtn: "Todos los Logros",
+    achSetBaseBtn: "Juego Base (Base Game)",
     uploadLeaderboardBtn: "Subir Puntuación al Ranking Mundial de Steam",
+    leaderboardRankDefault: "Tu puesto actual: selecciona una tabla de clasificación.",
     startPlatinumBtn: "Modo Platino Realista",
     craftBadgeBtn: "Fabricar Insignia (5/5 cromos)",
+    showcaseCardBtn: "Tarjeta Showcase",
+    samTabAchievements: "Logros",
+    samTabStats: "Estadísticas",
+    samTabTools: "Tiempos y Herramientas",
+    samTabLeaderboards: "Tablas de Clasificación",
     liveActionNotice: "Acción en vivo: Conecta tu cuenta de Steam para sincronizarla",
     demoBannerEyebrow: "MODO DEMOSTRACIÓN INTERACTIVO",
     demoBannerTitle: "Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo",
@@ -67,34 +90,70 @@ const i18n = {
     footerCommunity: "Enlaces Comunitarios",
     footerSteamStatus: "Estado de la Red de Steam ↗",
     footerReportIssue: "Reporte de Problemas ↗",
+    landingHeroEyebrow: "AUTONOMOUS STEAM CLOUD CONTROL ROOM · v2.4.0",
     landingHeroTitle: "Tu Centro de Control Autónomo para Steam",
-    landingHeroSubtitle: "Farmea cromos con la regla de 2 horas de ASF, desbloquea logros con tiempos humanizados por campana de Gauss, edita estadísticas INT/FLOAT y mantén tus cuentas 24/7 en la nube.",
+    landingHeroLead: "Impulsa tus Horas, Cromos y Logros de Steam en la Nube",
+    landingHeroSubtitle: "Farmea cromos 24/7 en la nube sin tener la PC encendida con la regla óptima de 2 horas de ASF, gestiona logros y estadísticas INT/FLOAT por protocolo nativo y programa desbloqueos humanizados con persistencia en PostgreSQL.",
     landingConnectBtn: "+ Conectar Cuenta de Steam",
-    landingLiveDemoBtn: "Ver Demostración en Vivo ↓",
-    featTitle1: "Farming de Cromos Inteligente",
+    landingLiveDemoBtn: "Explorar Demostración Interactiva ↓",
+    floatCard1Eyebrow: "COUNTER-STRIKE 2 · #730",
+    floatCard1Title: "+2,840 Horas Farmeadas · Logro Mítico",
+    floatCard1Sub: "Campana de Gauss Box-Muller · Verificado por Protocolo",
+    floatCard2Eyebrow: "TEAM FORTRESS 2 · #440",
+    floatCard2Title: "Regla Óptima ASF 2h · 3/5 Drops de Cromos Restantes",
+    floatCard2Sub: "Neto Est. $0.42 USD · Auto-Confirmación 2FA",
+    floatCard3Eyebrow: "PORTAL 2 · #620",
+    floatCard3Title: "Juego 100% Completado · Insignia Juego Base",
+    floatCard3Sub: "Verificado por Protocolo · Calibrado con HowLongToBeat",
+    floatSecurityBadge: "Sesión Nube 24/7 · Persistencia PostgreSQL · Cero Carga en PC",
+    trustLabel1: "Juegos Paralelos Máx.",
+    trustLabel2: "Tiempos Humanizados Box-Muller",
+    trustLabel3: "Cloud Idle Autónomo 24/7",
+    trustLabel4: "Persistencia de Estado y Colas",
+    featTitle1: "Smart Card Farming (Regla ASF 2h)",
     featDesc1: "Acumula 2 horas en paralelo en juegos nuevos y luego farmea 1 juego a la vez pasadas las 2 horas para maximizar la velocidad de drops de Valve.",
     featTitle2: "SamRewritten Web Edition",
     featDesc2: "Manipulación directa de logros y estadísticas INT/FLOAT vía CMsgClientStoreUserStats2 con filtros de rareza, historial auditable y deshacer en 1 clic.",
-    featTitle3: "Automatización & Curva de Gauss",
-    featDesc3: "Desbloqueo programado con tiempos humanizados por campana de Gauss, pausas de sesión reales y persistencia en PostgreSQL contra reinicios de Render.",
-    featTitle4: "Venta Rápida en el Mercado",
-    featDesc4: "Estimador de ganancias netas descontando comisiones de Valve (5% + 10%), protección anti Rate-Limit (HTTP 429) y auto-confirmación Steam Guard.",
-    featTitle5: "Auto Discovery Queue",
-    featDesc5: "Explora automáticamente las 3 listas de descubrimientos diarias de la tienda de Steam para reclamar cromos gratuitos en eventos de rebajas.",
-    featTitle6: "Cloud 24/7 Sin Descargas",
-    featDesc6: "Opera 100% en la nube con detección automática de colisión si abres un juego en tu PC, sin consumir recursos ni dejar tu computadora encendida.",
+    featTitle3: "Automatización & Curva de Gauss (Modo Platino Realista)",
+    featDesc3: "Desbloqueo programado con tiempos humanizados Box-Muller, pausas de sesión realistas y persistencia en PostgreSQL contra reinicios de Render.",
+    featTitle4: "Venta Rápida en el Mercado & Estimador Neto 2FA",
+    featDesc4: "Estimador de ganancias netas descontando comisiones de Valve (5%) y editor (10%), backoff anti-429 y auto-confirmación 2FA Steam Guard.",
+    featTitle5: "Auto Discovery Queue & Tienda de Puntos",
+    featDesc5: "Explora automáticamente las 3 listas de descubrimientos diarias de la tienda de Steam para reclamar cromos de eventos y puntos diarios.",
+    featTitle6: "Anti-Colisión & Multi-Account Idle Cluster",
+    featDesc6: "Opera 24/7 en la nube con cero consumo de PC y detección instantánea de colisión si abres un juego en tu computadora de escritorio.",
+    faqEyebrow: "PREGUNTAS FRECUENTES (FAQ)",
+    faqTitle: "Todo lo que necesitas saber sobre SteamFarmer",
+    faqQ1: "¿Puedo ser baneado por usar SteamFarmer?",
+    faqA1: "No. SteamFarmer usa el protocolo oficial de red de Steam vía steam-user sin inyectar DLLs ni tocar la memoria del juego, siendo 100% seguro contra VAC.",
+    faqQ2: "¿Puedo jugar en mi PC mientras SteamFarmer está activo?",
+    faqA2: "Sí. El motor Anti-Colisión detecta tu sesión de escritorio al instante, pausa el farmeo para evitar conflictos y reanuda automáticamente cuando cierras el juego.",
+    faqQ3: "¿Cómo funciona la regla de 2 horas de ASF para los cromos?",
+    faqA3: "Acumula 2 horas en paralelo en juegos nuevos para habilitar los drops de Valve y luego farmea de a 1 juego a la vez para máxima velocidad de cartas.",
+    faqQ4: "¿Tengo que dejar mi computadora prendida?",
+    faqA4: "No. Funciona 24/7 en la nube (Render o Docker) con persistencia en PostgreSQL, por lo que tus horas, cromos y colas siguen activos con tu PC apagada.",
     deckVerified: "🟢 Verificado",
     deckPlayable: "🟡 Jugable",
     deckUnsupported: "⚪ No compatible"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
+    liveActivityEyebrow: "LIVE ACTIVITY",
+    makeItYoursEyebrow: "MAKE IT YOURS",
+    activeProfileLabel: "Active Profile:",
+    addAccountBtn: "+ Add Account",
+    accountOptionsLabel: "Account options",
+    refreshSessionBtn: "Refresh Steam session",
+    signOutSteamBtn: "Sign out of Steam",
+    deleteProfileBtn: "Delete profile",
+    managedAccountNote: "The main account is managed by the server; signing out and deleting it here are unavailable.",
     sessionOverviewTitle: "Session overview",
     sessionOverviewNote: "Your current Steam session",
     sessionTimeLabel: "Session time",
     estimatedHoursLabel: "Estimated hours · Unverified",
     parallelGamesLabel: "Parallel games",
-    achVerificationLabel: "Achievement verification",
+    achVerificationLabel: "Automations & Cards Status",
+    gameSlotsMaxLabel: "Game slots · Maximum 32",
     automationsTitle: "Active Automations & Tasks",
     gameControlsTitle: "Game controls",
     libraryEyebrowGuest: "DEMO GAME LIBRARY",
@@ -102,19 +161,32 @@ const i18n = {
     libraryTitle: "Game library",
     libraryNote: "Open a game to verify its achievements",
     searchPlaceholder: "Search Steam games or paste AppIDs (e.g. 730, 440, 570)...",
+    achSearchPlaceholder: "Search achievement...",
+    statsSearchPlaceholder: "Search statistic...",
+    leaderboardScorePlaceholder: "Score / Time (ms)...",
     unlockAllBtn: "Unlock all",
     lockAllBtn: "Lock all",
+    checkMarketableCardsBtn: "Check Marketable Cards",
     quickSellBtn: "Quick-Sell Cards on Market",
+    marketEstimateDefault: "Estimated net wallet payout: check inventory to calculate (-5% Valve fee & -10% developer fee).",
     exploreQueueBtn: "Explore Discovery Queue (3x)",
     claimDailyPointsBtn: "Claim Daily Points",
     cancelAllTimedBtn: "Cancel all active schedules",
     forceResumeCollisionBtn: "⚠️ Force Resume (Clear Collision)",
     completedGamesLabel: "100% COMPLETED GAMES",
     completedBadgeText: "Completed ★",
-    dependencyTreeBtn: "Dependency Tree",
-    uploadLeaderboardBtn: "Subir Puntuación al Ranking Mundial de Steam",
+    dependencyTreeBtn: "Progression Tree (Dependency Tree)",
+    achSetAllBtn: "All Achievements",
+    achSetBaseBtn: "Base Game",
+    uploadLeaderboardBtn: "Upload Score to Steam World Leaderboard",
+    leaderboardRankDefault: "Your current rank: select a leaderboard.",
     startPlatinumBtn: "Realistic Platinum Mode",
     craftBadgeBtn: "Craft Badge (5/5 sets)",
+    showcaseCardBtn: "Showcase Card",
+    samTabAchievements: "Achievements",
+    samTabStats: "Statistics",
+    samTabTools: "Timed, Timings & Tools",
+    samTabLeaderboards: "Leaderboards",
     liveActionNotice: "Live action: Connect your Steam account to synchronize it",
     demoBannerEyebrow: "INTERACTIVE SHOWCASE · GUEST DEMO MODE",
     demoBannerTitle: "Demo Mode: Connect your Steam account to apply changes live",
@@ -134,10 +206,26 @@ const i18n = {
     footerCommunity: "Community Links",
     footerSteamStatus: "Steam Network Status ↗",
     footerReportIssue: "Report an Issue ↗",
+    landingHeroEyebrow: "AUTONOMOUS STEAM CLOUD CONTROL ROOM · v2.4.0",
     landingHeroTitle: "Autonomous Steam Cloud Control Room",
-    landingHeroSubtitle: "Farm trading cards with ASF's 2-hour optimal rule, unlock achievements with humanized Gaussian schedules, manage INT/FLOAT stats, and keep your accounts active 24/7 in the cloud.",
+    landingHeroLead: "Start Boosting Your Steam Hours, Cards & Achievements in the Cloud",
+    landingHeroSubtitle: "Farm trading cards 24/7 in the cloud without keeping your PC on using ASF's optimal 2-hour rule, manage achievements and INT/FLOAT stats via native Steam protocol, and schedule humanized Box-Muller unlocks with PostgreSQL persistence.",
     landingConnectBtn: "+ Connect Steam Account",
-    landingLiveDemoBtn: "View Live Demo ↓",
+    landingLiveDemoBtn: "Explore Interactive Demo ↓",
+    floatCard1Eyebrow: "COUNTER-STRIKE 2 · #730",
+    floatCard1Title: "+2,840 Farmed Hours · Mythic Achievement",
+    floatCard1Sub: "Gaussian Box-Muller · Verified via Protocol",
+    floatCard2Eyebrow: "TEAM FORTRESS 2 · #440",
+    floatCard2Title: "ASF 2-Hour Optimal Rule · 3/5 Card Drops Remaining",
+    floatCard2Sub: "Est. Net $0.42 USD · 2FA Market Auto-Confirm",
+    floatCard3Eyebrow: "PORTAL 2 · #620",
+    floatCard3Title: "100% Completed Game · Base Game Ribbon",
+    floatCard3Sub: "Verified via Protocol · HowLongToBeat Calibrated",
+    floatSecurityBadge: "24/7 Cloud Session · PostgreSQL Persistence · Zero PC Load",
+    trustLabel1: "Max Parallel Games",
+    trustLabel2: "Box-Muller Humanized Timing",
+    trustLabel3: "Autonomous Cloud Idle",
+    trustLabel4: "State & Schedule Persistence",
     featTitle1: "Smart Card Farming (ASF 2h Rule)",
     featDesc1: "Accumulates 2 hours in parallel on new games, then farms 1 game at a time past 2 hours for maximum Valve drop frequency.",
     featTitle2: "SamRewritten Web Edition",
@@ -146,10 +234,20 @@ const i18n = {
     featDesc3: "Scheduled unlocking with Box-Muller normal distribution, real gameplay breaks, and PostgreSQL persistence across Render container restarts.",
     featTitle4: "Quick-Sell Market & Net Estimator",
     featDesc4: "Net wallet payout estimator deducting Valve (5%) and publisher (10%) fees, HTTP 429 backoff, and Steam Guard 2FA auto-confirmation.",
-    featTitle5: "Auto Discovery Queue",
-    featDesc5: "Automatically explores 3 daily Steam Store Discovery Queues to claim free event trading cards during seasonal sales.",
-    featTitle6: "24/7 Cloud · Zero PC Load",
-    featDesc6: "Runs autonomously in the cloud with automatic session collision detection when you launch a game on your desktop PC.",
+    featTitle5: "Auto Discovery Queue & Points Shop",
+    featDesc5: "Automatically explores 3 daily Steam Store Discovery Queues to claim free event trading cards and daily Points Shop items.",
+    featTitle6: "Anti-Collision & Multi-Account Idle Cluster",
+    featDesc6: "Runs 24/7 in the cloud with zero PC load and instant desktop session collision detection when you launch a game on your computer.",
+    faqEyebrow: "FREQUENTLY ASKED QUESTIONS",
+    faqTitle: "Everything you need to know about SteamFarmer",
+    faqQ1: "Can I get banned for using SteamFarmer?",
+    faqA1: "No. SteamFarmer communicates via the official Steam network protocol (steam-user) without injecting DLLs or modifying game memory, making it 100% VAC-safe.",
+    faqQ2: "Can I play on my PC while SteamFarmer is active?",
+    faqA2: "Yes! The built-in Anti-Collision guard detects your desktop session immediately, pauses cloud farming so you never get disconnected, and automatically resumes when you close the game.",
+    faqQ3: "How does ASF's 2-hour rule work for trading cards?",
+    faqA3: "Games under 2 hours are farmed in parallel (up to 32 at once) to reach Valve's drop threshold quickly, then farmed 1 game at a time past 2 hours for maximum card drop frequency.",
+    faqQ4: "Do I need to keep my computer turned on?",
+    faqA4: "No. SteamFarmer runs 24/7 in the cloud (Render or Docker) with PostgreSQL persistence, so your hours, card drops, and Gaussian schedules continue even with your PC off.",
     deckVerified: "🟢 Deck Verified",
     deckPlayable: "🟡 Deck Playable",
     deckUnsupported: "⚪ Deck Unsupported"
@@ -389,14 +487,86 @@ function image(src, className, alternatives=[]) {
   img.addEventListener('error',()=>{while(next<alternatives.length){try{const u=new URL(alternatives[next++]);if(u.protocol==='https:'){img.src=u.href;img.hidden=false;return;}}catch{}}img.hidden=true;});
   return img;
 }
+let lastBridgeConnected = false;
 function updateLocalBridgeBadge(data) {
+  if (data && typeof data === 'object' && 'localBridgeConnected' in data) {
+    lastBridgeConnected = Boolean(data.localBridgeConnected);
+  }
   const el = $('localBridgeBadge');
   if (!el) return;
-  const connected = Boolean(data?.localBridgeConnected);
+  const connected = lastBridgeConnected;
   el.className = 'acc-pill local-bridge-badge ' + (connected ? 'online' : 'offline');
   el.textContent = connected
-    ? (currentLang === 'es' ? '🟢 Local Bridge: Conectado (Pop-up Oficial Activo)' : '🟢 Local Bridge: Connected (Official Pop-up Active)')
-    : (currentLang === 'es' ? '⚪ Local Bridge: Offline (Modo Nube)' : '⚪ Local Bridge: Offline (Cloud Mode)');
+    ? (currentLang === 'es' ? '🟢 Local Bridge: En línea (Local Bridge: Conectado)' : '🟢 Local Bridge: Online (Local Bridge: Connected)')
+    : (currentLang === 'es' ? '⚪ Local Bridge: Desconectado (Modo Nube)' : '⚪ Local Bridge: Offline (Cloud Mode)');
+}
+function updateUtilityButtonsI18n() {
+  if ($('btnOledTheme')) {
+    $('btnOledTheme').textContent = currentLang === 'es'
+      ? (oledTheme ? 'OLED: Activado (OLED: ON)' : 'OLED: Desactivado (OLED: OFF)')
+      : (oledTheme ? 'OLED: ON' : 'OLED: OFF');
+  }
+  if ($('btnSoundToggle')) {
+    $('btnSoundToggle').textContent = currentLang === 'es'
+      ? (soundMuted ? 'Sonido: Desactivado (Sound: OFF)' : 'Sonido: Activado (Sound: ON)')
+      : (soundMuted ? 'Sound: OFF' : 'Sound: ON');
+  }
+  if ($('btnStreamerMode')) {
+    $('btnStreamerMode').textContent = currentLang === 'es'
+      ? (streamerMode ? 'Modo Streamer: Activado' : 'Modo Streamer: Desactivado')
+      : (streamerMode ? 'Streamer Mode: ON' : 'Streamer Mode: OFF');
+  }
+}
+function updateActiveAccountControlsI18n(acc = active) {
+  if (!acc) return;
+  if ($('playBtn')) {
+    $('playBtn').textContent = acc.isCollisionPaused
+      ? (currentLang === 'es' ? '⚠️ Forzar Reanudar (Limpiar Colisión)' : '⚠️ Force Resume (Clear Collision)')
+      : (currentLang === 'es' ? (acc.isPaused ? 'Reanudar' : 'Pausar') : (acc.isPaused ? 'Resume' : 'Pause'));
+  }
+  if ($('personaBtn')) {
+    $('personaBtn').textContent = currentLang === 'es'
+      ? (acc.personaState === 7 ? 'Modo: Invisible' : 'Modo: En línea')
+      : (acc.personaState === 7 ? 'Mode: Invisible' : 'Mode: Online');
+  }
+  if ($('cardsBtn')) {
+    const dropCount = (acc.cardDropGames || []).length;
+    $('cardsBtn').textContent = currentLang === 'es'
+      ? (acc.cardFarming ? `Cromos: ${dropCount} juegos` : 'Cromos: Desactivado')
+      : (acc.cardFarming ? `Cards: ${dropCount} games` : 'Cards: OFF');
+  }
+  const liveBadge = $('accountLiveBadge');
+  if (liveBadge) {
+    if (acc.isCollisionPaused) {
+      liveBadge.className = 'acc-live-badge collision';
+      liveBadge.textContent = currentLang === 'es' ? '🟡 Colisión Detectada / Pausa' : '🟡 Collision Detected / Paused';
+    } else if (acc.isFarming && !acc.isPaused) {
+      liveBadge.className = 'acc-live-badge farming';
+      liveBadge.textContent = currentLang === 'es' ? '🟢 Farmeando' : '🟢 Farming';
+    } else {
+      liveBadge.className = 'acc-live-badge standby';
+      liveBadge.textContent = currentLang === 'es' ? '⚪ En Pausa' : '⚪ Paused';
+    }
+  }
+  const sidBtn = $('copySteamIdBtn');
+  const sidText = $('activeSteamIdText');
+  const rawSid = acc.linkedSteamId || acc.steamId64 || acc.mySteamID || '';
+  if (sidBtn && sidText) {
+    if (rawSid) {
+      sidBtn.hidden = false;
+      sidText.textContent = streamerMode ? maskText(rawSid, 5) : rawSid;
+    } else {
+      sidBtn.hidden = true;
+    }
+  }
+  if ($('achQueueVal')) {
+    if (acc.cardFarming) {
+      const drops = (acc.cardDropGames || []).reduce((s, g) => s + (Number(g.remaining) || 0), 0);
+      $('achQueueVal').textContent = currentLang === 'es' ? `ASF Activo · ${drops} cromos` : `ASF Active · ${drops} cards`;
+    } else {
+      $('achQueueVal').textContent = currentLang === 'es' ? 'Estado de Steam en vivo' : 'Actual Steam state';
+    }
+  }
 }
 function setGuestModeLayout(isGuest) {
   const guest = Boolean(isGuest);
@@ -458,9 +628,7 @@ async function loadStatus() {
     $('connectionDetails').textContent = `${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
     $('statusText').textContent = !active.connected ? (active.error || 'Disconnected') : active.isCollisionPaused ? 'Playing on another device' : active.isSleepPaused ? 'Sleep schedule active' : active.isPaused ? 'Paused' : active.cardFarming && !active.cardsReady ? 'Checking card drops' : active.isFarming ? 'Activity sent to Steam' : 'No active games';
     $('badgeStatus').className = 'badge-status' + (!active.isFarming ? ' paused' : '');
-    $('playBtn').textContent = active.isCollisionPaused ? (currentLang === 'es' ? '⚠️ Forzar Reanudar (Limpiar Colisión)' : '⚠️ Force Resume (Clear Collision)') : (active.isPaused ? 'Resume' : 'Pause');
-    $('personaBtn').textContent = active.personaState === 7 ? 'Invisible' : 'Online';
-    $('cardsBtn').textContent = active.cardFarming ? `Cards: ${(active.cardDropGames||[]).length} games` : 'Cards: OFF';
+    updateActiveAccountControlsI18n(active);
     $('cardsBtn').title = active.cardError || '';
     $('gamesCountVal').textContent = active.games.length + ' / 32';
     const pct = Math.round(active.games.length / 32 * 100); $('capacityPercent').textContent = pct + '%'; $('capacityFill').style.width = pct + '%';
@@ -876,7 +1044,13 @@ function applyLanguage(lang) {
   }
   if ($("headerGuestConnectBtn")) $("headerGuestConnectBtn").textContent = t("landingConnectBtn");
   if ($("searchInput")) $("searchInput").placeholder = t("searchPlaceholder");
+  if ($("achSearchInput")) $("achSearchInput").placeholder = t("achSearchPlaceholder");
+  if ($("statsSearchInput")) $("statsSearchInput").placeholder = t("statsSearchPlaceholder");
+  if ($("leaderboardScoreInput")) $("leaderboardScoreInput").placeholder = t("leaderboardScorePlaceholder");
   if ($("libraryEyebrow")) $("libraryEyebrow").textContent = t(active ? "libraryEyebrowAuth" : "libraryEyebrowGuest");
+  updateUtilityButtonsI18n();
+  updateLocalBridgeBadge();
+  if (active) updateActiveAccountControlsI18n(active);
   if (!active) {
     if ($("userLabel")) $("userLabel").textContent = t("guestUserLabel");
     if ($("connectionDetails")) $("connectionDetails").textContent = t("guestConnectionDetails");
@@ -901,7 +1075,7 @@ function applyOledTheme(enabled) {
   oledTheme = Boolean(enabled);
   try { localStorage.setItem("sf_theme", oledTheme ? "oled" : "midnight"); } catch {}
   document.body.classList.toggle("oled-theme", oledTheme);
-  if ($("btnOledTheme")) $("btnOledTheme").textContent = oledTheme ? "OLED: ON" : "OLED: OFF";
+  updateUtilityButtonsI18n();
 }
 
 function toggleOledTheme() {
@@ -919,14 +1093,14 @@ function setLibraryViewMode(mode) {
 function toggleSoundMute() {
   soundMuted = !soundMuted;
   try { localStorage.setItem('sf_sound_muted', soundMuted ? '1' : '0'); } catch {}
-  if ($('btnSoundToggle')) $('btnSoundToggle').textContent = soundMuted ? 'Sound: OFF' : 'Sound: ON';
+  updateUtilityButtonsI18n();
 }
 
 function toggleStreamerMode() {
   streamerMode = !streamerMode;
   try { localStorage.setItem('sf_streamer_mode', streamerMode ? '1' : '0'); } catch {}
   document.body.classList.toggle('streamer-mode', streamerMode);
-  if ($('btnStreamerMode')) $('btnStreamerMode').textContent = streamerMode ? 'Streamer Mode: ON' : 'Streamer Mode: OFF';
+  updateUtilityButtonsI18n(); updateActiveAccountControlsI18n(active);
   tabsSnapshot = '';
   if (active) {
     const dispName = streamerMode ? maskText(active.name, 2) : active.name;
@@ -1491,13 +1665,16 @@ function renderAchModal(page=achievementPage) {
     if (sets.length > 1) {
       setsNav.hidden = false;
       const setBtns = [
-        button(currentLang === 'es' ? 'Todos los Logros' : 'All Sets', () => { currentAchSet = 'all'; achievementPage = 0; renderAchModal(0); }, 'ach-set-btn' + (currentAchSet === 'all' ? ' active' : ''))
+        button(currentLang === 'es' ? 'Todos los Logros' : 'All Achievements', () => { currentAchSet = 'all'; achievementPage = 0; renderAchModal(0); }, 'ach-set-btn' + (currentAchSet === 'all' ? ' active' : ''))
       ];
       setBtns[0].dataset.set = 'all';
       for (const s of sets) {
         const isBase = s.id === 'base';
         const cls = 'ach-set-btn ' + (isBase ? 'set-base set-blue' : 'set-dlc set-purple') + (currentAchSet === s.id ? ' active' : '');
-        const b = button(s.name, () => { currentAchSet = s.id; achievementPage = 0; renderAchModal(0); }, cls);
+        const label = isBase && (s.name === 'Base Game' || s.name === 'Juego Base (Base Game)')
+          ? (currentLang === 'es' ? 'Juego Base (Base Game)' : 'Base Game')
+          : s.name;
+        const b = button(label, () => { currentAchSet = s.id; achievementPage = 0; renderAchModal(0); }, cls);
         b.dataset.set = s.id;
         setBtns.push(b);
       }
@@ -1856,9 +2033,13 @@ async function loadLeaderboardEntries(leaderboardId = currentLeaderboardId) {
     const rankCard = $('leaderboardUserRankCard');
     if (rankCard) {
       if (data.userEntry) {
-        rankCard.textContent = `Tu puesto actual: #${data.userEntry.rank} Mundial · ${data.userEntry.personaName} · Puntuación: ${data.userEntry.score}`;
+        rankCard.textContent = currentLang === 'es'
+          ? `Tu puesto actual: #${data.userEntry.rank} Mundial · ${data.userEntry.personaName} · Puntuación: ${data.userEntry.score}`
+          : `Your current rank: #${data.userEntry.rank} Mundial (World) · ${data.userEntry.personaName} · Score: ${data.userEntry.score}`;
       } else {
-        rankCard.textContent = 'Tu puesto actual: Sin clasificar en este tablero. Sube una puntuación para entrar al Ranking Mundial.';
+        rankCard.textContent = currentLang === 'es'
+          ? 'Tu puesto actual: Sin clasificar en este tablero. Sube una puntuación para entrar al Ranking Mundial.'
+          : 'Your current rank: Unranked on this board. Upload a score to enter the World Leaderboard.';
       }
     }
     const tbody = $('leaderboardTopTableBody');
@@ -2502,9 +2683,7 @@ function applyStatusUpdate(data){
     $('connectionDetails').textContent=`${active.connected?'Steam connected':'Steam disconnected'} · ${active.webSessionReady?'Web session ready':'Web session not ready'}${dispSteamId?' · Steam ID: '+dispSteamId:''}`;
     $('statusText').textContent=!active.connected?(active.error||'Disconnected'):active.isCollisionPaused?'Playing on another device':active.isSleepPaused?'Sleep schedule active':active.isPaused?'Paused':active.cardFarming&&!active.cardsReady?'Checking card drops':active.isFarming?'Activity sent to Steam':'No active games';
     $('badgeStatus').className='badge-status'+(!active.isFarming?' paused':'');
-    $('playBtn').textContent=active.isCollisionPaused?(currentLang==='es'?'⚠️ Forzar Reanudar (Limpiar Colisión)':'⚠️ Force Resume (Clear Collision)'):(active.isPaused?'Resume':'Pause');
-    $('personaBtn').textContent=active.personaState===7?'Invisible':'Online';
-    $('cardsBtn').textContent=active.cardFarming?`Cards: ${(active.cardDropGames||[]).length} games`:'Cards: OFF';
+    updateActiveAccountControlsI18n(active);
     $('gamesCountVal').textContent=active.games.length+' / 32';
     const pct=Math.round(active.games.length/32*100);$('capacityPercent').textContent=pct+'%';$('capacityFill').style.width=pct+'%';
     renderGames(active.games);
@@ -2640,6 +2819,12 @@ if($('btnViewGrid'))$('btnViewGrid').addEventListener('click',()=>setLibraryView
 if($('btnViewList'))$('btnViewList').addEventListener('click',()=>setLibraryViewMode('list'));
 if($('langSelect')){$('langSelect').value=currentLang;$('langSelect').addEventListener('change',e=>applyLanguage(e.target.value));}
 if($('btnOledTheme'))$('btnOledTheme').addEventListener('click',()=>toggleOledTheme());
+if($('copySteamIdBtn'))$('copySteamIdBtn').addEventListener('click',async()=>{
+  const rawSid=active?.linkedSteamId||active?.steamId64||active?.mySteamID||'';
+  if(!rawSid)return;
+  try{await navigator.clipboard?.writeText(rawSid);}catch{}
+  notice(currentLang==='es'?`SteamID64 copiado: ${streamerMode?maskText(rawSid,5):rawSid}`:`SteamID64 copied: ${streamerMode?maskText(rawSid,5):rawSid}`);
+});
 if($('btnLandingConnect'))$('btnLandingConnect').addEventListener('click',()=>openAddAccModal());
 if($('headerGuestConnectBtn'))$('headerGuestConnectBtn').addEventListener('click',()=>openAddAccModal());
 if($('btnLandingLiveDemo'))$('btnLandingLiveDemo').addEventListener('click',()=>{

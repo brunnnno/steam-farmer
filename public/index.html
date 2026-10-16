@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=53">
+  <link rel="stylesheet" href="/style.css?v=54">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -81,10 +81,10 @@
 
       <div id="samTabsBar" class="sam-tabs-bar">
         <div class="sam-tabs-left">
-          <button id="tabAchievementsBtn" type="button" class="sam-tab-btn active">Achievements</button>
-          <button id="tabStatsBtn" type="button" class="sam-tab-btn">Statistics</button>
-          <button id="tabToolsBtn" type="button" class="sam-tab-btn">Timed, Timings &amp; Tools</button>
-          <button id="tabLeaderboardsBtn" type="button" class="sam-tab-btn">Leaderboards</button>
+          <button id="tabAchievementsBtn" type="button" class="sam-tab-btn active" data-i18n="samTabAchievements">Achievements</button>
+          <button id="tabStatsBtn" type="button" class="sam-tab-btn" data-i18n="samTabStats">Statistics</button>
+          <button id="tabToolsBtn" type="button" class="sam-tab-btn" data-i18n="samTabTools">Timed, Timings &amp; Tools</button>
+          <button id="tabLeaderboardsBtn" type="button" class="sam-tab-btn" data-i18n="samTabLeaderboards">Leaderboards</button>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
           <button id="undoLastOperationBtn" type="button" class="btn-action-sm" hidden>Undo last change</button>
@@ -111,7 +111,7 @@
             <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11=""><span class="rarity-dot rare"></span>Rare 20-50%</button>
             <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn"><span class="rarity-dot common"></span>Common &gt;50%</button>
             <span style="color:rgba(255,255,255,0.2);">|</span>
-            <button class="filter-btn" type="button" id="btnDependencyTreeFilter" data-i18n="dependencyTreeBtn">Árbol de Progresión (Dependency Tree)</button>
+            <button class="filter-btn" type="button" id="btnDependencyTreeFilter" data-i18n="dependencyTreeBtn">Progression Tree (Dependency Tree)</button>
           </div>
           
           <div style="display:flex; gap:10px; align-items:center;">
@@ -142,8 +142,8 @@
           <div id="gameRequirementsContent"></div>
         </details>
         <div id="achSetsNav" class="ach-sets-nav" hidden>
-          <button type="button" class="ach-set-btn active" data-set="all">Todos los Logros</button>
-          <button type="button" class="ach-set-btn set-base set-blue" data-set="base">Juego Base (Base Game)</button>
+          <button type="button" class="ach-set-btn active" data-set="all" data-i18n="achSetAllBtn">All Achievements</button>
+          <button type="button" class="ach-set-btn set-base set-blue" data-set="base" data-i18n="achSetBaseBtn">Base Game</button>
         </div>
         <div class="ach-list" id="achListContainer"></div>
       </div>
@@ -244,11 +244,11 @@
               <option value="keep_best">Keep Best</option>
               <option value="force_update">Force Update</option>
             </select>
-            <button id="uploadLeaderboardScoreBtn" type="button" class="btn-main" data-i18n="uploadLeaderboardBtn">Subir Puntuación al Ranking Mundial de Steam</button>
+            <button id="uploadLeaderboardScoreBtn" type="button" class="btn-main" data-i18n="uploadLeaderboardBtn">Upload Score to Steam World Leaderboard</button>
           </div>
         </div>
         <div style="padding:14px 24px; overflow-y:auto; flex:1;">
-          <div id="leaderboardUserRankCard" class="ach-impact-review" style="margin-bottom:12px; font-size:0.85rem;">Tu puesto actual: selecciona una tabla de clasificación.</div>
+          <div id="leaderboardUserRankCard" class="ach-impact-review" data-i18n="leaderboardRankDefault" style="margin-bottom:12px; font-size:0.85rem;">Your current rank: select a leaderboard.</div>
           <div class="ach-table-wrap">
             <table class="ach-table">
               <thead>
@@ -274,19 +274,24 @@
     <button id="btnOledTheme" type="button" class="acc-pill" title="Toggle Midnight / OLED Pure Black theme">OLED: OFF</button>
     <button id="btnSoundToggle" type="button" class="acc-pill" title="Mute or unmute achievement unlock sound">Sound: ON</button>
     <button id="btnStreamerMode" type="button" class="acc-pill" title="Hide SteamID and account names on screen">Streamer Mode: OFF</button>
-    <button id="btnShowcaseCard" type="button" class="acc-pill" title="Generate downloadable profile showcase card">Showcase Card</button>
-    <span id="localBridgeBadge" class="acc-pill local-bridge-badge offline" title="SteamFarmer Local Bridge Companion status">⚪ Local Bridge: Offline (Modo Nube)</span>
+    <button id="btnShowcaseCard" type="button" class="acc-pill" data-i18n="showcaseCardBtn" title="Generate downloadable profile showcase card">Showcase Card</button>
+    <span id="localBridgeBadge" class="acc-pill local-bridge-badge offline" title="SteamFarmer Local Bridge Companion status">⚪ Local Bridge: Offline (Cloud Mode)</span>
   </nav>
 
   <div class="container">
     <div id="accountsBarSection" class="accounts-bar">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:0.8rem; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Active Profile:</span>
+      <div class="accounts-bar-left">
+        <span class="accounts-bar-label" data-i18n="activeProfileLabel">Active Profile:</span>
         <div class="accounts-list" id="accountsTabsContainer"></div>
+        <span id="accountLiveBadge" class="acc-live-badge standby">⚪ Standby</span>
+        <button id="copySteamIdBtn" type="button" class="acc-pill steamid-copy-pill" title="Click to copy SteamID64" hidden>
+          <span id="activeSteamIdText">SteamID64</span>
+          <span class="copy-icon" aria-hidden="true">⧉</span>
+        </button>
       </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <button class="acc-pill" data-event-15="">+ Add Account</button>
-        <details class="control-menu" id="accountMenu"><summary>Account options</summary><div class="control-menu-content"><button class="acc-pill" data-event-16="">Refresh Steam session</button><button class="acc-pill" data-event-17="" hidden>Sign out of Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="" hidden>Delete profile</button><small id="managedAccountNote" hidden>The main account is managed by the server; signing out and deleting it here are unavailable.</small></div></details>
+      <div class="accounts-bar-right">
+        <button class="acc-pill btn-add-acc-highlight" data-event-15="" data-i18n="addAccountBtn">+ Add Account</button>
+        <details class="control-menu" id="accountMenu"><summary data-i18n="accountOptionsLabel">Account options</summary><div class="control-menu-content"><button class="acc-pill" data-event-16="" data-i18n="refreshSessionBtn">Refresh Steam session</button><button class="acc-pill" data-event-17="" data-i18n="signOutSteamBtn" hidden>Sign out of Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="" data-i18n="deleteProfileBtn" hidden>Delete profile</button><small id="managedAccountNote" data-i18n="managedAccountNote" hidden>The main account is managed by the server; signing out and deleting it here are unavailable.</small></div></details>
       </div>
     </div>
 
@@ -306,28 +311,40 @@
     </header>
 
     <section id="sessionOverviewPanel" class="dashboard-panel" aria-label="Session overview">
-      <div class="section-heading"><div><span class="eyebrow">LIVE ACTIVITY</span><h2>Session overview</h2></div><span class="section-note">Your current Steam session</span></div>
+      <div class="section-heading"><div><span class="eyebrow" data-i18n="liveActivityEyebrow">LIVE ACTIVITY</span><h2 data-i18n="sessionOverviewTitle">Session overview</h2></div><span class="section-note" data-i18n="sessionOverviewNote">Your current Steam session</span></div>
       <div class="stats-row">
-        <div class="stat-item">
-          <label>Session time</label>
-          <value id="timerVal">00h 00m 00s</value>
+        <div class="stat-item kpi-card kpi-time">
+          <div class="kpi-card-top">
+            <label data-i18n="sessionTimeLabel">Session time</label>
+            <span class="kpi-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          </div>
+          <value id="timerVal" class="kpi-mono">00h 00m 00s</value>
         </div>
-        <div class="stat-item">
-          <label>Estimated hours · Unverified</label>
+        <div class="stat-item kpi-card kpi-hours">
+          <div class="kpi-card-top">
+            <label data-i18n="estimatedHoursLabel">Estimated hours · Unverified</label>
+            <span class="kpi-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></span>
+          </div>
           <value id="hoursVal">0.0 estimated hrs</value>
         </div>
-        <div class="stat-item">
-          <label>Parallel games</label>
+        <div class="stat-item kpi-card kpi-games">
+          <div class="kpi-card-top">
+            <label data-i18n="parallelGamesLabel">Parallel games</label>
+            <span class="kpi-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span>
+          </div>
           <value id="gamesCountVal">0 / 32</value>
         </div>
-        <div class="stat-item">
-          <label>Achievement verification</label>
+        <div class="stat-item kpi-card kpi-sync">
+          <div class="kpi-card-top">
+            <label data-i18n="achVerificationLabel">Achievement verification</label>
+            <span class="kpi-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+          </div>
           <value id="achQueueVal">Live Steam data</value>
         </div>
       </div>
-      <div>
+      <div class="capacity-meter-box">
         <div class="capacity-header">
-          <span>Game slots · Maximum 32</span>
+          <span data-i18n="gameSlotsMaxLabel">Game slots · Maximum 32</span>
           <span id="capacityPercent">0%</span>
         </div>
         <div class="progress-bar-bg">
@@ -342,11 +359,11 @@
         <p id="cardsStatus" class="cards-panel-status" aria-live="polite"></p>
         <div id="cardsList" class="cards-list"></div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center;">
-          <button id="loadInventoryCardsBtn" type="button" class="btn-action-sm">Check Marketable Cards</button>
-          <button id="quickSellCardsBtn" type="button" class="btn-main">Quick-Sell Cards on Market</button>
+          <button id="loadInventoryCardsBtn" type="button" class="btn-action-sm" data-i18n="checkMarketableCardsBtn">Check Marketable Cards</button>
+          <button id="quickSellCardsBtn" type="button" class="btn-main" data-i18n="quickSellBtn">Quick-Sell Cards on Market</button>
           <input id="marketIdentitySecretInput" type="password" placeholder="Optional: Steam Guard identity_secret (2FA auto-confirm)" style="flex:1; min-width:220px; padding:8px 12px; font-size:0.8rem;">
         </div>
-        <p id="marketEarningsEstimate" class="cards-panel-status" style="margin-top:8px; font-weight:600; color:var(--primary);">Estimated net wallet payout: check inventory to calculate (-5% Valve fee &amp; -10% developer fee).</p>
+        <p id="marketEarningsEstimate" class="cards-panel-status market-net-estimator-banner" data-i18n="marketEstimateDefault">Estimated net wallet payout: check inventory to calculate (-5% Valve fee &amp; -10% developer fee).</p>
         <div id="marketCardsList" class="cards-list" style="margin-top:8px;"></div>
         <details id="badgeCrafterSection" class="badge-crafter-panel">
           <summary class="cards-panel-heading">
@@ -385,7 +402,7 @@
           <div id="taskCardTimed" class="task-center-box status-blue">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
               <span class="eyebrow"><span class="status-dot blue"></span> 3. SCHEDULED ACHIEVEMENTS</span>
-              <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancelar todas las programaciones activas</button>
+              <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancel all active schedules</button>
             </div>
             <div id="taskCenterTimedList" class="task-center-body">No active timed schedules.</div>
           </div>
@@ -406,7 +423,7 @@
           <div id="clusterStatusContainer" class="cluster-tabs-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
         </div>
       </details>
-      <div class="section-heading"><div><span class="eyebrow">MAKE IT YOURS</span><h2>Game controls</h2></div></div>
+      <div class="section-heading"><div><span class="eyebrow" data-i18n="makeItYoursEyebrow">MAKE IT YOURS</span><h2 data-i18n="gameControlsTitle">Game controls</h2></div></div>
       <div class="input-row">
         <div class="search-box-wrapper">
           <input type="text" id="searchInput" placeholder="Search game title or enter AppID..." autocomplete="off">
@@ -456,12 +473,13 @@
     <section id="saasLandingSection" class="saas-landing" aria-label="SteamFarmer Promotional Showcase">
       <div class="landing-hero">
         <div class="landing-hero-copy">
-          <span id="landingHeroEyebrow" class="landing-eyebrow">AUTONOMOUS STEAM CLOUD ENGINE · v2.4.0</span>
+          <span id="landingHeroEyebrow" class="landing-eyebrow" data-i18n="landingHeroEyebrow">AUTONOMOUS STEAM CLOUD CONTROL ROOM · v2.4.0</span>
           <h2 id="landingHeroTitle" class="landing-hero-title" data-i18n="landingHeroTitle">Autonomous Steam Cloud Control Room</h2>
-          <p id="landingHeroSubtitle" class="landing-hero-subtitle" data-i18n="landingHeroSubtitle">Farm trading cards with ASF's 2-hour optimal rule, unlock achievements with humanized Gaussian schedules, manage INT/FLOAT stats, and keep your accounts active 24/7 in the cloud.</p>
+          <p id="landingHeroLead" class="landing-hero-lead" data-i18n="landingHeroLead">Start Boosting Your Steam Hours, Cards &amp; Achievements in the Cloud</p>
+          <p id="landingHeroSubtitle" class="landing-hero-subtitle" data-i18n="landingHeroSubtitle">Farm trading cards 24/7 in the cloud without keeping your PC on using ASF's optimal 2-hour rule, manage achievements and INT/FLOAT stats via native Steam protocol, and schedule humanized Box-Muller unlocks with PostgreSQL persistence.</p>
           <div class="landing-cta-row">
-            <button id="btnLandingConnect" type="button" class="btn-main" data-i18n="landingConnectBtn">+ Connect Steam Account</button>
-            <button id="btnLandingLiveDemo" type="button" class="btn-action-sm" data-i18n="landingLiveDemoBtn">View Live Demo ↓</button>
+            <button id="btnLandingConnect" type="button" class="btn-main btn-cta-glow" data-i18n="landingConnectBtn">+ Connect Steam Account</button>
+            <button id="btnLandingLiveDemo" type="button" class="btn-action-sm btn-cta-secondary" data-i18n="landingLiveDemoBtn">Explore Interactive Demo ↓</button>
           </div>
         </div>
         <div class="hero-mockup floating-showcase-deck" aria-hidden="true">
@@ -469,31 +487,44 @@
             <div class="float-card-icon">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
             </div>
-            <div>
-              <span class="eyebrow">MYTHIC ACHIEVEMENT · 2.4%</span>
-              <strong>Clutch Maestro · Counter-Strike 2</strong>
-              <small>Gaussian Box-Muller Schedule · Verified via Protocol</small>
+            <div class="float-card-body">
+              <div class="float-card-header-row">
+                <span class="eyebrow" data-i18n="floatCard1Eyebrow">COUNTER-STRIKE 2 · #730</span>
+                <span class="fhb-hours-pill">+2,840 Hours</span>
+              </div>
+              <strong data-i18n="floatCard1Title">+2,840 Farmed Hours · Mythic Achievement</strong>
+              <small data-i18n="floatCard1Sub">Gaussian Box-Muller · Verified via Protocol</small>
             </div>
           </div>
           <div class="floating-card float-card-holo">
             <div class="float-card-icon">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 6h8"/><path d="M8 10h8"/><path d="M8 14h4"/></svg>
             </div>
-            <div>
-              <span class="eyebrow">TRADING CARD DROP ENGINE</span>
-              <strong>Portal 2 · 4/5 Set Collected (+100 XP)</strong>
-              <small>ASF 2-Hour Optimal Rule · Est. Net Payout $0.42 USD</small>
+            <div class="float-card-body">
+              <div class="float-card-header-row">
+                <span class="eyebrow" data-i18n="floatCard2Eyebrow">TEAM FORTRESS 2 · #440</span>
+                <span class="fhb-hours-pill cyan">3/5 Cards</span>
+              </div>
+              <strong data-i18n="floatCard2Title">ASF 2-Hour Optimal Rule · 3/5 Card Drops Remaining</strong>
+              <small data-i18n="floatCard2Sub">Est. Net /usr/bin/bash.42 USD · 2FA Market Auto-Confirm</small>
             </div>
           </div>
           <div class="floating-card float-badge">
             <div class="float-card-icon">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
             </div>
-            <div>
-              <span class="eyebrow">CLOUD 24/7 · POSTGRESQL PERSISTENCE</span>
-              <strong>Multi-Account Idle Cluster · 3/3 Bots Online</strong>
-              <small>Anti-Collision Guard + 2FA Market Auto-Confirm</small>
+            <div class="float-card-body">
+              <div class="float-card-header-row">
+                <span class="eyebrow" data-i18n="floatCard3Eyebrow">PORTAL 2 · #620</span>
+                <span class="fhb-hours-pill purple">100% Base ★</span>
+              </div>
+              <strong data-i18n="floatCard3Title">100% Completed Game · Base Game Ribbon</strong>
+              <small data-i18n="floatCard3Sub">Verified via Protocol · HowLongToBeat Calibrated</small>
             </div>
+          </div>
+          <div class="showcase-security-badge">
+            <span class="status-dot green"></span>
+            <span data-i18n="floatSecurityBadge">24/7 Cloud Session · PostgreSQL Persistence · Zero PC Load</span>
           </div>
         </div>
       </div>
@@ -501,19 +532,19 @@
       <div class="landing-trust-row">
         <div class="trust-item">
           <span class="trust-val">32</span>
-          <span class="trust-label">Max parallel games</span>
+          <span class="trust-label" data-i18n="trustLabel1">Max Parallel Games</span>
         </div>
         <div class="trust-item">
           <span class="trust-val">Gaussian</span>
-          <span class="trust-label">Box-Muller timing</span>
+          <span class="trust-label" data-i18n="trustLabel2">Box-Muller Humanized Timing</span>
         </div>
         <div class="trust-item">
           <span class="trust-val">24/7</span>
-          <span class="trust-label">Cloud session</span>
+          <span class="trust-label" data-i18n="trustLabel3">Autonomous Cloud Idle</span>
         </div>
         <div class="trust-item">
           <span class="trust-val">PostgreSQL</span>
-          <span class="trust-label">Persistence layer</span>
+          <span class="trust-label" data-i18n="trustLabel4">State &amp; Schedule Persistence</span>
         </div>
       </div>
 
@@ -521,7 +552,7 @@
         <article class="landing-feature-card">
           <div class="feature-card-top">
             <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
-            <span class="feature-badge feat-tag feat-tag-asf"><span class="status-dot green"></span>ASF Rule</span>
+            <span class="feature-badge feat-tag feat-tag-asf"><span class="status-dot green"></span>ASF 2h Rule</span>
           </div>
           <h3 id="featTitle1" data-i18n="featTitle1">Smart Card Farming (ASF 2h Rule)</h3>
           <p id="featDesc1" data-i18n="featDesc1">Accumulates 2 hours in parallel on new games, then farms 1 game at a time past 2 hours for maximum Valve drop frequency.</p>
@@ -529,7 +560,7 @@
         <article class="landing-feature-card">
           <div class="feature-card-top">
             <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span>
-            <span class="feature-badge feat-tag"><span class="status-dot blue"></span>Native Protocol</span>
+            <span class="feature-badge feat-tag feat-tag-sam"><span class="status-dot blue"></span>Native Protocol</span>
           </div>
           <h3 id="featTitle2" data-i18n="featTitle2">SamRewritten Web Edition</h3>
           <p id="featDesc2" data-i18n="featDesc2">Direct achievement and INT/FLOAT statistics management via CMsgClientStoreUserStats2 with rarity filters, audit log, and 1-click Undo.</p>
@@ -537,7 +568,7 @@
         <article class="landing-feature-card">
           <div class="feature-card-top">
             <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-            <span class="feature-badge feat-tag"><span class="status-dot purple"></span>Box-Muller + DB</span>
+            <span class="feature-badge feat-tag feat-tag-gauss"><span class="status-dot purple"></span>Box-Muller + DB</span>
           </div>
           <h3 id="featTitle3" data-i18n="featTitle3">Gaussian Automation &amp; DB Persistence</h3>
           <p id="featDesc3" data-i18n="featDesc3">Scheduled unlocking with Box-Muller normal distribution, real gameplay breaks, and PostgreSQL persistence across Render container restarts.</p>
@@ -545,7 +576,7 @@
         <article class="landing-feature-card">
           <div class="feature-card-top">
             <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg></span>
-            <span class="feature-badge feat-tag"><span class="status-dot green"></span>2FA Quick-Sell</span>
+            <span class="feature-badge feat-tag feat-tag-market"><span class="status-dot green"></span>2FA Quick-Sell</span>
           </div>
           <h3 id="featTitle4" data-i18n="featTitle4">Quick-Sell Market &amp; Net Estimator</h3>
           <p id="featDesc4" data-i18n="featDesc4">Net wallet payout estimator deducting Valve (5%) and publisher (10%) fees, HTTP 429 backoff, and Steam Guard 2FA auto-confirmation.</p>
@@ -553,23 +584,50 @@
         <article class="landing-feature-card">
           <div class="feature-card-top">
             <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span>
-            <span class="feature-badge feat-tag"><span class="status-dot blue"></span>Auto Queue</span>
+            <span class="feature-badge feat-tag feat-tag-queue"><span class="status-dot blue"></span>Auto Queue</span>
           </div>
-          <h3 id="featTitle5" data-i18n="featTitle5">Auto Discovery Queue</h3>
-          <p id="featDesc5" data-i18n="featDesc5">Automatically explores 3 daily Steam Store Discovery Queues to claim free event trading cards during seasonal sales.</p>
+          <h3 id="featTitle5" data-i18n="featTitle5">Auto Discovery Queue &amp; Points Shop</h3>
+          <p id="featDesc5" data-i18n="featDesc5">Automatically explores 3 daily Steam Store Discovery Queues to claim free event trading cards and daily Points Shop items.</p>
         </article>
         <article class="landing-feature-card">
           <div class="feature-card-top">
             <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg></span>
-            <span class="feature-badge feat-tag"><span class="status-dot green"></span>24/7 Cloud</span>
+            <span class="feature-badge feat-tag feat-tag-cloud"><span class="status-dot green"></span>Anti-Collision</span>
           </div>
-          <h3 id="featTitle6" data-i18n="featTitle6">24/7 Cloud · Zero PC Load</h3>
-          <p id="featDesc6" data-i18n="featDesc6">Runs autonomously in the cloud with automatic session collision detection when you launch a game on your desktop PC.</p>
+          <h3 id="featTitle6" data-i18n="featTitle6">Anti-Collision &amp; Multi-Account Idle Cluster</h3>
+          <p id="featDesc6" data-i18n="featDesc6">Runs 24/7 in the cloud with zero PC load and instant desktop session collision detection when you launch a game on your computer.</p>
         </article>
+      </div>
+
+      <div class="landing-faq-section">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow" data-i18n="faqEyebrow">FREQUENTLY ASKED QUESTIONS</span>
+            <h3 class="faq-heading-title" data-i18n="faqTitle">Everything you need to know about SteamFarmer</h3>
+          </div>
+        </div>
+        <div class="faq-accordion-list">
+          <details class="faq-item" open>
+            <summary><span data-i18n="faqQ1">Can I get banned for using SteamFarmer?</span><span class="faq-chevron" aria-hidden="true">▾</span></summary>
+            <p data-i18n="faqA1">No. SteamFarmer communicates via the official Steam network protocol (steam-user) without injecting DLLs or modifying game memory, making it 100% VAC-safe.</p>
+          </details>
+          <details class="faq-item">
+            <summary><span data-i18n="faqQ2">Can I play on my PC while SteamFarmer is active?</span><span class="faq-chevron" aria-hidden="true">▾</span></summary>
+            <p data-i18n="faqA2">Yes! The built-in Anti-Collision guard detects your desktop session immediately, pauses cloud farming so you never get disconnected, and automatically resumes when you close the game.</p>
+          </details>
+          <details class="faq-item">
+            <summary><span data-i18n="faqQ3">How does ASF's 2-hour rule work for trading cards?</span><span class="faq-chevron" aria-hidden="true">▾</span></summary>
+            <p data-i18n="faqA3">Games under 2 hours are farmed in parallel (up to 32 at once) to reach Valve's drop threshold quickly, then farmed 1 game at a time past 2 hours for maximum card drop frequency.</p>
+          </details>
+          <details class="faq-item">
+            <summary><span data-i18n="faqQ4">Do I need to keep my computer turned on?</span><span class="faq-chevron" aria-hidden="true">▾</span></summary>
+            <p data-i18n="faqA4">No. SteamFarmer runs 24/7 in the cloud (Render or Docker) with PostgreSQL persistence, so your hours, card drops, and Gaussian schedules continue even with your PC off.</p>
+          </details>
+        </div>
       </div>
     </section>
 
-    <section id="librarySection" class="library-section" aria-label="Game library"><div class="section-heading"><div><span class="eyebrow">YOUR COLLECTION</span><h2>Game library</h2></div><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><span id="libraryModeNote" class="section-note">Open a game to verify its achievements</span><div class="view-selector" role="group" aria-label="Library view mode"><button id="btnViewGrid" type="button" class="btn-action-sm view-btn active" title="Wide grid view">⊞ Grid</button><button id="btnViewList" type="button" class="btn-action-sm view-btn" title="Compact list view">☰ Compact List</button></div></div></div><div id="demoBannerContainer"></div><div class="grid" id="gamesGrid"></div></section>
+    <section id="librarySection" class="library-section" aria-label="Game library"><div class="section-heading"><div><span id="libraryEyebrow" class="eyebrow" data-i18n="libraryEyebrowAuth">YOUR COLLECTION</span><h2 data-i18n="libraryTitle">Game library</h2></div><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><span id="libraryModeNote" class="section-note">Open a game to verify its achievements</span><div class="view-selector" role="group" aria-label="Library view mode"><button id="btnViewGrid" type="button" class="btn-action-sm view-btn active" title="Wide grid view">⊞ Grid</button><button id="btnViewList" type="button" class="btn-action-sm view-btn" title="Compact list view">☰ Compact List</button></div></div></div><div id="demoBannerContainer"></div><div class="grid" id="gamesGrid"></div></section>
     <footer class="pro-footer" aria-label="Site footer">
       <div class="pro-footer-col brand-col">
         <div class="pro-footer-brand-row">
@@ -599,10 +657,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=53" defer></script>
-  <script src="/achievement-availability.js?v=53" defer></script>
-  <script src="/draft-settings.js?v=53" defer></script>
-  <script src="/achievement-live.js?v=53" defer></script>
-  <script src="/app.js?v=53" defer></script>
+  <script src="/achievement-rarity.js?v=54" defer></script>
+  <script src="/achievement-availability.js?v=54" defer></script>
+  <script src="/draft-settings.js?v=54" defer></script>
+  <script src="/achievement-live.js?v=54" defer></script>
+  <script src="/app.js?v=54" defer></script>
 </body>
 </html>

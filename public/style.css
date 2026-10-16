@@ -2500,3 +2500,266 @@ body.oled-theme {
   background: var(--primary-dim);
   border: 1px solid var(--primary-border);
 }
+
+/* ==========================================================================
+   SteamFarmer v54 — FreeHourBoost Landing, Modern Dashboard & FAQ Accordion
+   ========================================================================== */
+
+.landing-hero {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(56, 189, 248, 0.09) 0%, transparent 48%),
+    radial-gradient(circle at 88% 82%, rgba(52, 211, 153, 0.08) 0%, transparent 50%),
+    linear-gradient(145deg, #0b1120 0%, #070a13 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.landing-hero-lead {
+  font-size: clamp(15px, 1.6vw, 18px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #38bdf8, #34d399, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-top: -4px;
+}
+
+.btn-cta-glow {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #38bdf8 100%);
+  color: #03120d;
+  font-weight: 800;
+  padding: 11px 20px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 24px rgba(52, 211, 153, 0.28);
+  border: 1px solid rgba(110, 231, 183, 0.55);
+}
+
+.btn-cta-glow:hover:not(:disabled) {
+  box-shadow: 0 0 32px rgba(56, 189, 248, 0.42);
+  transform: translateY(-1px);
+}
+
+.btn-cta-secondary {
+  padding: 11px 18px;
+  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.float-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.float-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fhb-hours-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  font-variant-numeric: tabular-nums;
+}
+
+.fhb-hours-pill.cyan {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.fhb-hours-pill.purple {
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.14);
+  border-color: rgba(168, 85, 247, 0.32);
+}
+
+.showcase-security-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(6, 10, 18, 0.72);
+  border: 1px dashed rgba(52, 211, 153, 0.3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* FAQ Accordion Section */
+.landing-faq-section {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.faq-heading-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  margin-top: 2px;
+}
+
+.faq-accordion-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.faq-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 13px 16px;
+  transition: border-color 0.16s var(--ease);
+}
+
+.faq-item[open] {
+  border-color: var(--primary-border);
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.05) 0%, var(--surface-2) 100%);
+}
+
+.faq-item > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-chevron {
+  color: var(--primary);
+  font-size: 12px;
+  transition: transform 0.18s var(--ease);
+}
+
+.faq-item[open] .faq-chevron {
+  transform: rotate(180deg);
+}
+
+.faq-item p {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* Modern Authenticated Dashboard Facelift */
+.accounts-bar-left,
+.accounts-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.accounts-bar-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+}
+
+.acc-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.acc-live-badge.farming {
+  color: var(--primary);
+  border-color: var(--primary-border);
+  background: var(--primary-dim);
+}
+
+.acc-live-badge.collision {
+  color: var(--amber);
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.steamid-copy-pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  border-color: rgba(56, 189, 248, 0.25);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.btn-add-acc-highlight {
+  border-color: var(--primary-border);
+  color: var(--primary);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.kpi-card {
+  background: linear-gradient(160deg, var(--surface-2) 0%, rgba(12, 20, 32, 0.95) 100%);
+  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease);
+}
+
+.kpi-card:hover {
+  border-color: var(--primary-border);
+}
+
+.kpi-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.kpi-card-top label {
+  margin-bottom: 0;
+}
+
+.kpi-icon {
+  color: var(--primary);
+  opacity: 0.85;
+  display: inline-flex;
+}
+
+.kpi-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.market-net-estimator-banner {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.32);
+  font-weight: 700;
+  color: var(--primary);
+}
