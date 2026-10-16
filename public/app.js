@@ -42,6 +42,22 @@ const i18n = {
     footerCommunity: "Enlaces Comunitarios",
     footerSteamStatus: "Estado de la Red de Steam (Steam Status) ↗",
     footerReportIssue: "Reporte de Problemas ↗",
+    landingHeroTitle: "Tu Centro de Control Autónomo para Steam",
+    landingHeroSubtitle: "Farmea cromos con la regla óptima de 2 horas de ASF, desbloquea logros con distribución gaussiana humanizada, gestiona estadísticas INT/FLOAT con SamRewritten Web y mantén tus cuentas activas 24/7 en la nube sin encender tu PC.",
+    landingConnectBtn: "+ Conectar Cuenta de Steam",
+    landingLiveDemoBtn: "Ver Demostración en Vivo ↓",
+    featTitle1: "Farming de Cromos Inteligente",
+    featDesc1: "Acumula 2 horas en paralelo en juegos nuevos y luego farmea 1 juego a la vez pasadas las 2 horas para maximizar la velocidad de drops de Valve.",
+    featTitle2: "SamRewritten Web Edition",
+    featDesc2: "Manipulación directa de logros y estadísticas INT/FLOAT vía CMsgClientStoreUserStats2 con filtros de rareza, historial auditable y deshacer en 1 clic.",
+    featTitle3: "Automatización & Curva de Gauss",
+    featDesc3: "Desbloqueo programado con tiempos humanizados por campana de Gauss, pausas de sesión reales y persistencia en PostgreSQL contra reinicios de Render.",
+    featTitle4: "Venta Rápida en el Mercado",
+    featDesc4: "Estimador de ganancias netas descontando comisiones de Valve (5% + 10%), protección anti Rate-Limit (HTTP 429) y auto-confirmación Steam Guard.",
+    featTitle5: "Auto Discovery Queue",
+    featDesc5: "Explora automáticamente las 3 listas de descubrimientos diarias de la tienda de Steam para reclamar cromos gratuitos en eventos de rebajas.",
+    featTitle6: "Cloud 24/7 Sin Descargas",
+    featDesc6: "Opera 100% en la nube con detección automática de colisión si abres un juego en tu PC, sin consumir recursos ni dejar tu computadora encendida.",
     deckVerified: "🟢 Verificado",
     deckPlayable: "🟡 Jugable",
     deckUnsupported: "⚪ No compatible"
@@ -74,6 +90,22 @@ const i18n = {
     footerCommunity: "Community Links",
     footerSteamStatus: "Steam Network Status ↗",
     footerReportIssue: "Report an Issue ↗",
+    landingHeroTitle: "Tu Centro de Control Autónomo para Steam · Autonomous Steam Cloud",
+    landingHeroSubtitle: "Farm trading cards with ASF's optimal 2-hour rule, unlock achievements with humanized Gaussian schedules, edit INT/FLOAT stats via SamRewritten Web, and keep your accounts active 24/7 in the cloud.",
+    landingConnectBtn: "+ Connect Steam Account",
+    landingLiveDemoBtn: "View Live Demo ↓",
+    featTitle1: "Smart Card Farming (ASF 2h Rule)",
+    featDesc1: "Accumulates 2 hours in parallel on new games, then farms 1 game at a time past 2 hours for maximum Valve drop frequency.",
+    featTitle2: "SamRewritten Web Edition",
+    featDesc2: "Direct achievement and INT/FLOAT statistics management via CMsgClientStoreUserStats2 with rarity filters, audit log, and 1-click Undo.",
+    featTitle3: "Gaussian Automation & DB Persistence",
+    featDesc3: "Scheduled unlocking with Box-Muller normal distribution, real gameplay breaks, and PostgreSQL persistence across Render container restarts.",
+    featTitle4: "Quick-Sell Market & Net Estimator",
+    featDesc4: "Net wallet payout estimator deducting Valve (5%) and publisher (10%) fees, HTTP 429 backoff, and Steam Guard 2FA auto-confirmation.",
+    featTitle5: "Auto Discovery Queue",
+    featDesc5: "Automatically explores 3 daily Steam Store Discovery Queues to claim free event trading cards during seasonal sales.",
+    featTitle6: "24/7 Cloud · Zero PC Load",
+    featDesc6: "Runs autonomously in the cloud with automatic session collision detection when you launch a game on your desktop PC.",
     deckVerified: "🟢 Deck Verified",
     deckPlayable: "🟡 Deck Playable",
     deckUnsupported: "⚪ Deck Unsupported"
@@ -315,6 +347,7 @@ async function loadStatus() {
     if (Array.isArray(data.demoCatalog) && data.demoCatalog.length && guestDemoGames.length === DEFAULT_DEMO_GAMES.length) {
       guestDemoGames = data.demoCatalog.map(g => ({ id: Number(g.id), name: String(g.name) }));
     }
+    if ($('saasLandingSection')) $('saasLandingSection').hidden = Boolean(active);
     if (!active) {
       $('connectionDetails').textContent = 'Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo · Interactive Public Showcase.';
       $('userLabel').textContent = currentLang === 'es' ? 'Sesión Interactiva · Panel Operativo en Vivo' : 'Interactive Showcase · Live Operational Preview';
@@ -724,6 +757,14 @@ function applyLanguage(lang) {
   if ($("footerCommunityTitle")) $("footerCommunityTitle").textContent = t("footerCommunity");
   if ($("footerLinkSteamStatus")) $("footerLinkSteamStatus").textContent = t("footerSteamStatus");
   if ($("footerLinkIssues")) $("footerLinkIssues").textContent = t("footerReportIssue");
+  if ($("landingHeroTitle")) $("landingHeroTitle").textContent = t("landingHeroTitle");
+  if ($("landingHeroSubtitle")) $("landingHeroSubtitle").textContent = t("landingHeroSubtitle");
+  if ($("btnLandingConnect")) $("btnLandingConnect").textContent = t("landingConnectBtn");
+  if ($("btnLandingLiveDemo")) $("btnLandingLiveDemo").textContent = t("landingLiveDemoBtn");
+  for (let i = 1; i <= 6; i++) {
+    if ($("featTitle" + i)) $("featTitle" + i).textContent = t("featTitle" + i);
+    if ($("featDesc" + i)) $("featDesc" + i).textContent = t("featDesc" + i);
+  }
   cardsSnapshot = "";
   gamesSnapshot = "";
   if (active) {
@@ -1813,6 +1854,11 @@ if($('btnViewGrid'))$('btnViewGrid').addEventListener('click',()=>setLibraryView
 if($('btnViewList'))$('btnViewList').addEventListener('click',()=>setLibraryViewMode('list'));
 if($('langSelect')){$('langSelect').value=currentLang;$('langSelect').addEventListener('change',e=>applyLanguage(e.target.value));}
 if($('btnOledTheme'))$('btnOledTheme').addEventListener('click',()=>toggleOledTheme());
+if($('btnLandingConnect'))$('btnLandingConnect').addEventListener('click',()=>openAddAccModal());
+if($('btnLandingLiveDemo'))$('btnLandingLiveDemo').addEventListener('click',()=>{
+  try{$('gamesGrid')?.scrollIntoView?.({behavior:'smooth'});}catch{}
+  openAchModal(730,'Counter-Strike 2',false,'web','achievements');
+});
 if($('footerLinkSam'))$('footerLinkSam').addEventListener('click',e=>{e.preventDefault();openAchModal(730,'Counter-Strike 2',false,active?.connected?'auto':'web','achievements');});
 if($('footerLinkAsf'))$('footerLinkAsf').addEventListener('click',e=>{if($('cardsPanel')){$('cardsPanel').hidden=false;$('cardsPanel').open=true;}});
 if($('footerLinkTasks'))$('footerLinkTasks').addEventListener('click',e=>{if($('automationsPanel'))$('automationsPanel').open=true;});

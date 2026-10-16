@@ -627,7 +627,17 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   w.testUI.activate(null);
   await w.testUI.load();
 
-  // 1. Verify Guest Demo / Showcase Mode renders banner + 4 iconic demo games when !active
+  // 1. Verify SaaS Promotional Landing Page (#saasLandingSection) + Guest Demo / Showcase Mode when !active
+  const saasLanding = w.document.getElementById("saasLandingSection");
+  assert.ok(saasLanding);
+  assert.equal(saasLanding.hidden, false);
+  assert.match(w.document.getElementById("landingHeroTitle").textContent, /Tu Centro de Control Autónomo para Steam/);
+  assert.equal(w.document.querySelectorAll(".landing-feature-card").length, 6);
+  assert.equal(w.document.querySelectorAll(".floating-card").length, 3);
+  assert.equal(w.document.querySelectorAll(".glow-blob").length, 3);
+  assert.ok(w.document.querySelector(".corner-toolbar #langSelect"));
+  assert.ok(w.document.querySelector(".corner-toolbar #btnOledTheme"));
+  assert.ok(w.document.querySelector(".corner-toolbar #btnSoundToggle"));
   assert.match(w.document.getElementById("demoBannerContainer").textContent, /Modo Demostración: Conecta tu cuenta de Steam para aplicar cambios en vivo/);
   const demoCards = w.document.querySelectorAll("#gamesGrid .demo-card");
   assert.equal(demoCards.length, 4);
@@ -697,6 +707,7 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   });
   w.testUI.select("acc1");
   await w.testUI.load();
+  assert.equal(w.document.getElementById("saasLandingSection").hidden, true);
   assert.match(w.document.getElementById("userLabel").textContent, /BrunoMain/);
   assert.match(w.document.getElementById("connectionDetails").textContent, /76561198012345678/);
 
@@ -738,4 +749,8 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.ok(w.document.querySelector("footer.pro-footer"));
   assert.match(w.document.querySelector("footer.pro-footer").textContent, /v2\.4\.0/);
   assert.match(w.document.querySelector("footer.pro-footer").textContent, /github\.com\/brunnnno\/steam-farmer/);
+  const fullCss = fs.readFileSync(path.join(__dirname, "../public/style.css"), "utf8");
+  assert.match(fullCss, /max-width:\s*1720px/);
+  assert.match(fullCss, /repeat\(auto-fill,\s*minmax\(240px,\s*1fr\)\)/);
+  assert.match(fullCss, /\.corner-toolbar/);
 });

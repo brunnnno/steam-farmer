@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070a13">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=46">
+  <link rel="stylesheet" href="/style.css?v=47">
 </head>
 <body><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -214,21 +214,100 @@
     </div>
   </div>
 
+  <nav class="corner-toolbar" aria-label="Global utilities">
+    <select id="langSelect" aria-label="Language selector" class="acc-pill lang-select" style="width:auto; padding:7px 12px;">
+      <option value="es">🇪🇸 ES · Español</option>
+      <option value="en">🇺🇸 EN · English</option>
+    </select>
+    <button id="btnOledTheme" type="button" class="acc-pill" title="Alternar tema Midnight Blue / OLED Pure Black">🌙 OLED: OFF</button>
+    <button id="btnSoundToggle" type="button" class="acc-pill" title="Mute or unmute achievement unlock sound">🔊 Sound: ON</button>
+    <button id="btnStreamerMode" type="button" class="acc-pill" title="Hide SteamID and account names on screen">🕵️ Streamer Mode: OFF</button>
+    <button id="btnShowcaseCard" type="button" class="acc-pill" title="Generate downloadable profile showcase card">✨ Showcase Card</button>
+  </nav>
+
   <div class="container">
+    <section id="saasLandingSection" class="saas-landing" aria-label="SteamFarmer Promotional Showcase">
+      <div class="landing-hero">
+        <div class="glow-blob blob-emerald" aria-hidden="true"></div>
+        <div class="glow-blob blob-cyan" aria-hidden="true"></div>
+        <div class="glow-blob blob-purple" aria-hidden="true"></div>
+        <div class="landing-hero-copy">
+          <span id="landingHeroEyebrow" class="landing-eyebrow">⚡ AUTONOMOUS STEAM CLOUD ENGINE · v2.4.0</span>
+          <h2 id="landingHeroTitle" class="landing-hero-title">Tu Centro de Control Autónomo para Steam</h2>
+          <p id="landingHeroSubtitle" class="landing-hero-subtitle">Farmea cromos con la regla óptima de 2 horas de ASF, desbloquea logros con distribución gaussiana humanizada, gestiona estadísticas INT/FLOAT con SamRewritten Web y mantén tus cuentas activas 24/7 en la nube sin encender tu PC.</p>
+          <div class="landing-cta-row">
+            <button id="btnLandingConnect" type="button" class="btn-main btn-glow-cta">+ Conectar Cuenta de Steam</button>
+            <button id="btnLandingLiveDemo" type="button" class="btn-action-sm btn-secondary-cta">Ver Demostración en Vivo ↓</button>
+          </div>
+        </div>
+        <div class="floating-showcase-deck" aria-hidden="true">
+          <div class="floating-card float-ach">
+            <div class="float-card-icon">🏆</div>
+            <div>
+              <span class="eyebrow">MYTHIC ACHIEVEMENT · 2.4%</span>
+              <strong>Clutch Maestro · Counter-Strike 2</strong>
+              <small>Gaussian Box-Muller Schedule · Verified via Protocol</small>
+            </div>
+          </div>
+          <div class="floating-card float-card-holo">
+            <div class="float-card-icon">🃏</div>
+            <div>
+              <span class="eyebrow">HOLOGRAPHIC TRADING CARD DROP</span>
+              <strong>Portal 2 · 4/5 Set Collected (+100 XP)</strong>
+              <small>ASF 2-Hour Optimal Rule · Est. Net Payout $0.42 USD</small>
+            </div>
+          </div>
+          <div class="floating-card float-badge">
+            <div class="float-card-icon">🎖️</div>
+            <div>
+              <span class="eyebrow">CLOUD 24/7 · POSTGRESQL PERSISTENCE</span>
+              <strong>Multi-Account Idle Cluster · 3/3 Bots Online</strong>
+              <small>Anti-Collision Guard + 2FA Market Auto-Confirm</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="landing-features-grid">
+        <article class="landing-feature-card">
+          <div class="feature-card-top"><span class="feature-icon">⚡</span><span class="feature-badge">ASF 2H RULE</span></div>
+          <h3 id="featTitle1">Farming de Cromos Inteligente</h3>
+          <p id="featDesc1">Acumula 2 horas en paralelo en juegos nuevos y luego farmea 1 juego a la vez pasadas las 2 horas para maximizar la velocidad de drops de Valve.</p>
+        </article>
+        <article class="landing-feature-card">
+          <div class="feature-card-top"><span class="feature-icon">🏆</span><span class="feature-badge">NATIVE PROTOCOL</span></div>
+          <h3 id="featTitle2">SamRewritten Web Edition</h3>
+          <p id="featDesc2">Manipulación directa de logros y estadísticas INT/FLOAT vía CMsgClientStoreUserStats2 con filtros de rareza, historial auditable y deshacer en 1 clic.</p>
+        </article>
+        <article class="landing-feature-card">
+          <div class="feature-card-top"><span class="feature-icon">⏱️</span><span class="feature-badge">BOX-MULLER + DB</span></div>
+          <h3 id="featTitle3">Automatización &amp; Curva de Gauss</h3>
+          <p id="featDesc3">Desbloqueo programado con tiempos humanizados por campana de Gauss, pausas de sesión reales y persistencia en PostgreSQL contra reinicios de Render.</p>
+        </article>
+        <article class="landing-feature-card">
+          <div class="feature-card-top"><span class="feature-icon">🛒</span><span class="feature-badge">2FA QUICK-SELL</span></div>
+          <h3 id="featTitle4">Venta Rápida en el Mercado</h3>
+          <p id="featDesc4">Estimador de ganancias netas descontando comisiones de Valve (5% + 10%), protección anti Rate-Limit (HTTP 429) y auto-confirmación Steam Guard.</p>
+        </article>
+        <article class="landing-feature-card">
+          <div class="feature-card-top"><span class="feature-icon">🧭</span><span class="feature-badge">AUTO QUEUE</span></div>
+          <h3 id="featTitle5">Auto Discovery Queue</h3>
+          <p id="featDesc5">Explora automáticamente las 3 listas de descubrimientos diarias de la tienda de Steam para reclamar cromos gratuitos en eventos de rebajas.</p>
+        </article>
+        <article class="landing-feature-card">
+          <div class="feature-card-top"><span class="feature-icon">☁️</span><span class="feature-badge">24/7 CLOUD</span></div>
+          <h3 id="featTitle6">Cloud 24/7 Sin Descargas</h3>
+          <p id="featDesc6">Opera 100% en la nube con detección automática de colisión si abres un juego en tu PC, sin consumir recursos ni dejar tu computadora encendida.</p>
+        </article>
+      </div>
+    </section>
+
     <div class="accounts-bar">
       <div style="display:flex; align-items:center; gap:12px;">
         <span style="font-size:0.8rem; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Active Profile:</span>
         <div class="accounts-list" id="accountsTabsContainer"></div>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <select id="langSelect" aria-label="Language selector" class="acc-pill lang-select" style="width:auto; padding:7px 12px;">
-          <option value="es">🇪🇸 Español</option>
-          <option value="en">🇺🇸 English</option>
-        </select>
-        <button id="btnOledTheme" type="button" class="acc-pill" title="Alternar tema Midnight Blue / OLED Pure Black">🌙 OLED: OFF</button>
-        <button id="btnSoundToggle" type="button" class="acc-pill" title="Mute or unmute achievement unlock sound">🔊 Sound: ON</button>
-        <button id="btnStreamerMode" type="button" class="acc-pill" title="Hide SteamID and account names on screen">🕵️ Streamer Mode: OFF</button>
-        <button id="btnShowcaseCard" type="button" class="acc-pill" title="Generate downloadable profile showcase card">✨ Showcase Card</button>
         <button class="acc-pill" data-event-15="">+ Add Account</button>
         <details class="control-menu" id="accountMenu"><summary>Account options</summary><div class="control-menu-content"><button class="acc-pill" data-event-16="">Refresh Steam session</button><button class="acc-pill" data-event-17="" hidden>Sign out of Steam</button><button class="acc-pill" style="color:var(--danger);" data-event-18="" hidden>Delete profile</button><small id="managedAccountNote" hidden>The main account is managed by the server; signing out and deleting it here are unavailable.</small></div></details>
       </div>
@@ -415,10 +494,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=46" defer></script>
-  <script src="/achievement-availability.js?v=46" defer></script>
-  <script src="/draft-settings.js?v=46" defer></script>
-  <script src="/achievement-live.js?v=46" defer></script>
-  <script src="/app.js?v=46" defer></script>
+  <script src="/achievement-rarity.js?v=47" defer></script>
+  <script src="/achievement-availability.js?v=47" defer></script>
+  <script src="/draft-settings.js?v=47" defer></script>
+  <script src="/achievement-live.js?v=47" defer></script>
+  <script src="/app.js?v=47" defer></script>
 </body>
 </html>
