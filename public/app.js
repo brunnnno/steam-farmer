@@ -178,7 +178,16 @@ const i18n = {
     stealthFarmingOffBtn: "👻 Modo Oculto: Desactivado",
     claimFree32PackBtn: "🎁 Reclamar Pack de 32 Juegos Gratis",
     donorSchemaBtn: "🧬 Explorar Schema (Donor ID)",
-    livePlayersSuffix: "en vivo"
+    livePlayersSuffix: "en vivo",
+    techDrawerSummary: "Ver Detalles Técnicos / Protocolo",
+    platinumPaceFastBtn: "🚀 Rápido (~1 a 2 semanas)",
+    platinumPaceHumanBtn: "🎮 Natural / Humano (~1 a 2 meses)",
+    platinumPaceMonthsBtn: "🏆 Ultra Realista / Juego Completo (~3 a 6 meses)",
+    unownedSectionTitle: "Logros de Juegos No Poseídos y Vías REA",
+    unownedSectionDesc: "Valve valida la licencia en CMsgClientStoreUserStats2. Usa estas 4 vías REA verificadas: Préstamo Familiar (Steam Families), Licencia Temporal Free On-Demand, AppID 480 (Spacewar) o exportar configuración para OpenSteamTool.",
+    exportOpenSteamToolBtn: "📦 Exportar Configuración para OpenSteamTool",
+    claimCurrentGameFreeBtn: "🆓 Reclamar Licencia Temporal (Free On-Demand)",
+    openSpacewar480Btn: "🛸 Abrir AppID 480 (Spacewar)"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
@@ -338,7 +347,16 @@ const i18n = {
     stealthFarmingOffBtn: "👻 Stealth Farming: OFF",
     claimFree32PackBtn: "🎁 Claim 32 Free Games Pack",
     donorSchemaBtn: "🧬 Explore Schema (Donor ID)",
-    livePlayersSuffix: "playing now"
+    livePlayersSuffix: "playing now",
+    techDrawerSummary: "View Technical / Protocol Details",
+    platinumPaceFastBtn: "🚀 Fast (~1–2 weeks)",
+    platinumPaceHumanBtn: "🎮 Natural / Human (~1–2 months)",
+    platinumPaceMonthsBtn: "🏆 Ultra Realistic / Full Game (~3–6 months)",
+    unownedSectionTitle: "Unowned Game Achievements & REA Pathways",
+    unownedSectionDesc: "Valve validates game ownership on CMsgClientStoreUserStats2. Use these 4 verified REA pathways for unowned games: Steam Families loan tickets, Free On-Demand temporary licenses, AppID 480 (Spacewar), or OpenSteamTool local config export.",
+    exportOpenSteamToolBtn: "📦 Export Configuration for OpenSteamTool",
+    claimCurrentGameFreeBtn: "🆓 Claim Free On-Demand License",
+    openSpacewar480Btn: "🛸 Open AppID 480 (Spacewar)"
   }
 };
 function t(key) {
@@ -1918,7 +1936,8 @@ function renderAchModal(page=achievementPage) {
         });
         label.append(check);iconWrap.append(label);
       }
-      const iconImg=image(a.unlocked?a.iconOpen:a.iconClosed,a.unlocked?'':'locked');
+      const isVeryRare=a.percent!==null&&a.percent<10;
+      const iconImg=image(a.unlocked?a.iconOpen:a.iconClosed,(a.unlocked?'':'locked')+(isVeryRare?' rare-gold-border':''));
       iconWrap.append(iconImg);
       tdIcon.append(iconWrap);
 
@@ -1933,28 +1952,35 @@ function renderAchModal(page=achievementPage) {
         const depBadge=element('small',depInfo.blockedByDependency?`🔒 ${depInfo.requiresText}`:`✓ ${depInfo.requiresText}`,'ach-dep-badge '+(depInfo.blockedByDependency?'blocked':'satisfied'));
         info.append(depBadge);
       }
+      const techDrawer=element('details',undefined,'technical-debug-drawer');
+      const techSummary=element('summary',t('techDrawerSummary'),'technical-debug-summary');
+      const techBody=element('div',undefined,'technical-debug-body');
+      techDrawer.append(techSummary,techBody);
+      if(Number.isInteger(a.statId))techBody.append(element('small',`statId: ${a.statId} · bitIndex: ${a.bitIndex??0}`));
       if(liveProto){
-        if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
-        if(a.serverControlled)info.append(element('small',' · Server-controlled'));
+        if(a.progressDetails)techBody.append(element('small',` · Progress: ${a.progressDetails.currentValue??0} / ${a.progressDetails.maximum??0}`));
+        if(a.serverControlled)techBody.append(element('small',' · Server-controlled'));
       }else{
-        if(a.unlocked===true&&currentAchMethod==='protocol'){if(selectEligible&&a.batchSupport?.canRemove){const remove=button('Review removal',()=>reviewChangeSelection([{apiname:a.apiname,action:'remove'}]),'btn-action-sm');remove.disabled=experimentBusy;info.append(remove);}else info.append(element('small','Removal unavailable: '+(a.batchSupport?.removalReason||a.removalSupport?.reason||'Refresh direct verification to check the current state and permissions.'),'ach-write-reason'));}
-        if(a.hidden===true)info.append(element('small',' · Hidden achievement'));
-        if(a.progressDetails)info.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}`));
-        if(a.serverControlled) info.append(element('small',' · Server-controlled'));
-        if(a.hasProgressDependency) info.append(element('small',' · Linked progress statistic'));
-        const available=availability.get(a),classification=element('div',available.label,'ach-availability '+available.status);classification.title=available.reason;info.append(classification);
-        if(a.unlocked!==true){info.append(element('small',available.reason,'ach-write-reason'));if(available.action&&!isAuthorizedAccount(active))info.append(element('small','Activation from this panel is available only on the server-managed main account.','ach-write-reason'));if(available.provisional)info.append(element('small','Not guaranteed: Steam must accept the update and a fresh read must confirm it.','ach-write-reason'));}
+        if(a.unlocked===true&&currentAchMethod==='protocol'){if(selectEligible&&a.batchSupport?.canRemove){const remove=button('Review removal',()=>reviewChangeSelection([{apiname:a.apiname,action:'remove'}]),'btn-action-sm');remove.disabled=experimentBusy;info.append(remove);}else techBody.append(element('small','Removal unavailable: '+(a.batchSupport?.removalReason||a.removalSupport?.reason||'Refresh direct verification to check the current state and permissions.'),'ach-write-reason'));}
+        if(a.hidden===true)techBody.append(element('small',' · Hidden achievement'));
+        if(a.progressDetails)techBody.append(element('small',` · Progress: ${a.progressDetails.currentValue??'unknown'} / ${a.progressDetails.maximum??'unknown'}`));
+        if(a.serverControlled) techBody.append(element('small',' · Server-controlled'));
+        if(a.hasProgressDependency) techBody.append(element('small',' · Linked progress statistic'));
+        const available=availability.get(a),classification=element('div',available.label,'ach-availability '+available.status);classification.title=available.reason;techBody.append(classification);
+        if(a.unlocked!==true){techBody.append(element('small',available.reason,'ach-write-reason'));if(available.action&&!isAuthorizedAccount(active))techBody.append(element('small','Activation from this panel is available only on the server-managed main account.','ach-write-reason'));if(available.provisional)techBody.append(element('small','Not guaranteed: Steam must accept the update and a fresh read must confirm it.','ach-write-reason'));}
         if(currentAchMethod==='protocol' && a.compatibility) {
           if(a.unlocked===false && isAuthorizedAccount(active)) {
             if(available.canAttempt&&available.action==='unlock'){const unlock=button(experimentBusy?'Checking Steam…':'Unlock achievement',()=>a.batchSupport?.canReactivate?reviewChangeSelection([{apiname:a.apiname,action:'unlock'}]):unlockIndividualAchievement(a));unlock.disabled=experimentBusy;unlock.title=a.compatibility.reason;info.append(unlock);}
             if(a.hasProgressDependency&&(available.canAttempt&&available.action==='progress'||a.progressSupport?.canPreviewShared||a.progressSupport?.canPreviewFloat)){const progress=button(experimentBusy?'Checking Steam…':'Review progress',()=>reviewAchievementProgress(a));progress.disabled=experimentBusy;info.append(progress);}
           }
-          if(a.unlocked!==true && !a.compatibility.canUnlock)info.append(element('small',a.compatibility.action||'','ach-write-reason'));
-        } else if(currentAchMethod==='web' && a.unlocked===false) info.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
+          if(a.unlocked!==true && !a.compatibility.canUnlock)techBody.append(element('small',a.compatibility.action||'','ach-write-reason'));
+        } else if(currentAchMethod==='web' && a.unlocked===false) techBody.append(element('small','Choose Direct verification in the reading mode to check activation compatibility.','ach-write-reason'));
       }
+      if(techBody.childNodes.length)info.append(techDrawer);
 
       const tdPct=element('td',undefined,'ach-td-pct');
-      tdPct.append(element('small',a.percent===null?'Unknown rarity':`${a.tier} · ${a.percent.toFixed(1)}%`));
+      const rarityPill=element('small',a.percent===null?'Unknown rarity':`${isVeryRare?'⭐ ':''}${a.tier} · ${a.percent.toFixed(1)}%`,'ach-rarity-pill'+(isVeryRare?' rare-gold':''));
+      tdPct.append(rarityPill);
 
       const tdRarity=element('td',undefined,'ach-td-rarity');
       const rDot=element('span',undefined,'ach-rarity-dot '+String(a.tier||'unknown').toLowerCase());
@@ -2508,6 +2534,7 @@ async function startTimedModifications(overrideOptions={}){
       order,
       stealth,
       percentages,
+      pacingMode:overrideOptions.pacingMode||selectedPlatinumPace,
       ...(mode==='selected'?{selection:[...achievementSelection.values()]}:{bulkAction:mode})
     };
     const res=await api('/api/achievement/timed',payload);
@@ -2519,10 +2546,47 @@ async function startTimedModifications(overrideOptions={}){
     notice(e.message);
   }
 }
+let selectedPlatinumPace = 'realistic_human';
+function setPlatinumPacingMode(pace) {
+  selectedPlatinumPace = ['fast', 'realistic_human', 'ultra_long_months'].includes(pace) ? pace : 'realistic_human';
+  for (const btn of document.querySelectorAll('.platinum-pace-btn')) {
+    btn.classList.toggle('active', btn.dataset.pace === selectedPlatinumPace);
+  }
+}
 async function startRealisticPlatinum(){
   if($('timedSpacingSelect'))$('timedSpacingSelect').value='platinum';
   if($('timedOrderSelect'))$('timedOrderSelect').value='progression';
-  return startTimedModifications({spacing:'platinum',order:'progression',mode:'unlock_all'});
+  return startTimedModifications({spacing:'platinum',order:'progression',mode:'unlock_all',pacingMode:selectedPlatinumPace});
+}
+async function exportOpenSteamToolConfig(){
+  if(!currentAchAppId)return;
+  const id=currentAchAppId,account=currentAccKey();
+  try{
+    const data=await api(`/api/games/${id}/opensteamtool-export?accountId=${encodeURIComponent(account)}`);
+    const text=JSON.stringify(data,null,2);
+    if($('importJsonInput'))$('importJsonInput').value=text;
+    const blob=new Blob([text],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=element('a');a.href=url;a.download=`opensteamtool-${id}.json`;
+    document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);
+    notice(currentLang==='es'?`Configuración OpenSteamTool exportada para AppID #${id} (Donor ${data.donorId})`:`OpenSteamTool config exported for AppID #${id} (Donor ${data.donorId})`);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function claimCurrentGameFreeLicense(){
+  if(!currentAchAppId)return;
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/account/claim-free-pack',{accountId:activeAccountId,appids:[currentAchAppId],addToGames:true});
+    if(res?.message)notice(res.message);
+    await loadStatus();
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function openSpacewar480(){
+  await openAchModal(480,'Spacewar (OnlineFix / AppID 480)',true,active?.connected?'auto':'web','achievements');
 }
 async function stopTimedModifications(){
   if(!currentAchAppId||!activeAccountId)return;
@@ -2592,6 +2656,12 @@ if($('leaderboardSelect'))$('leaderboardSelect').addEventListener('change',e=>lo
 if($('leaderboardScopeSelect'))$('leaderboardScopeSelect').addEventListener('change',()=>loadLeaderboardEntries(currentLeaderboardId));
 if($('refreshLeaderboardsBtn'))$('refreshLeaderboardsBtn').addEventListener('click',()=>loadLeaderboardEntries(currentLeaderboardId));
 if($('btnDonorSchemaExplorer'))$('btnDonorSchemaExplorer').addEventListener('click',()=>exploreDonorSchema());
+if($('platinumPaceFastBtn'))$('platinumPaceFastBtn').addEventListener('click',()=>setPlatinumPacingMode('fast'));
+if($('platinumPaceHumanBtn'))$('platinumPaceHumanBtn').addEventListener('click',()=>setPlatinumPacingMode('realistic_human'));
+if($('platinumPaceMonthsBtn'))$('platinumPaceMonthsBtn').addEventListener('click',()=>setPlatinumPacingMode('ultra_long_months'));
+if($('btnExportOpenSteamTool'))$('btnExportOpenSteamTool').addEventListener('click',()=>exportOpenSteamToolConfig());
+if($('btnClaimCurrentGameFree'))$('btnClaimCurrentGameFree').addEventListener('click',()=>claimCurrentGameFreeLicense());
+if($('btnOpenSpacewar480'))$('btnOpenSpacewar480').addEventListener('click',()=>openSpacewar480());
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
 if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());

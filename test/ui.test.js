@@ -1182,4 +1182,61 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   claim32Btn.click();
   await new Promise(r => setTimeout(r, 20));
   assert.ok(reaUiCalls.some(c => c.url === "/api/account/claim-free-pack" && c.body?.addToGames === true));
+
+  // 15. Verify v57 UI: Clean Achievement Row Hierarchy (.rare-gold-border, .ach-rarity-pill, <details class="technical-debug-drawer">), Platinum Pacing Selector, and OpenSteamTool Exporter
+  assert.ok(w.document.querySelector(".ach-rarity-pill"), "Achievement rows must render clean .ach-rarity-pill");
+  assert.ok(w.document.querySelector("details.technical-debug-drawer summary.technical-debug-summary"), "Technical metadata must be collapsed inside <details class='technical-debug-drawer'>");
+
+  const v57Calls = [];
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    v57Calls.push({ url, body });
+    if (url.startsWith("/api/games/730/opensteamtool-export")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          format: "OpenSteamTool-REA-v1",
+          appid: 730,
+          spacewarAppId: 480,
+          donorId: "76561198028121353",
+          achievements: [{ apiname: "OST_1", name: "OST Achievement", unlocked: true }],
+          luaScript: "addappid(730)"
+        })
+      };
+    }
+    if (url === "/api/achievement/timed") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          active: true,
+          spacing: "platinum",
+          order: "progression",
+          pacingMode: body?.pacingMode || "ultra_long_months",
+          message: "Modo Platino Realista activado (Ultra-Realista): 10 logros en 5 sesiones a lo largo de ~3.2 meses"
+        })
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ accounts: [connectedAcc], presets: [], timezone: "UTC" }) };
+  };
+
+  // Switch Platinum Pacing to Ultra Realistic / Full Game (ultra_long_months) and click Start Platinum
+  w.testUI.activate({ ...connectedAcc, tokenSource: "environment", tokenAccountMatches: true });
+  const paceMonthsBtn = w.document.getElementById("platinumPaceMonthsBtn");
+  assert.ok(paceMonthsBtn);
+  paceMonthsBtn.click();
+  assert.equal(paceMonthsBtn.classList.contains("active"), true);
+  w.document.getElementById("startPlatinumBtn").click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v57Calls.some(c => c.url === "/api/achievement/timed" && c.body?.pacingMode === "ultra_long_months"));
+
+  // Click Export Configuration for OpenSteamTool (#btnExportOpenSteamTool)
+  const ostExportBtn = w.document.getElementById("btnExportOpenSteamTool");
+  assert.ok(ostExportBtn);
+  ostExportBtn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v57Calls.some(c => c.url.startsWith("/api/games/730/opensteamtool-export")));
+  assert.match(w.document.getElementById("importJsonInput").value, /OpenSteamTool-REA-v1/);
 });

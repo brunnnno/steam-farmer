@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=56">
+  <link rel="stylesheet" href="/style.css?v=57">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -200,6 +200,11 @@
                 <option value="random" selected>Random order</option>
               </select>
             </div>
+            <div class="platinum-pace-selector" role="group" aria-label="Platinum Pacing Mode" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+              <button id="platinumPaceFastBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="fast" data-i18n="platinumPaceFastBtn">🚀 Fast (~1–2 weeks)</button>
+              <button id="platinumPaceHumanBtn" type="button" class="btn-action-sm platinum-pace-btn active" data-pace="realistic_human" data-i18n="platinumPaceHumanBtn">🎮 Natural / Human (~1–2 months)</button>
+              <button id="platinumPaceMonthsBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="ultra_long_months" data-i18n="platinumPaceMonthsBtn">🏆 Ultra Realistic / Full Game (~3–6 months)</button>
+            </div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
               <button id="startTimedBtn" type="button" class="btn-main">Start timed schedule</button>
               <button id="startPlatinumBtn" type="button" class="btn-purple" data-i18n="startPlatinumBtn">Realistic Platinum Mode</button>
@@ -227,6 +232,16 @@
             </div>
             <textarea id="importJsonInput" rows="4" placeholder='Paste JSON export here: {"achievements":[{"apiname":"...","unlocked":true}],"stats":[{"name":"...","value":10}]}' style="width:100%; padding:10px; border-radius:10px; background:#0d1424; border:1px solid var(--card-border); color:#fff; font-family:monospace; font-size:0.8rem; margin-bottom:10px;"></textarea>
             <button id="importJsonBtn" type="button" class="btn-main">Import &amp; apply JSON</button>
+          </section>
+
+          <section id="unownedAchPathwaysSection" class="ach-impact-review" style="margin-top:14px;">
+            <h3 data-i18n="unownedSectionTitle">Unowned Game Achievements &amp; REA Pathways</h3>
+            <p style="font-size:0.84rem; color:var(--text-muted); margin-bottom:10px;" data-i18n="unownedSectionDesc">Valve validates game ownership on CMsgClientStoreUserStats2. Use these 4 verified REA pathways for unowned games: Steam Families loan tickets, Free On-Demand temporary licenses, AppID 480 (Spacewar), or OpenSteamTool local config export.</p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <button id="btnExportOpenSteamTool" type="button" class="btn-purple" data-i18n="exportOpenSteamToolBtn">📦 Export Configuration for OpenSteamTool</button>
+              <button id="btnClaimCurrentGameFree" type="button" class="btn-action-sm" data-i18n="claimCurrentGameFreeBtn">🆓 Claim Free On-Demand License</button>
+              <button id="btnOpenSpacewar480" type="button" class="btn-action-sm" data-i18n="openSpacewar480Btn">🛸 Open AppID 480 (Spacewar)</button>
+            </div>
           </section>
 
           <section class="ach-impact-review" style="margin-top:14px;">
@@ -676,10 +691,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=56" defer></script>
-  <script src="/achievement-availability.js?v=56" defer></script>
-  <script src="/draft-settings.js?v=56" defer></script>
-  <script src="/achievement-live.js?v=56" defer></script>
-  <script src="/app.js?v=56" defer></script>
+  <script src="/achievement-rarity.js?v=57" defer></script>
+  <script src="/achievement-availability.js?v=57" defer></script>
+  <script src="/draft-settings.js?v=57" defer></script>
+  <script src="/achievement-live.js?v=57" defer></script>
+  <script src="/app.js?v=57" defer></script>
 </body>
 </html>

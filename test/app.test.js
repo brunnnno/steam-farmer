@@ -645,7 +645,7 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const statsReset=await f.request('/api/stats',{accountId:'user2',appid:34830,resetAll:true});
   assert.equal(statsReset.response.status,200);
   assert.equal(statsReset.data.stats.every(s=>s.value===0),true);
-  assert.equal(stateStats.get(1),5); // Achievement bitmask preserved!
+  assert.equal(stateStats.get(1),0); // REA FIX: Master reset clears both stats and achievement bitmask to 0!
 
   // 4. SamRewritten JSON Export & Import
   const exported=await f.request('/api/achievement/export?accountId=user2&appid=34830');
@@ -1658,4 +1658,35 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(routeLoyaltyRes.response.status, 200);
   assert.equal(typeof routeLoyaltyRes.data.points, "number");
   assert.equal(typeof routeLoyaltyRes.data.totalCardsEarned, "number");
+
+  // 27. v57 REA Fixes: /api/persona forces farming(acc, true), Ultra-Long Months Platinum Pacing, and OpenSteamTool Exporter
+  const prevCallsCount = client.calls.length;
+  const personaRes1 = await f.request("/api/persona", { accountId: "user2" });
+  assert.equal(personaRes1.response.status, 200);
+  assert.equal(personaRes1.data.personaState, 7);
+  assert.equal(personaRes1.data.statusText, "Invisible");
+  assert.ok(client.calls.length > prevCallsCount, "/api/persona must immediately invoke farming(acc, true) and re-send gamesPlayed");
+
+  const personaRes2 = await f.request("/api/persona", { accountId: "user2" });
+  assert.equal(personaRes2.response.status, 200);
+  assert.equal(personaRes2.data.personaState, 1);
+  assert.equal(personaRes2.data.statusText, "En línea");
+
+  // Test buildRealisticPlatinumSchedule with ultra_long_months, realistic_human, and fast pacingModes
+  const monthsSched = buildRealisticPlatinumSchedule(fortyTwo, { pacingMode: "ultra_long_months", rng: () => 0.5 });
+  assert.equal(monthsSched.pacingMode, "ultra_long_months");
+  assert.ok(Number(monthsSched.estimatedMonths) >= 1.5, `Expected >= 1.5 months for ultra_long_months, got ${monthsSched.estimatedMonths}`);
+  assert.match(monthsSched.summaryTextEs, /meses/);
+
+  const fastSched = buildRealisticPlatinumSchedule(fortyTwo, { pacingMode: "fast", rng: () => 0.5 });
+  assert.equal(fastSched.pacingMode, "fast");
+  assert.ok(fastSched.estimatedDays < monthsSched.estimatedDays);
+
+  // Test GET /api/games/:id/opensteamtool-export
+  const ostRes = await f.request("/api/games/690790/opensteamtool-export?accountId=user2");
+  assert.equal(ostRes.response.status, 200);
+  assert.equal(ostRes.data.ok, true);
+  assert.equal(ostRes.data.format, "OpenSteamTool-REA-v1");
+  assert.equal(ostRes.data.spacewarAppId, 480);
+  assert.match(ostRes.data.luaScript, /addappid\(690790\)/);
 });

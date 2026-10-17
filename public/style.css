@@ -2883,3 +2883,62 @@ body.oled-theme {
   border-color: rgba(192, 132, 252, 0.45);
   background: rgba(168, 85, 247, 0.16);
 }
+
+/* ==========================================================================
+   SteamFarmer v57 — Clean Achievement Hierarchy, Technical Drawer & Pacing
+   ========================================================================== */
+
+.ach-td-icon-inner img.rare-gold-border {
+  border: 2px solid #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.45);
+}
+
+.ach-rarity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ach-rarity-pill.rare-gold {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.technical-debug-drawer {
+  margin-top: 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 11, 20, 0.55);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  padding: 4px 8px;
+}
+
+.technical-debug-drawer > summary.technical-debug-summary {
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+.technical-debug-drawer > .technical-debug-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.platinum-pace-btn.active {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(52, 211, 153, 0.14);
+}
