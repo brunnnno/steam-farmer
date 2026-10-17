@@ -1516,4 +1516,146 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(dirtStats.get(1), 0, "Achievement bits must be 0");
   assert.equal(dirtStats.get(2), 0, "incrementonly JUMPS_STAT must be reset to 0 via explicit_reset:true");
   assert.equal(dirtStats.get(3), 0, "incrementonly CREDITS_STAT must be reset to 0 via explicit_reset:true");
+
+  // 26. v56 REA Technical Ingest (OpenSteamTool + SteamKit + SteamTracking): 7 Modules & 6 Backend Routes
+  const protoMod = require("../lib/steam-protocol");
+  assert.equal(protoMod.DEFAULT_FALLBACK_DONOR, "76561198028121353");
+  assert.equal(protoMod.DEFAULT_32_FREE_APPIDS.length, 32);
+
+  // 26a. Module 6: encodeBinaryKV & uploadRichPresence
+  const kvBuf = protoMod.encodeBinaryKV({ status: "Farming 32 games", steam_display: "#Status_Farming" }, "RP");
+  assert.ok(Buffer.isBuffer(kvBuf));
+  assert.equal(kvBuf[0], 0);
+  assert.equal(kvBuf[kvBuf.length - 1], 8);
+  assert.equal(kvBuf[kvBuf.length - 2], 8);
+
+  const sentPackets = [];
+  const reaMockClient = {
+    steamID: { toString: () => "76561198000000001" },
+    _send(header, body, cb) {
+      sentPackets.push({ header, body });
+      if (!cb) return;
+      if (header.msg === EMsg.ClientGetUserStats) {
+        const req = Schema.CMsgClientGetUserStats.decode(body);
+        const respBuf = Buffer.from(Schema.CMsgClientGetUserStatsResponse.encode({
+          game_id: req.game_id,
+          eresult: 1,
+          crc_stats: 10,
+          schema: dirtSchema,
+          stats: []
+        }).finish());
+        queueMicrotask(() => cb(respBuf, { msg: EMsg.ClientGetUserStatsResponse }));
+      } else if (header.msg === EMsg.ClientLBSFindOrCreateLB) {
+        const req = Schema.CMsgClientLBSFindOrCreateLB.decode(body);
+        const respBuf = Buffer.from(Schema.CMsgClientLBSFindOrCreateLBResponse.encode({
+          eresult: 1,
+          leaderboard_id: 777,
+          leaderboard_entry_count: 42,
+          leaderboard_sort_method: 2,
+          leaderboard_display_type: 1,
+          leaderboard_name: req.leaderboard_name
+        }).finish());
+        queueMicrotask(() => cb(respBuf, { msg: EMsg.ClientLBSFindOrCreateLBResponse }));
+      } else if (header.msg === EMsg.ClientLBSGetLBEntries) {
+        const respBuf = Buffer.from(Schema.CMsgClientLBSGetLBEntriesResponse.encode({
+          eresult: 1,
+          leaderboard_entry_count: 2,
+          entries: [
+            { steam_id: "76561198000000001", global_rank: 1, score: 99999 },
+            { steam_id: "76561198000000002", global_rank: 2, score: 88888 }
+          ]
+        }).finish());
+        queueMicrotask(() => cb(respBuf, { msg: EMsg.ClientLBSGetLBEntriesResponse }));
+      } else if (header.msg === EMsg.ClientGetNumberOfCurrentPlayersDP) {
+        const respBuf = Buffer.from(Schema.CMsgDPGetNumberOfCurrentPlayersResponse.encode({
+          eresult: 1,
+          player_count: 54321
+        }).finish());
+        queueMicrotask(() => cb(respBuf, { msg: EMsg.ClientGetNumberOfCurrentPlayersDPResponse }));
+      } else if (header.msg === EMsg.ClientRequestFreeLicense) {
+        const req = Schema.CMsgClientRequestFreeLicense.decode(body);
+        const respBuf = Buffer.from(Schema.CMsgClientRequestFreeLicenseResponse.encode({
+          eresult: 1,
+          granted_appids: req.appids,
+          granted_packageids: []
+        }).finish());
+        queueMicrotask(() => cb(respBuf, { msg: EMsg.ClientRequestFreeLicenseResponse }));
+      } else if (header.msg === EMsg.ServiceMethodCallFromClient) {
+        const method = header.proto?.target_job_name;
+        if (method === "AccountPrivateApps.ToggleAppPrivacy#1") {
+          queueMicrotask(() => cb(Buffer.alloc(0), { msg: EMsg.ServiceMethodResponse, proto: { eresult: 1 } }));
+        } else if (method === "LoyaltyRewards.GetSummary#1") {
+          const respBuf = Buffer.from(Schema.CLoyaltyRewards_GetSummary_Response.encode({
+            summary: { points: 18500, points_spent: 4200 }
+          }).finish());
+          queueMicrotask(() => cb(respBuf, { msg: EMsg.ServiceMethodResponse, proto: { eresult: 1 } }));
+        } else if (method === "Quest.GetNumTradingCardsEarned#1") {
+          const respBuf = Buffer.from(Schema.CQuest_GetNumTradingCardsEarned_Response.encode({
+            num_trading_cards: 137
+          }).finish());
+          queueMicrotask(() => cb(respBuf, { msg: EMsg.ServiceMethodResponse, proto: { eresult: 1 } }));
+        }
+      }
+    }
+  };
+
+  // Test Module 1: fetchUnownedGameSchema with Donor SteamID
+  const donorRes = await protoMod.fetchUnownedGameSchema(reaMockClient, 690790);
+  assert.equal(donorRes.appId, 690790);
+  assert.match(donorRes.donorId, /^765\d{14}$/);
+  assert.equal(donorRes.achievements.length, 2);
+
+  // Test Module 2: findSteamLeaderboard & getSteamLeaderboardEntries (verifying routing_appid!)
+  const foundLb = await protoMod.findSteamLeaderboard(reaMockClient, 730, "Official Ranking");
+  assert.equal(foundLb.leaderboardId, 777);
+  assert.equal(foundLb.entryCount, 42);
+  assert.ok(sentPackets.some(p => p.header.msg === EMsg.ClientLBSFindOrCreateLB && p.header.proto?.routing_appid === 730));
+
+  const lbEntries = await protoMod.getSteamLeaderboardEntries(reaMockClient, 730, 777, 1, 10, 2);
+  assert.equal(lbEntries.length, 2);
+  assert.equal(lbEntries[0].score, 99999);
+  assert.ok(sentPackets.some(p => p.header.msg === EMsg.ClientLBSGetLBEntries && p.header.proto?.routing_appid === 730));
+
+  // Test Module 3: getLivePlayerCount
+  const liveCnt = await protoMod.getLivePlayerCount(reaMockClient, 730);
+  assert.equal(liveCnt, 54321);
+
+  // Test Module 4: claimFreeLicenses
+  const freeLic = await protoMod.claimFreeLicenses(reaMockClient, [440, 570, 730]);
+  assert.deepEqual(freeLic.granted, [440, 570, 730]);
+
+  // Test Module 5: toggleAppsPrivacy
+  const privOk = await protoMod.toggleAppsPrivacy(reaMockClient, [730, 440], true);
+  assert.equal(privOk, true);
+
+  // Test Module 6: uploadRichPresence
+  const rpOk = await protoMod.uploadRichPresence(reaMockClient, { status: "SteamFarmer VIP", steam_display: "#Status_Farming" });
+  assert.equal(rpOk, true);
+  assert.ok(sentPackets.some(p => p.header.msg === EMsg.ClientRichPresenceUpload));
+
+  // Test Module 7: fetchSteamPointsSummary & fetchTotalCardsEarned
+  const ptsSummary = await protoMod.fetchSteamPointsSummary(reaMockClient);
+  assert.deepEqual(ptsSummary, { points: 18500, pointsSpent: 4200 });
+  const totalCards = await protoMod.fetchTotalCardsEarned(reaMockClient);
+  assert.equal(totalCards, 137);
+
+  // Test Backend Routes in bot.js (/api/games/:id/live-players, /api/account/claim-free-pack, /api/account/toggle-privacy, /api/account/loyalty-summary)
+  const routeLiveRes = await f.request("/api/games/730/live-players?accountId=user2");
+  assert.equal(routeLiveRes.response.status, 200);
+  assert.equal(typeof routeLiveRes.data.playerCount, "number");
+  assert.ok(routeLiveRes.data.playerCount > 0);
+
+  const routePackRes = await f.request("/api/account/claim-free-pack", { accountId: "user2", addToGames: true });
+  assert.equal(routePackRes.response.status, 200);
+  assert.equal(routePackRes.data.ok, true);
+  assert.equal(routePackRes.data.totalRequested, 32);
+
+  const routePrivRes = await f.request("/api/account/toggle-privacy", { accountId: "user2", privateApps: true, appids: [730, 440] });
+  assert.equal(routePrivRes.response.status, 200);
+  assert.equal(routePrivRes.data.privateApps, true);
+
+  const routeLoyaltyRes = await f.request("/api/account/loyalty-summary?accountId=user2");
+  assert.equal(routeLoyaltyRes.response.status, 200);
+  assert.equal(typeof routeLoyaltyRes.data.points, "number");
+  assert.equal(typeof routeLoyaltyRes.data.totalCardsEarned, "number");
 });

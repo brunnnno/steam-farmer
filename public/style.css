@@ -2828,3 +2828,58 @@ body.oled-theme {
     padding: 10px 14px;
   }
 }
+
+/* ==========================================================================
+   SteamFarmer v56 — REA Protocol Suite (Live Players, Loyalty, Stealth Apps)
+   ========================================================================== */
+
+.live-players-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.32);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.live-players-badge .live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+  animation: sfPulseGreen 1.8s infinite ease-in-out;
+}
+
+@keyframes sfPulseGreen {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+
+.loyalty-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e0f2fe;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14) 0%, rgba(168, 85, 247, 0.14) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  font-variant-numeric: tabular-nums;
+}
+
+.loyalty-summary-pill:hover {
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+#stealthPrivacyBtn.stealth-privacy-active {
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.45);
+  background: rgba(168, 85, 247, 0.16);
+}

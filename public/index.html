@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=55">
+  <link rel="stylesheet" href="/style.css?v=56">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -74,7 +74,7 @@
           </div>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
-<button class="btn-action-sm" data-event-4="" data-i18n="samRefreshBtn">Refresh</button><details class="control-menu achievement-reading-options" id="achReadingOptions"><summary data-i18n="samReadingOptionsBtn">Reading options</summary><div class="control-menu-content"><label for="achReadMode" data-i18n="samReadingMethodLabel">Reading method</label><select id="achReadMode" aria-label="Achievement reading mode"><option value="auto" data-i18n="readModeAuto">Automatic (recommended)</option><option value="protocol" data-i18n="readModeProtocol">Verify through Steam session</option><option value="web" data-i18n="readModeWeb">Community reading</option></select><small>Automatic works for everyday use. Steam-session verification checks activation compatibility; community reading provides an alternative when information is unavailable.</small></div></details>
+<button class="btn-action-sm" data-event-4="" data-i18n="samRefreshBtn">Refresh</button><details class="control-menu achievement-reading-options" id="achReadingOptions"><summary data-i18n="samReadingOptionsBtn">Reading options</summary><div class="control-menu-content"><label for="achReadMode" data-i18n="samReadingMethodLabel">Reading method</label><select id="achReadMode" aria-label="Achievement reading mode"><option value="auto" data-i18n="readModeAuto">Automatic (recommended)</option><option value="protocol" data-i18n="readModeProtocol">Verify through Steam session</option><option value="web" data-i18n="readModeWeb">Community reading</option></select><button id="btnDonorSchemaExplorer" type="button" class="btn-action-sm" data-i18n="donorSchemaBtn" style="margin-top:6px; width:100%;">🧬 Explore Schema (Donor ID)</button><small>Automatic works for everyday use. Steam-session verification checks activation compatibility; community reading or Donor SteamID explores unowned game schemas.</small></div></details>
           <button class="btn-action-sm" data-event-5="" data-i18n="samCloseBtn">Close</button>
         </div>
       </div>
@@ -241,6 +241,11 @@
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <label for="leaderboardSelect" data-i18n="leaderboardSelectLabel" style="font-size:0.82rem; font-weight:700; color:var(--text-muted);">Leaderboard:</label>
             <select id="leaderboardSelect" aria-label="Select game leaderboard" style="padding:8px 12px; border-radius:8px; background:var(--surface-3); border:1px solid var(--border); color:#fff;"></select>
+            <select id="leaderboardScopeSelect" aria-label="Leaderboard scope selector" style="padding:8px 12px; border-radius:8px; background:var(--surface-3); border:1px solid var(--border); color:#fff;">
+              <option value="0" data-i18n="lbScopeGlobal">Top Global</option>
+              <option value="2" data-i18n="lbScopeFriends">My Friends</option>
+              <option value="1" data-i18n="lbScopeAroundMe">Around Me</option>
+            </select>
             <button id="refreshLeaderboardsBtn" type="button" class="btn-action-sm" data-i18n="refreshLeaderboardsBtn">Refresh Top 10</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -293,6 +298,12 @@
           <span id="activeSteamIdText">SteamID64</span>
           <span class="copy-icon" aria-hidden="true">⧉</span>
         </button>
+        <button id="loyaltySummaryBadge" type="button" class="acc-pill loyalty-summary-pill" title="Steam Loyalty Summary: Points Shop balance &amp; total trading cards earned">
+          <span class="loyalty-gem-icon" aria-hidden="true">💎</span>
+          <span id="loyaltyPointsText">0 pts</span>
+          <span style="opacity:0.4;">·</span>
+          <span id="loyaltyCardsText">0 cards</span>
+        </button>
       </div>
       <div class="accounts-bar-right">
         <button class="acc-pill btn-add-acc-highlight" data-event-15="" data-i18n="addAccountBtn">+ Add Account</button>
@@ -310,6 +321,7 @@
         <button class="btn-main session-play" id="playBtn" data-event-24="">Resume / Play Now</button>
         <button class="btn-purple" id="cardsBtn" data-event-19="">Cards: OFF</button>
         <button class="btn-action-sm" id="personaBtn" data-event-21="">Mode: Online</button>
+        <button class="btn-action-sm" id="stealthPrivacyBtn" type="button" data-i18n="stealthFarmingOffBtn" title="Mark farmed games as Private Apps on Steam (AccountPrivateApps.ToggleAppPrivacy)">👻 Stealth Farming: OFF</button>
         <button class="btn-action-sm" data-event-23="" hidden>Lock panel</button>
         <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Active</span></div>
       </div>
@@ -434,7 +446,7 @@
           <input type="text" id="searchInput" placeholder="Search game title or enter AppID..." autocomplete="off">
           <div class="search-results" id="searchResults"></div>
         </div>
-        <details class="control-menu"><summary>List options</summary><div class="control-menu-content"><button id="loadOwnedGamesBtn" type="button" class="btn-main">Load my Steam games</button><button id="bulkUnlockAllGamesBtn" type="button" class="btn-action-sm">Unlock all in listed games</button><button id="bulkLockAllGamesBtn" type="button" class="btn-action-sm">Lock all in listed games</button><button class="btn-clear" data-event-25="">Clear All Games</button></div></details>
+        <details class="control-menu"><summary>List options</summary><div class="control-menu-content"><button id="loadOwnedGamesBtn" type="button" class="btn-main">Load my Steam games</button><button id="claimFree32PackBtn" type="button" class="btn-purple" data-i18n="claimFree32PackBtn">🎁 Claim 32 Free Games Pack</button><button id="bulkUnlockAllGamesBtn" type="button" class="btn-action-sm">Unlock all in listed games</button><button id="bulkLockAllGamesBtn" type="button" class="btn-action-sm">Lock all in listed games</button><button class="btn-clear" data-event-25="">Clear All Games</button></div></details>
       </div>
 
       <details class="quick-presets"><summary>Quick presets</summary><div class="presets-row" id="presetsContainer">
@@ -485,6 +497,7 @@
           <p id="landingHeroSubtitle" class="landing-hero-subtitle" data-i18n="landingHeroSubtitle">Farm trading cards 24/7 in the cloud without keeping your PC on using ASF's optimal 2-hour rule, manage achievements and INT/FLOAT stats via native Steam protocol, and schedule humanized Box-Muller unlocks with PostgreSQL persistence.</p>
           <div class="landing-cta-row">
             <button id="btnLandingConnect" type="button" class="btn-main btn-cta-glow" data-i18n="landingConnectBtn">+ Connect Steam Account</button>
+            <button id="btnLandingClaimFreePack" type="button" class="btn-purple btn-cta-secondary" data-i18n="claimFree32PackBtn">🎁 Claim 32 Free Games Pack</button>
             <button id="btnLandingLiveDemo" type="button" class="btn-action-sm btn-cta-secondary" data-i18n="landingLiveDemoBtn">Explore Interactive Demo ↓</button>
           </div>
         </div>
@@ -663,10 +676,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=55" defer></script>
-  <script src="/achievement-availability.js?v=55" defer></script>
-  <script src="/draft-settings.js?v=55" defer></script>
-  <script src="/achievement-live.js?v=55" defer></script>
-  <script src="/app.js?v=55" defer></script>
+  <script src="/achievement-rarity.js?v=56" defer></script>
+  <script src="/achievement-availability.js?v=56" defer></script>
+  <script src="/draft-settings.js?v=56" defer></script>
+  <script src="/achievement-live.js?v=56" defer></script>
+  <script src="/app.js?v=56" defer></script>
 </body>
 </html>

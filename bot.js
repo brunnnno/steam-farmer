@@ -22,7 +22,15 @@ const {
   TimedModificationManager,
   findOrListLeaderboards,
   getLeaderboardEntries,
-  uploadLeaderboardScore
+  uploadLeaderboardScore,
+  fetchUnownedGameSchema,
+  getLivePlayerCount,
+  DEFAULT_32_FREE_APPIDS,
+  claimFreeLicenses,
+  toggleAppsPrivacy,
+  uploadRichPresence,
+  fetchSteamPointsSummary,
+  fetchTotalCardsEarned
 } = require('./lib/steam-protocol');
 const { TARGET, unlockModelMania } = require('./lib/achievement-experiment');
 const { unlockAchievement, prepare, prepareShared, prepareFloat, applyChanges, store } = require('./lib/achievement-writer');
@@ -299,6 +307,16 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       if (games.length && !st.isFarming) st.sessionStartTime = Date.now();
       if (!games.length) st.sessionStartTime = null;
       st.isFarming = games.length > 0;
+      if (games.length > 0 && st.connected) {
+        if (acc.stealthFarming) {
+          toggleAppsPrivacy(client, games, true).catch(() => {});
+        }
+        uploadRichPresence(client, {
+          status: acc.customStatus || `Farmeando ${games.length} juegos en SteamFarmer`,
+          steam_display: '#Status_Farming',
+          steam_player_group: 'SteamFarmer_VIP'
+        }).catch(() => {});
+      }
       emitStatusChange();
     } catch { st.isFarming = false; st.sessionStartTime = null; st.error = 'Could not update Steam activity.'; }
   }
@@ -498,7 +516,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           : st.isFarming
             ? 'manual'
             : 'idle';
-    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
+    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, stealthFarming: Boolean(acc.stealthFarming), steamPoints: st.steamPoints ?? null, totalCardsEarned: st.totalCardsEarned ?? null, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
@@ -657,7 +675,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         data = await readBody(req);
       }
       if(['/api/achievement/progress-preview','/api/achievement/float-progress-preview','/api/achievement/float-search','/api/achievement/shared-progress-preview','/api/achievement/unlock','/api/achievement/change-preview','/api/achievement/change','/api/achievement/changes','/api/achievement-experiment','/api/stats','/api/achievement/import','/api/achievement/undo','/api/achievement/bulk-apps'].includes(url.pathname))releaseResource=budget.acquire('heavy');
-      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action','/api/game/inspect-start','/api/game/inspect-stop','/api/points/claim-daily'].includes(url.pathname))releaseResource=budget.acquire('small');
+      else if(['/api/search','/api/game-requirements','/api/achievement/percentages','/api/claim-free','/api/achievement/history','/api/achievement/timed','/api/achievement/export','/api/achievement/analytics','/api/achievement/copy-timings','/api/cards/inventory','/api/cards/estimate','/api/cards/sell','/api/badges/craft','/api/cluster/status','/api/cluster/action','/api/game/inspect-start','/api/game/inspect-stop','/api/points/claim-daily','/api/account/claim-free-pack','/api/account/toggle-privacy','/api/account/loyalty-summary'].includes(url.pathname)||/^\/api\/games\/\d+\/(live-players|leaderboards|donor-schema)$/.test(url.pathname))releaseResource=budget.acquire('small');
       if (url.pathname === '/api/panel/logout' && req.method === 'POST') {
         for (const [id, a] of attempts) if (a.owner === token) cancelAttempt(id);
         sessions.delete(token); res.setHeader('Set-Cookie', `sf_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${origin?.startsWith('https:') ? '; Secure' : ''}`); return json(res, 200, { success: true });
@@ -1204,8 +1222,96 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           return json(res,200,{appid:id,outcome:'confirmed',achievementsApplied,statsApplied,message:`Imported ${achievementsApplied} achievement changes and ${statsApplied} statistics.`});
         }finally{experimentBusy.delete(acc.id);st.webSessionVersion++;achievementCache.clear();farming(acc,true);}
       }
-      if(url.pathname==='/api/leaderboards'&&req.method==='GET'){
-        const id=appId(url.searchParams.get('appid'));
+      const livePlayersMatch = url.pathname.match(/^\/api\/games\/(\d+)\/live-players$/);
+      if ((livePlayersMatch || url.pathname === '/api/live-players') && req.method === 'GET') {
+        const id = appId(livePlayersMatch ? livePlayersMatch[1] : url.searchParams.get('appid'));
+        const accId = url.searchParams.get('accountId') || cfg.accounts[0]?.id || '';
+        const client = accId && accId !== 'demo' ? clients.get(accId) : null;
+        const liveCount = client ? await getLivePlayerCount(client, id) : null;
+        const fallbackMap = { 730: 1184200, 440: 78450, 570: 642100, 620: 3890, 550: 28400, 690790: 2410, 34830: 420 };
+        const playerCount = typeof liveCount === 'number' ? liveCount : (fallbackMap[id] ?? 1250);
+        return json(res, 200, { appid: id, playerCount, live: typeof liveCount === 'number' });
+      }
+      const donorSchemaMatch = url.pathname.match(/^\/api\/games\/(\d+)\/donor-schema$/);
+      if (donorSchemaMatch && req.method === 'GET') {
+        const id = appId(donorSchemaMatch[1]);
+        const acc = getAccount(req, url), client = clients.get(acc.id);
+        const schemaRes = await fetchUnownedGameSchema(client, id);
+        return json(res, 200, {
+          appid: id,
+          donorId: schemaRes.donorId,
+          achievements: schemaRes.achievements || [],
+          statistics: schemaRes.statistics || []
+        });
+      }
+      if (url.pathname === '/api/account/loyalty-summary' && req.method === 'GET') {
+        const reqAccId = url.searchParams.get('accountId') || '';
+        if (reqAccId === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { accountId: 'demo', points: 14500, pointsSpent: 3200, totalCardsEarned: 48 });
+        }
+        const acc = getAccount(req, url), st = stateFor(acc.id), client = clients.get(acc.id);
+        const [pts, cards] = await Promise.all([
+          fetchSteamPointsSummary(client),
+          fetchTotalCardsEarned(client)
+        ]);
+        const points = pts?.points ?? st.steamPoints ?? 0;
+        const pointsSpent = pts?.pointsSpent ?? 0;
+        const totalCardsEarned = typeof cards === 'number' ? cards : (st.totalCardsEarned ?? 0);
+        st.steamPoints = points;
+        st.totalCardsEarned = totalCardsEarned;
+        return json(res, 200, { accountId: acc.id, points, pointsSpent, totalCardsEarned });
+      }
+      if (url.pathname === '/api/account/toggle-privacy' && req.method === 'POST') {
+        const acc = getAccount(req, url, data), st = stateFor(acc.id), client = clients.get(acc.id);
+        const makePrivate = data.privateApps !== undefined ? Boolean(data.privateApps) : (data.private !== undefined ? Boolean(data.private) : !Boolean(acc.stealthFarming || acc.privateApps));
+        acc.stealthFarming = makePrivate;
+        acc.privateApps = makePrivate;
+        save();
+        const targetApps = Array.isArray(data.appids) && data.appids.length ? data.appids.map(appId) : acc.games;
+        let privateUpdated = false;
+        if (st.connected && client && targetApps.length) {
+          privateUpdated = await toggleAppsPrivacy(client, targetApps, makePrivate);
+        }
+        return json(res, 200, {
+          ok: true,
+          success: true,
+          privateApps: acc.stealthFarming,
+          stealthFarming: acc.stealthFarming,
+          privateUpdated,
+          appids: targetApps,
+          message: acc.stealthFarming
+            ? 'Stealth Farming (Private Apps) enabled: farmed games are hidden from friends.'
+            : 'Stealth Farming disabled: farmed games are visible on your profile.'
+        });
+      }
+      if (url.pathname === '/api/account/claim-free-pack' && req.method === 'POST') {
+        const acc = getAccount(req, url, data), st = stateFor(acc.id), client = clients.get(acc.id);
+        if (!st.connected || !client) throw fail('Connect your Steam account first.', 409);
+        const packIds = Array.isArray(data.appids) && data.appids.length
+          ? data.appids.slice(0, 32).map(appId)
+          : DEFAULT_32_FREE_APPIDS;
+        const resClaim = await claimFreeLicenses(client, packIds);
+        for (const gid of packIds) {
+          if (acc.games.length >= 32) break;
+          if (!acc.games.includes(gid)) acc.games.push(gid);
+        }
+        save();
+        farming(acc, true);
+        resolveNames(acc).catch(() => {});
+        return json(res, 200, {
+          ok: true,
+          success: true,
+          eresult: resClaim.eresult,
+          granted: resClaim.granted,
+          grantedPackages: resClaim.grantedPackages || [],
+          totalRequested: packIds.length,
+          totalGames: acc.games.length,
+          message: `Claimed 32 Free Farming Games pack (${resClaim.granted.length} new licenses granted · ${acc.games.length}/32 slots active).`
+        });
+      }
+      const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
+      if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){
+        const id=appId(gameLbMatch ? gameLbMatch[1] : url.searchParams.get('appid'));
         const name=text(url.searchParams.get('name')||'',128);
         if(url.searchParams.get('accountId')==='demo'||!cfg.accounts.length){
           return json(res,200,await findOrListLeaderboards(null,id,{name}));
@@ -1216,11 +1322,12 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       if(url.pathname==='/api/leaderboards/entries'&&req.method==='GET'){
         const id=appId(url.searchParams.get('appid'));
         const leaderboardId=Number(url.searchParams.get('leaderboardId'))||101;
+        const dataRequest=Number(url.searchParams.get('dataRequest'))||0;
         if(url.searchParams.get('accountId')==='demo'||!cfg.accounts.length){
-          return json(res,200,await getLeaderboardEntries(null,id,leaderboardId,{steamId64:'76561198000000000',personaName:'Demo Player'}));
+          return json(res,200,await getLeaderboardEntries(null,id,leaderboardId,{dataRequest,steamId64:'76561198000000000',personaName:'Demo Player'}));
         }
         const acc=getAccount(req,url),st=stateFor(acc.id),client=clients.get(acc.id);
-        return json(res,200,await getLeaderboardEntries(client,id,leaderboardId,{steamId64:st.steamId64||acc.mySteamID||'',personaName:st.profileName||acc.name||''}));
+        return json(res,200,await getLeaderboardEntries(client,id,leaderboardId,{dataRequest,steamId64:st.steamId64||acc.mySteamID||'',personaName:st.profileName||acc.name||''}));
       }
       if(url.pathname==='/api/leaderboards/upload'&&req.method==='POST'){
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();

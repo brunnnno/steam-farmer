@@ -1090,4 +1090,96 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.equal(w.document.querySelector('[data-event-5]').textContent, "Cerrar");
   assert.equal(w.document.getElementById("undoLastOperationBtn").textContent, "Deshacer último cambio");
   assert.match(w.document.getElementById("achProgressText").textContent, /logros verificados desbloqueados/);
+
+  // 14. Verify v56 REA UI: Live Players Badge, Leaderboard Scope Selector (Global/Friends/AroundMe), Stealth Privacy Toggle, Loyalty Summary Widget, Claim 32 Free Pack, and Donor Schema Explorer
+  assert.ok(w.document.querySelector(".live-players-badge .live-dot"), "Game cards & modal must display pulsing green live-players-badge");
+  const reaUiCalls = [];
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    reaUiCalls.push({ url, body });
+    if (url.startsWith("/api/games/730/live-players")) {
+      return { ok: true, status: 200, json: async () => ({ appid: 730, playerCount: 1337420, source: "steam_cm_dp" }) };
+    }
+    if (url.startsWith("/api/games/730/donor-schema")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          appid: 730,
+          donorId: "76561198028121353",
+          achievements: [{ apiname: "DONOR_ACH_1", name: "Donor Secret Achievement", description: "Unlocked via OpenSteamTool Donor ID", unlocked: false, percent: 12.5 }],
+          statistics: []
+        })
+      };
+    }
+    if (url.startsWith("/api/leaderboards/entries")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          appid: 730,
+          leaderboardId: 101,
+          dataRequest: 2,
+          topEntries: [{ rank: 1, steamId: "76561198000000001", personaName: "FriendOne", score: 777777 }],
+          userEntry: { rank: 1, steamId: "76561198000000001", personaName: "FriendOne", score: 777777 }
+        })
+      };
+    }
+    if (url === "/api/account/toggle-privacy") {
+      return { ok: true, status: 200, json: async () => ({ ok: true, privateApps: true, message: "Modo Fantasma activado" }) };
+    }
+    if (url === "/api/account/claim-free-pack") {
+      return { ok: true, status: 200, json: async () => ({ ok: true, granted: [730, 440, 570], totalRequested: 32, message: "Se reclamaron 32 licencias gratuitas" }) };
+    }
+    if (url.startsWith("/api/account/loyalty-summary")) {
+      return { ok: true, status: 200, json: async () => ({ ok: true, points: 24680, pointsSpent: 1000, totalCardsEarned: 94 }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ accounts: [connectedAcc], presets: [], timezone: "UTC" }) };
+  };
+
+  // Click live-players-badge to refresh live count from CM DP
+  const liveBadge = w.document.querySelector('.live-players-badge[data-appid="730"]');
+  assert.ok(liveBadge);
+  liveBadge.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(reaUiCalls.some(c => c.url.startsWith("/api/games/730/live-players")));
+  assert.match(liveBadge.textContent, /1,337,420/);
+
+  // Change leaderboardScopeSelect to Friends (2) and verify dataRequest=2 query parameter
+  const scopeSelect = w.document.getElementById("leaderboardScopeSelect");
+  assert.ok(scopeSelect);
+  scopeSelect.value = "2";
+  scopeSelect.dispatchEvent(new w.Event("change"));
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(reaUiCalls.some(c => c.url.includes("/api/leaderboards/entries") && c.url.includes("dataRequest=2")));
+
+  // Click Donor Schema Explorer button (#btnDonorSchemaExplorer)
+  const donorBtn = w.document.getElementById("btnDonorSchemaExplorer");
+  assert.ok(donorBtn);
+  donorBtn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(reaUiCalls.some(c => c.url.startsWith("/api/games/730/donor-schema")));
+  assert.match(w.document.getElementById("achReadMessage").textContent, /76561198028121353/);
+
+  // Click Stealth Privacy button (#stealthPrivacyBtn)
+  const stealthBtn = w.document.getElementById("stealthPrivacyBtn");
+  assert.ok(stealthBtn);
+  stealthBtn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(reaUiCalls.some(c => c.url === "/api/account/toggle-privacy" && c.body?.privateApps === true));
+
+  // Click Loyalty Summary widget (#loyaltySummaryBadge)
+  const loyaltyBadge = w.document.getElementById("loyaltySummaryBadge");
+  assert.ok(loyaltyBadge);
+  loyaltyBadge.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(w.document.getElementById("loyaltyPointsText").textContent, "24,680 pts");
+  assert.match(w.document.getElementById("loyaltyCardsText").textContent, /94 (cromos|cards)/);
+
+  // Click Claim 32 Free Games Pack button (#claimFree32PackBtn)
+  const claim32Btn = w.document.getElementById("claimFree32PackBtn");
+  assert.ok(claim32Btn);
+  claim32Btn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(reaUiCalls.some(c => c.url === "/api/account/claim-free-pack" && c.body?.addToGames === true));
 });

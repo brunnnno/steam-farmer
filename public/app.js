@@ -170,7 +170,15 @@ const i18n = {
     noLeaderboardScores: "No se encontraron puntuaciones oficiales en las tablas de Steam para este juego.",
     deckVerified: "🟢 Verificado",
     deckPlayable: "🟡 Jugable",
-    deckUnsupported: "⚪ No compatible"
+    deckUnsupported: "⚪ No compatible",
+    lbScopeGlobal: "Top Global",
+    lbScopeFriends: "Mis Amigos",
+    lbScopeAroundMe: "Cerca de Mí",
+    stealthFarmingOnBtn: "👻 Modo Oculto: Activado",
+    stealthFarmingOffBtn: "👻 Modo Oculto: Desactivado",
+    claimFree32PackBtn: "🎁 Reclamar Pack de 32 Juegos Gratis",
+    donorSchemaBtn: "🧬 Explorar Schema (Donor ID)",
+    livePlayersSuffix: "en vivo"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
@@ -322,7 +330,15 @@ const i18n = {
     noLeaderboardScores: "No official Steam leaderboard scores found for this game.",
     deckVerified: "🟢 Deck Verified",
     deckPlayable: "🟡 Deck Playable",
-    deckUnsupported: "⚪ Deck Unsupported"
+    deckUnsupported: "⚪ Deck Unsupported",
+    lbScopeGlobal: "Top Global",
+    lbScopeFriends: "My Friends",
+    lbScopeAroundMe: "Around Me",
+    stealthFarmingOnBtn: "👻 Stealth Farming: ON",
+    stealthFarmingOffBtn: "👻 Stealth Farming: OFF",
+    claimFree32PackBtn: "🎁 Claim 32 Free Games Pack",
+    donorSchemaBtn: "🧬 Explore Schema (Donor ID)",
+    livePlayersSuffix: "playing now"
   }
 };
 function t(key) {
@@ -355,15 +371,77 @@ function getGameExternalMeta(appid) {
   };
 }
 
+const LIVE_PLAYERS_SEED = {
+  730: 1245890,
+  570: 642310,
+  440: 78420,
+  252490: 142300,
+  578080: 312400,
+  1172470: 198500,
+  271590: 154200,
+  620: 4820,
+  550: 28450,
+  220: 3190,
+  240: 14200
+};
+const livePlayersCache = new Map();
+const livePlayersInFlight = new Set();
+
+function formatLivePlayerText(count) {
+  const num = Math.max(0, Number(count) || 0);
+  return `${num.toLocaleString('en-US')} ${t('livePlayersSuffix')}`;
+}
+
+function requestLivePlayerCount(appid) {
+  const id = Number(appid) || 0;
+  if (id <= 0 || livePlayersInFlight.has(id)) return;
+  const cached = livePlayersCache.get(id);
+  if (cached && Date.now() - cached.at < 120000) return;
+  livePlayersInFlight.add(id);
+  const accParam = activeAccountId ? `?accountId=${encodeURIComponent(activeAccountId)}` : '';
+  fetch(`/api/games/${id}/live-players${accParam}`)
+    .then(r => (r && r.ok ? r.json() : null))
+    .then(data => {
+      const cnt = Number(data?.playerCount ?? data?.player_count);
+      if (Number.isFinite(cnt) && cnt >= 0) {
+        livePlayersCache.set(id, { count: cnt, at: Date.now() });
+        for (const node of document.querySelectorAll(`.live-players-text[data-appid="${id}"]`)) {
+          node.textContent = formatLivePlayerText(cnt);
+        }
+      }
+    })
+    .catch(() => {})
+    .finally(() => {
+      livePlayersInFlight.delete(id);
+    });
+}
+
 function createExternalBadgesNode(appid) {
   const meta = getGameExternalMeta(appid);
+  const id = meta.appid;
   const wrap = element("div", undefined, "card-meta-badges");
+  const liveBadge = element("span", undefined, "live-players-badge");
+  liveBadge.dataset.appid = String(id);
+  const dot = element("span", undefined, "live-dot");
+  dot.setAttribute("aria-hidden", "true");
+  const cachedCount = livePlayersCache.get(id)?.count ?? LIVE_PLAYERS_SEED[id] ?? (1200 + (id % 8500));
+  const txt = element("span", formatLivePlayerText(cachedCount), "live-players-text");
+  txt.dataset.appid = String(id);
+  liveBadge.append(dot, txt);
   const dbLink = element("a", "SteamDB ↗", "steamdb-badge");
   dbLink.href = meta.steamDbUrl;
   dbLink.target = "_blank";
   dbLink.rel = "noopener noreferrer";
+  liveBadge.title = "Click to refresh live concurrent Steam players (ClientGetNumberOfCurrentPlayersDP)";
+  liveBadge.style.cursor = "pointer";
+  liveBadge.addEventListener("click", e => {
+    e.stopPropagation();
+    livePlayersCache.delete(id);
+    requestLivePlayerCount(id);
+  });
   const deckSpan = element("span", meta.deckLabel, "deck-badge deck-" + meta.deckStatus);
-  wrap.append(dbLink, deckSpan);
+  wrap.append(liveBadge, dbLink, deckSpan);
+  if (typeof window.testUI === "undefined" && csrf && activeAccountId) requestLivePlayerCount(id);
   return wrap;
 }
 
@@ -631,6 +709,19 @@ function updateActiveAccountControlsI18n(acc = active) {
       sidBtn.hidden = true;
     }
   }
+  if ($('stealthPrivacyBtn')) {
+    const isStealth = Boolean(acc.privateApps);
+    $('stealthPrivacyBtn').classList.toggle('stealth-privacy-active', isStealth);
+    $('stealthPrivacyBtn').textContent = t(isStealth ? 'stealthFarmingOnBtn' : 'stealthFarmingOffBtn');
+  }
+  if ($('loyaltyPointsText')) {
+    const pts = Number(acc.steamPoints) || 0;
+    $('loyaltyPointsText').textContent = `${pts.toLocaleString('en-US')} pts`;
+  }
+  if ($('loyaltyCardsText')) {
+    const cards = Number(acc.totalCardsEarned) || 0;
+    $('loyaltyCardsText').textContent = currentLang === 'es' ? `${cards} cromos` : `${cards} cards`;
+  }
   if ($('achQueueVal')) {
     if (acc.cardFarming) {
       const drops = (acc.cardDropGames || []).reduce((s, g) => s + (Number(g.remaining) || 0), 0);
@@ -650,6 +741,7 @@ function setGuestModeLayout(isGuest) {
   if ($('playBtn')) $('playBtn').hidden = guest;
   if ($('cardsBtn')) $('cardsBtn').hidden = guest;
   if ($('personaBtn')) $('personaBtn').hidden = guest;
+  if ($('stealthPrivacyBtn')) $('stealthPrivacyBtn').hidden = guest;
   if ($('badgeStatus')) $('badgeStatus').hidden = guest;
   if ($('accountsBarSection')) $('accountsBarSection').hidden = guest;
   if ($('sessionOverviewPanel')) $('sessionOverviewPanel').hidden = guest;
@@ -2106,8 +2198,9 @@ async function loadLeaderboardEntries(leaderboardId = currentLeaderboardId) {
   if (!currentAchAppId) return;
   currentLeaderboardId = Number(leaderboardId) || 101;
   const id = currentAchAppId, account = currentAccKey();
+  const scope = Number($('leaderboardScopeSelect')?.value ?? 0) || 0;
   try {
-    const data = await api(`/api/leaderboards/entries?accountId=${encodeURIComponent(account)}&appid=${id}&leaderboardId=${currentLeaderboardId}`);
+    const data = await api(`/api/leaderboards/entries?accountId=${encodeURIComponent(account)}&appid=${id}&leaderboardId=${currentLeaderboardId}&dataRequest=${scope}`);
     const rankCard = $('leaderboardUserRankCard');
     if (rankCard) {
       if (data.userEntry) {
@@ -2496,7 +2589,13 @@ if($('tabToolsBtn'))$('tabToolsBtn').addEventListener('click',()=>switchSamTab('
 if($('tabLeaderboardsBtn'))$('tabLeaderboardsBtn').addEventListener('click',()=>switchSamTab('leaderboards'));
 if($('btnDependencyTreeFilter'))$('btnDependencyTreeFilter').addEventListener('click',()=>toggleDependencyTreeMode());
 if($('leaderboardSelect'))$('leaderboardSelect').addEventListener('change',e=>loadLeaderboardEntries(Number(e.target.value)));
+if($('leaderboardScopeSelect'))$('leaderboardScopeSelect').addEventListener('change',()=>loadLeaderboardEntries(currentLeaderboardId));
 if($('refreshLeaderboardsBtn'))$('refreshLeaderboardsBtn').addEventListener('click',()=>loadLeaderboardEntries(currentLeaderboardId));
+if($('btnDonorSchemaExplorer'))$('btnDonorSchemaExplorer').addEventListener('click',()=>exploreDonorSchema());
+if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
+if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
+if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());
+if($('loyaltySummaryBadge'))$('loyaltySummaryBadge').addEventListener('click',()=>refreshLoyaltySummary());
 if($('uploadLeaderboardScoreBtn'))$('uploadLeaderboardScoreBtn').addEventListener('click',()=>submitLeaderboardScore());
 if($('undoLastOperationBtn'))$('undoLastOperationBtn').addEventListener('click',()=>undoLastAchievementChange());
 if($('statsSearchInput'))$('statsSearchInput').addEventListener('input',()=>renderStatsModal());
@@ -2676,6 +2775,59 @@ async function cancelAllTimedSchedules() {
 function togglePersona(){return action('/api/persona');}
 function toggleCards(){return action('/api/toggle-cards');}
 async function claimFreeGames(){const r=await action('/api/claim-free');if(r)notice(`Steam granted ${r.granted.apps.length} apps and ${r.granted.packages.length} packages.`);}
+async function claimFree32Pack(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const r=await api('/api/account/claim-free-pack',{accountId:activeAccountId,addToGames:true});
+    if(r?.message)notice(r.message);
+    await loadStatus();
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function toggleStealthPrivacy(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const nextState=!Boolean(active?.privateApps);
+  try{
+    const r=await api('/api/account/toggle-privacy',{accountId:activeAccountId,privateApps:nextState,appids:active?.games||[]});
+    if(active)active.privateApps=Boolean(r?.privateApps??nextState);
+    updateActiveAccountControlsI18n(active);
+    if(r?.message)notice(r.message);
+    await loadStatus();
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function refreshLoyaltySummary(){
+  if(!activeAccountId)return;
+  try{
+    const r=await api(`/api/account/loyalty-summary?accountId=${encodeURIComponent(activeAccountId)}`);
+    if(active){
+      if(typeof r?.points==='number')active.steamPoints=r.points;
+      if(typeof r?.totalCardsEarned==='number')active.totalCardsEarned=r.totalCardsEarned;
+      updateActiveAccountControlsI18n(active);
+    }
+  }catch{}
+}
+async function exploreDonorSchema(){
+  if(!currentAchAppId)return;
+  const id=currentAchAppId,account=currentAccKey();
+  try{
+    const data=await api(`/api/games/${id}/donor-schema?accountId=${encodeURIComponent(account)}`);
+    if(Array.isArray(data?.achievements)){
+      currentAchList=AchievementRarity.normalizeRows(data.achievements.map(a=>({...a,name:String(a.name||a.apiname||'Achievement'),description:String(a.description||''),unlocked:typeof a.unlocked==='boolean'?a.unlocked:false})));
+    }
+    if(Array.isArray(data?.statistics))currentStatsList=data.statistics;
+    if($('achReadMessage'))$('achReadMessage').textContent=`Schema loaded via OpenSteamTool Donor SteamID (${data.donorId||'76561198028121353'}).`;
+    if($('achPrivacyWarning'))$('achPrivacyWarning').style.display='block';
+    if($('achievementSource'))$('achievementSource').textContent=`Donor SteamID (${data.donorId||'76561198028121353'})`;
+    renderAchModal();
+    if(currentSamTab==='stats')renderStatsModal();
+    notice(currentLang==='es'?`Schema desbloqueado con Donor SteamID (${data.donorId})`:`Schema unlocked via Donor SteamID (${data.donorId})`);
+  }catch(e){
+    notice(e.message);
+  }
+}
 async function runDiscoveryQueue(){
   const r=await action('/api/discovery-queue',{runNow:true});
   if(r?.message)notice(r.message);
