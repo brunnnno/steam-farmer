@@ -191,6 +191,8 @@ const i18n = {
     samMasterResetBtn: "🔥 Resetear Todas las Estadísticas y Logros (Master Wipe)",
     collisionBypassOnBtn: "🛡️ Farmeo En Línea Sin Pausas: Activado",
     collisionBypassOffBtn: "🛡️ Farmeo En Línea Sin Pausas: Desactivado",
+    pentagonEyebrow: "SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE",
+    pentagonPanelTitle: "El Pentágono de Élite: URLs, Mercado, Alquimia, Nivel y Vitrinas",
     pioneerEyebrow: "PROTOCOLOS BINARIOS VALVE · HEADLESS ENGINE",
     pioneerPanelTitle: "Funciones Pioneras (CS2/TF2 GC, Steam Deck & Tournament Ghost)",
     gcDefaultStatus: "Conecta sin GPU al Game Coordinator (ClientToGC 4006) para reclamar el Weekly Care Package de CS2 y drops de TF2.",
@@ -201,22 +203,7 @@ const i18n = {
     claimSteamDeckRewardsBtn: "Obtener Recompensas Permanentes de Steam Deck",
     tournamentDefaultStatus: "Envía heartbeats de visualización a Broadcast.WatchBroadcast#1 sin descargar video para farmear drops de Majors.",
     watchTournamentGhostBtn: "Iniciar Farmeo Headless de Drops de Major",
-    stopTournamentGhostBtn: "Detener",
-    pentagonEyebrow: "SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE",
-    pentagonPanelTitle: "El Pentágono de Élite: Mercado, Alquimia, URLs, Nivel y Vitrinas",
-    pentagonSummaryBadge: "5 sistemas armados",
-    marketSniperDesc: "Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.",
-    startMarketSniperBtn: "Activar Radar de Compras",
-    stopMarketSniperBtn: "Detener",
-    alchemyDesc: "Convierte chatarra en gemas y forja Booster Packs de $3 a $5 USD para generar saldo Steam Wallet.",
-    runAlchemyBtn: "Forjar Booster de Alto Margen",
-    vanityDesc: "Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.",
-    startVanitySniperBtn: "Iniciar Radar de URLs",
-    stopVanitySniperBtn: "Detener",
-    levelOptimizerDesc: "Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).",
-    craftCheapestBadgeBtn: "Forjar Set Económico (+100 XP)",
-    artworkPatcherDesc: "Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x10000px) a tu perfil.",
-    selectArtworkPatchBtn: "Subir y Parchear PNG Infinito"
+    stopTournamentGhostBtn: "Detener"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
@@ -389,6 +376,8 @@ const i18n = {
     samMasterResetBtn: "🔥 Reset All Statistics & Achievements (Master Wipe)",
     collisionBypassOnBtn: "🛡️ Non-Stop Online Farming: ON",
     collisionBypassOffBtn: "🛡️ Non-Stop Online Farming: OFF",
+    pentagonEyebrow: "VALVE UNDERGROUND SUITE · 5 ELITE WEAPONS",
+    pentagonPanelTitle: "The Elite Pentagon: URLs, Market, Alchemy, Level & Showcases",
     pioneerEyebrow: "VALVE BINARY PROTOCOLS · HEADLESS ENGINE",
     pioneerPanelTitle: "Pioneer Features (CS2/TF2 GC, Steam Deck & Tournament Ghost)",
     gcDefaultStatus: "Connect headlessly to the Game Coordinator (ClientToGC 4006) to claim CS2 Weekly Care Packages and TF2 drops.",
@@ -399,22 +388,7 @@ const i18n = {
     claimSteamDeckRewardsBtn: "Claim Permanent Steam Deck Rewards",
     tournamentDefaultStatus: "Send watch heartbeats to Broadcast.WatchBroadcast#1 with zero video bandwidth to farm Major drops.",
     watchTournamentGhostBtn: "Start Headless Major Drops Farming",
-    stopTournamentGhostBtn: "Stop",
-    pentagonEyebrow: "VALVE UNDERGROUND SUITE · 5 ELITE WEAPONS",
-    pentagonPanelTitle: "The Elite Pentagon: Market, Alchemy, Vanity URLs, Level & Showcases",
-    pentagonSummaryBadge: "5 systems armed",
-    marketSniperDesc: "Snipes mispriced items or 90% discounts in milliseconds for instant resale.",
-    startMarketSniperBtn: "Start Market Sniper Radar",
-    stopMarketSniperBtn: "Stop",
-    alchemyDesc: "Converts cheap items into gems and crafts $3–$5 USD Booster Packs to multiply Steam Wallet balance.",
-    runAlchemyBtn: "Craft High-Margin Booster",
-    vanityDesc: "Watches legendary 3-letter vanity URLs (/id/pro, /id/neo, /id/won) and claims them in 150ms when freed.",
-    startVanitySniperBtn: "Start Vanity URL Radar",
-    stopVanitySniperBtn: "Stop",
-    levelOptimizerDesc: "Levels up using the cheapest card sets on Steam to double your passive weekly Booster Pack drops (+100%).",
-    craftCheapestBadgeBtn: "Craft Economical Set (+100 XP)",
-    artworkPatcherDesc: "Injects the binary IHDR exploit into PNG images to upload infinite vertical artworks (506x10000px) to your profile.",
-    selectArtworkPatchBtn: "Upload & Patch Infinite PNG"
+    stopTournamentGhostBtn: "Stop"
   }
 };
 function t(key) {
@@ -854,6 +828,7 @@ async function loadStatus() {
     updateLocalBridgeBadge(data);
     renderCardFarming(active);
     renderAutomationsPanel(active);
+    renderPentagonPanel(active);
     if (Array.isArray(data.demoCatalog) && data.demoCatalog.length && guestDemoGames.length === DEFAULT_DEMO_GAMES.length) {
       guestDemoGames = data.demoCatalog.map(g => ({ id: Number(g.id), name: String(g.name) }));
     }
@@ -1065,6 +1040,74 @@ function renderAutomationsPanel(account) {
       for (const b of craftable.slice(0, 3)) {
         cardsBox.append(button(`Fabricar Insignia (${b.name})`, () => craftBadgeForGame(b.appid), 'btn-purple sam-quick-btn'));
       }
+    }
+  }
+}
+
+function renderPentagonPanel(account) {
+  const panel = $('pentagonElitePanel');
+  if (!panel) return;
+  if (!account) {
+    if ($('vanityStatusBadge')) {
+      $('vanityStatusBadge').textContent = 'DEMO';
+      $('vanityStatusBadge').style.background = '#334155';
+      $('vanityStatusBadge').style.color = '#cbd5e1';
+    }
+    if ($('sniperStatusBadge')) {
+      $('sniperStatusBadge').textContent = 'DEMO';
+      $('sniperStatusBadge').style.background = '#334155';
+      $('sniperStatusBadge').style.color = '#cbd5e1';
+    }
+    return;
+  }
+  const pentagon = account.pentagonStatus;
+  if (pentagon) {
+    if (pentagon.vanitySniper) {
+      const v = pentagon.vanitySniper;
+      if ($('vanityStatusBadge')) {
+        $('vanityStatusBadge').textContent = v.running ? `ESCANEANDO (${v.activeChecks || 0})` : 'DETENIDO';
+        $('vanityStatusBadge').style.background = v.running ? '#059669' : '#334155';
+        $('vanityStatusBadge').style.color = v.running ? '#ecfdf5' : '#cbd5e1';
+      }
+      if ($('btnStartVanity')) $('btnStartVanity').hidden = Boolean(v.running);
+      if ($('btnStopVanity')) $('btnStopVanity').hidden = !v.running;
+      if ($('vanityTerminalBox') && Array.isArray(v.recentLog)) {
+        const box = $('vanityTerminalBox');
+        box.replaceChildren();
+        if (v.recentLog.length === 0) {
+          box.append(element('div', v.running ? '[Radar activo: consultando endpoints de Steam...]' : '[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]'));
+        } else {
+          for (const line of v.recentLog.slice(-20).reverse()) {
+            box.append(element('div', line));
+          }
+        }
+      }
+    }
+
+    if (pentagon.marketSniper) {
+      const m = pentagon.marketSniper;
+      if ($('sniperStatusBadge')) {
+        $('sniperStatusBadge').textContent = m.running ? `ESCANEANDO (${m.checksCount || 0})` : 'DETENIDO';
+        $('sniperStatusBadge').style.background = m.running ? '#059669' : '#334155';
+        $('sniperStatusBadge').style.color = m.running ? '#ecfdf5' : '#cbd5e1';
+      }
+      if ($('btnStartSniper')) $('btnStartSniper').hidden = Boolean(m.running);
+      if ($('btnStopSniper')) $('btnStopSniper').hidden = !m.running;
+      if ($('sniperTerminalBox') && Array.isArray(m.recentLog)) {
+        const box = $('sniperTerminalBox');
+        box.replaceChildren();
+        if (m.recentLog.length === 0) {
+          box.append(element('div', m.running ? '[Radar de mercado escaneando listings cada 1.5s...]' : '[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]'));
+        } else {
+          for (const line of m.recentLog.slice(-20).reverse()) {
+            box.append(element('div', line));
+          }
+        }
+      }
+    }
+
+    if (pentagon.vanitySniper?.running || pentagon.marketSniper?.running) {
+      startPentagonPolling();
     }
   }
 }
@@ -2506,143 +2549,276 @@ async function connectGameCoordinator(){
     notice(e.message);
   }
 }
-async function claimCs2WeeklyPackage(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  try{
-    const res=await api('/api/gc/cs2/claim-package',{accountId:activeAccountId});
-    if($('gcStatusText')&&res?.message)$('gcStatusText').textContent=res.message;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function spoofSteamDeckPresence(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  try{
-    const res=await api('/api/steamdeck/spoof',{accountId:activeAccountId});
-    if($('steamDeckStatusText')&&res?.message)$('steamDeckStatusText').textContent=res.message;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function claimSteamDeckPermanentRewards(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  try{
-    const res=await api('/api/steamdeck/claim-rewards',{accountId:activeAccountId});
-    if($('steamDeckStatusText')&&res?.message)$('steamDeckStatusText').textContent=res.message;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function startTournamentGhost(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  const broadcastSteamId=($('tournamentBroadcastIdInput')?.value||'').trim()||'76561198000000000';
-  try{
-    const res=await api('/api/tournament/watch',{accountId:activeAccountId,broadcastSteamId});
-    if($('tournamentGhostStatusText')&&res?.message)$('tournamentGhostStatusText').textContent=res.message;
-    if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').hidden=false;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function stopTournamentGhost(){
-  if(!activeAccountId)return;
-  try{
-    const res=await api('/api/tournament/stop',{accountId:activeAccountId});
-    if($('tournamentGhostStatusText')&&res?.message)$('tournamentGhostStatusText').textContent=res.message;
-    if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').hidden=true;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-const SAMPLE_1X1_PNG_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-async function startMarketSniper(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  try{
-    const res=await api('/api/sniper/start',{accountId:activeAccountId,targets:[{appId:730,marketHashName:'CS2 Case Key',maxPriceCents:25}]});
-    if($('marketSniperStatusText')&&res?.message)$('marketSniperStatusText').textContent=res.message;
-    if($('btnStopMarketSniper'))$('btnStopMarketSniper').hidden=false;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function stopMarketSniper(){
-  if(!activeAccountId)return;
-  try{
-    const res=await api('/api/sniper/stop',{accountId:activeAccountId});
-    if($('marketSniperStatusText')&&res?.message)$('marketSniperStatusText').textContent=res.message;
-    if($('btnStopMarketSniper'))$('btnStopMarketSniper').hidden=true;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function runAlchemyCycle(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  const appId=Number($('alchemyAppIdInput')?.value||730)||730;
-  try{
-    const res=await api('/api/alchemy/craft-booster',{accountId:activeAccountId,appId});
-    if($('alchemyStatusText')&&res?.message)$('alchemyStatusText').textContent=res.message;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function startVanitySniper(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  try{
-    const res=await api('/api/vanity/start',{accountId:activeAccountId,watchlist:['pro','neo','won','god','dev']});
-    if($('vanityStatusText')&&res?.message)$('vanityStatusText').textContent=res.message;
-    if($('btnStopVanitySniper'))$('btnStopVanitySniper').hidden=false;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function stopVanitySniper(){
-  if(!activeAccountId)return;
-  try{
-    const res=await api('/api/vanity/stop',{accountId:activeAccountId});
-    if($('vanityStatusText')&&res?.message)$('vanityStatusText').textContent=res.message;
-    if($('btnStopVanitySniper'))$('btnStopVanitySniper').hidden=true;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function craftCheapestLevelBadge(){
-  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
-  const appId=Number($('levelOptimizerAppIdInput')?.value||730)||730;
-  try{
-    const res=await api('/api/level/craft',{accountId:activeAccountId,appId});
-    if($('levelOptimizerStatusText')&&res?.message)$('levelOptimizerStatusText').textContent=res.message;
-    if(res?.message)notice(res.message);
-  }catch(e){
-    notice(e.message);
-  }
-}
-async function submitArtworkForIhdrPatch(imagePayload = SAMPLE_1X1_PNG_BASE64) {
+/* ==========================================================================
+   PENTAGON ELITE SUITE (Vanity URL, Market Sniper, Alchemy, Level, Artwork)
+   ========================================================================== */
+
+let pentagonPollTimer = null;
+
+async function pollPentagonStatus() {
+  if (!activeAccountId) return;
   try {
-    const res = await api('/api/artwork/patch', { imagePayload });
-    if ($('artworkPatchStatusText') && res?.message) {
-      $('artworkPatchStatusText').textContent = `${res.message} (${res.originalHeight || 1}px → ${res.patchedHeight || 3840}px)`;
+    const res = await api(`/api/pentagon/status?accountId=${encodeURIComponent(activeAccountId)}`);
+    if (!res) return;
+
+    if (res.vanitySniper) {
+      const v = res.vanitySniper;
+      if ($('vanityStatusBadge')) {
+        $('vanityStatusBadge').textContent = v.running ? `ESCANEANDO (${v.activeChecks || 0})` : 'DETENIDO';
+        $('vanityStatusBadge').style.background = v.running ? '#059669' : '#334155';
+        $('vanityStatusBadge').style.color = v.running ? '#ecfdf5' : '#cbd5e1';
+      }
+      if ($('btnStartVanity')) $('btnStartVanity').hidden = Boolean(v.running);
+      if ($('btnStopVanity')) $('btnStopVanity').hidden = !v.running;
+
+      if ($('vanityTerminalBox') && Array.isArray(v.recentLog)) {
+        const box = $('vanityTerminalBox');
+        box.replaceChildren();
+        if (v.recentLog.length === 0) {
+          box.append(element('div', v.running ? '[Radar activo: consultando endpoints de Steam...]' : '[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]'));
+        } else {
+          for (const line of v.recentLog.slice(-20).reverse()) {
+            box.append(element('div', line));
+          }
+        }
+      }
     }
-    if (res?.patchedBase64) {
-      const a = element('a');
-      a.href = res.patchedBase64;
-      a.download = 'steamfarmer-infinite-artwork.png';
-      document.body.append(a);
-      a.click();
-      a.remove();
+
+    if (res.marketSniper) {
+      const m = res.marketSniper;
+      if ($('sniperStatusBadge')) {
+        $('sniperStatusBadge').textContent = m.running ? `ESCANEANDO (${m.checksCount || 0})` : 'DETENIDO';
+        $('sniperStatusBadge').style.background = m.running ? '#059669' : '#334155';
+        $('sniperStatusBadge').style.color = m.running ? '#ecfdf5' : '#cbd5e1';
+      }
+      if ($('btnStartSniper')) $('btnStartSniper').hidden = Boolean(m.running);
+      if ($('btnStopSniper')) $('btnStopSniper').hidden = !m.running;
+
+      if ($('sniperTerminalBox') && Array.isArray(m.recentLog)) {
+        const box = $('sniperTerminalBox');
+        box.replaceChildren();
+        if (m.recentLog.length === 0) {
+          box.append(element('div', m.running ? '[Radar de mercado escaneando listings cada 1.5s...]' : '[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]'));
+        } else {
+          for (const line of m.recentLog.slice(-20).reverse()) {
+            box.append(element('div', line));
+          }
+        }
+      }
     }
-    if (res?.message) notice(res.message);
+  } catch (e) {
+    // Silent catch on poll
+  }
+}
+
+function startPentagonPolling() {
+  if (pentagonPollTimer) return;
+  pentagonPollTimer = setInterval(() => {
+    if (!document.hidden && activeAccountId) {
+      pollPentagonStatus();
+    }
+  }, 2000);
+}
+
+async function startVanitySniper() {
+  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
+  const rawTags = ($('vanityWatchlistInput')?.value || '').trim();
+  const tags = rawTags.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (!tags.length) { notice('Ingresa al menos 1 Vanity URL para monitorear.'); return; }
+  try {
+    const res = await api('/api/pentagon/vanity/start', { accountId: activeAccountId, tags });
+    notice(res.message || 'Radar de Vanity URLs iniciado.');
+    startPentagonPolling();
+    await pollPentagonStatus();
   } catch (e) {
     notice(e.message);
+  }
+}
+
+async function stopVanitySniper() {
+  if (!activeAccountId) return;
+  try {
+    const res = await api('/api/pentagon/vanity/stop', { accountId: activeAccountId });
+    notice(res.message || 'Radar de Vanity URLs detenido.');
+    await pollPentagonStatus();
+  } catch (e) {
+    notice(e.message);
+  }
+}
+
+function loadDefaultVanityTags() {
+  const defaultTags = "pro, neo, won, god, rip, axe, fps, dev, bot, gem, ace, max, vip, top, 777, 999, 007, cs2, dota, vac, sam, asf, pubg, aim, kda, eco, fov, raw, lag, hit, box, win, fun, wow, zen, fox, cat, sky, red, ice";
+  if ($('vanityWatchlistInput')) {
+    $('vanityWatchlistInput').value = defaultTags;
+  }
+  notice('40 Vanity URLs legendarias cargadas.');
+}
+
+async function startMarketSniper() {
+  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
+  const presetVal = $('sniperPresetSelect')?.value || '730|Dreams & Nightmares Case|15';
+  const parts = presetVal.split('|');
+  const appid = Number(parts[0]) || 730;
+  const market_hash_name = parts[1] || 'Dreams & Nightmares Case';
+  const max_price_cents = Number(parts[2]) || 15;
+  try {
+    const res = await api('/api/pentagon/sniper/start', {
+      accountId: activeAccountId,
+      appid,
+      market_hash_name,
+      max_price_cents,
+      pollIntervalMs: 1500
+    });
+    notice(res.message || 'Radar de Mercado activado.');
+    startPentagonPolling();
+    await pollPentagonStatus();
+  } catch (e) {
+    notice(e.message);
+  }
+}
+
+async function stopMarketSniper() {
+  if (!activeAccountId) return;
+  try {
+    const res = await api('/api/pentagon/sniper/stop', { accountId: activeAccountId });
+    notice(res.message || 'Radar de Mercado detenido.');
+    await pollPentagonStatus();
+  } catch (e) {
+    notice(e.message);
+  }
+}
+
+async function loadAlchemyCatalog() {
+  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
+  try {
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Consultando generador de Booster Packs de Steam...';
+    const res = await api(`/api/pentagon/alchemy/catalog?accountId=${encodeURIComponent(activeAccountId)}`);
+    if ($('alchemyBoosterSelect') && Array.isArray(res.catalog)) {
+      const select = $('alchemyBoosterSelect');
+      select.replaceChildren();
+      for (const item of res.catalog) {
+        const opt = document.createElement('option');
+        opt.value = item.appid;
+        opt.textContent = `${item.name} (Gemas: ${item.gemsNeeded} · Valor Pack: ~$${item.estimatedPackValueUsd.toFixed(2)} USD · Margen: ${item.profitMargin})`;
+        select.appendChild(opt);
+      }
+    }
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Catálogo actualizado: ${res.catalog?.length || 0} packs disponibles.`;
+  } catch (e) {
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Error: ' + e.message;
+    notice(e.message);
+  }
+}
+
+async function craftAlchemyBooster() {
+  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
+  const appid = Number($('alchemyBoosterSelect')?.value);
+  if (!appid) { notice('Selecciona un juego para forjar booster.'); return; }
+  try {
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Forjando Booster Pack para AppID ${appid}...`;
+    const res = await api('/api/pentagon/alchemy/craft', { accountId: activeAccountId, appid });
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = res.message || 'Booster Pack forjado.';
+    notice(res.message || 'Booster Pack forjado con éxito.');
+  } catch (e) {
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Error: ' + e.message;
+    notice(e.message);
+  }
+}
+
+async function loadCheapBadgeSets() {
+  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
+  try {
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Analizando sets de cromos más económicos...';
+    const res = await api(`/api/pentagon/level/recommend?accountId=${encodeURIComponent(activeAccountId)}`);
+    if ($('cheapSetsSelect') && Array.isArray(res.recommendations)) {
+      const select = $('cheapSetsSelect');
+      select.replaceChildren();
+      for (const item of res.recommendations) {
+        const opt = document.createElement('option');
+        opt.value = item.appid;
+        opt.textContent = `${item.name} (${item.cardCount} cromos · ~$${item.estimatedCostUsd.toFixed(2)} USD · +100 XP)`;
+        select.appendChild(opt);
+      }
+    }
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `Nivel actual: ${res.currentLevel || '?'} · ${res.recommendations?.length || 0} sets económicos disponibles.`;
+  } catch (e) {
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Error: ' + e.message;
+    notice(e.message);
+  }
+}
+
+async function craftCheapBadge() {
+  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
+  const appid = Number($('cheapSetsSelect')?.value);
+  if (!appid) { notice('Selecciona un set de insignia.'); return; }
+  try {
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `Fabricando insignia para AppID ${appid}...`;
+    const res = await api('/api/pentagon/level/craft', { accountId: activeAccountId, appid });
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = res.message || 'Insignia fabricada.';
+    notice(res.message || 'Insignia fabricada con éxito.');
+  } catch (e) {
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Error: ' + e.message;
+    notice(e.message);
+  }
+}
+
+async function patchInfiniteArtwork() {
+  const fileInput = $('artworkFileInput');
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    notice('Por favor selecciona una imagen PNG primero.');
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith('.png')) {
+    notice('El archivo debe ser una imagen en formato PNG.');
+    return;
+  }
+  if ($('artworkStatusText')) $('artworkStatusText').textContent = 'Procesando header binario IHDR y recalculando CRC32...';
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const base64 = reader.result;
+      const res = await api('/api/pentagon/artwork/patch', {
+        imagePayload: base64,
+        targetHeight: 3840
+      });
+
+      if (res.patchedBase64) {
+        const downloadLink = document.createElement('a');
+        downloadLink.href = res.patchedBase64;
+        downloadLink.download = file.name.replace(/\.png$/i, '') + '_long_glitched.png';
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
+
+      if ($('artworkConsoleCmd') && res.consoleScript) {
+        $('artworkConsoleCmd').value = res.consoleScript;
+      }
+
+      if ($('artworkStatusText')) {
+        $('artworkStatusText').textContent = `✅ ${res.message || 'PNG parcheado y descargado automáticamente'}`;
+      }
+      notice('¡PNG parcheado con éxito! Se descargó automáticamente a tu PC.');
+    } catch (e) {
+      if ($('artworkStatusText')) $('artworkStatusText').textContent = 'Error: ' + e.message;
+      notice(e.message);
+    }
+  };
+  reader.onerror = () => {
+    notice('Error al leer el archivo PNG local.');
+  };
+  reader.readAsDataURL(file);
+}
+
+function copyArtworkConsoleCommand() {
+  const cmd = $('artworkConsoleCmd')?.value || "$J('#image_width').val(1000); $J('#image_height').val(1);";
+  try {
+    navigator.clipboard?.writeText(cmd);
+    notice('Comando copiado al portapapeles. Pégalo en la consola F12 de Steam Artwork.');
+  } catch {
+    notice('Selecciona y copia el comando manualmente.');
   }
 }
 
@@ -2899,37 +3075,17 @@ if($('btnClaimCurrentGameFree'))$('btnClaimCurrentGameFree').addEventListener('c
 if($('btnOpenSpacewar480'))$('btnOpenSpacewar480').addEventListener('click',()=>openSpacewar480());
 if($('samMasterResetBtn'))$('samMasterResetBtn').addEventListener('click',()=>resetAllGameStats());
 if($('collisionBypassBtn'))$('collisionBypassBtn').addEventListener('click',()=>toggleCollisionBypass());
-if($('btnConnectGC'))$('btnConnectGC').addEventListener('click',()=>connectGameCoordinator());
-if($('btnClaimCarePackage'))$('btnClaimCarePackage').addEventListener('click',()=>claimCs2WeeklyPackage());
-if($('btnSpoofSteamDeck'))$('btnSpoofSteamDeck').addEventListener('click',()=>spoofSteamDeckPresence());
-if($('btnClaimSteamDeckRewards'))$('btnClaimSteamDeckRewards').addEventListener('click',()=>claimSteamDeckPermanentRewards());
-if($('btnWatchTournamentGhost'))$('btnWatchTournamentGhost').addEventListener('click',()=>startTournamentGhost());
-if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').addEventListener('click',()=>stopTournamentGhost());
-if($('btnStartMarketSniper'))$('btnStartMarketSniper').addEventListener('click',()=>startMarketSniper());
-if($('btnStopMarketSniper'))$('btnStopMarketSniper').addEventListener('click',()=>stopMarketSniper());
-if($('btnRunAlchemyCycle'))$('btnRunAlchemyCycle').addEventListener('click',()=>runAlchemyCycle());
-if($('btnStartVanitySniper'))$('btnStartVanitySniper').addEventListener('click',()=>startVanitySniper());
-if($('btnStopVanitySniper'))$('btnStopVanitySniper').addEventListener('click',()=>stopVanitySniper());
-if($('btnCraftCheapestBadge'))$('btnCraftCheapestBadge').addEventListener('click',()=>craftCheapestLevelBadge());
-if($('btnSelectArtworkToPatch'))$('btnSelectArtworkToPatch').addEventListener('click',()=>{
-  const fi=$('artworkFileInput');
-  if(fi&&typeof window.testUI==='undefined'&&fi.files&&fi.files.length===0){
-    try{fi.click();}catch{}
-  }else{
-    submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);
-  }
-});
-if($('artworkFileInput'))$('artworkFileInput').addEventListener('change',e=>{
-  const file=e.target?.files?.[0];
-  if(!file){submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);return;}
-  if(typeof FileReader==='function'){
-    const reader=new FileReader();
-    reader.onload=()=>submitArtworkForIhdrPatch(String(reader.result||SAMPLE_1X1_PNG_BASE64));
-    reader.readAsDataURL(file);
-  }else{
-    submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);
-  }
-});
+if($('btnStartVanity'))$('btnStartVanity').addEventListener('click',()=>startVanitySniper());
+if($('btnStopVanity'))$('btnStopVanity').addEventListener('click',()=>stopVanitySniper());
+if($('btnLoadDefaultTags'))$('btnLoadDefaultTags').addEventListener('click',()=>loadDefaultVanityTags());
+if($('btnStartSniper'))$('btnStartSniper').addEventListener('click',()=>startMarketSniper());
+if($('btnStopSniper'))$('btnStopSniper').addEventListener('click',()=>stopMarketSniper());
+if($('btnLoadAlchemyCatalog'))$('btnLoadAlchemyCatalog').addEventListener('click',()=>loadAlchemyCatalog());
+if($('btnCraftBooster'))$('btnCraftBooster').addEventListener('click',()=>craftAlchemyBooster());
+if($('btnLoadCheapSets'))$('btnLoadCheapSets').addEventListener('click',()=>loadCheapBadgeSets());
+if($('btnCraftCheapBadge'))$('btnCraftCheapBadge').addEventListener('click',()=>craftCheapBadge());
+if($('btnPatchArtwork'))$('btnPatchArtwork').addEventListener('click',()=>patchInfiniteArtwork());
+if($('btnCopyArtworkCmd'))$('btnCopyArtworkCmd').addEventListener('click',()=>copyArtworkConsoleCommand());
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
 if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());

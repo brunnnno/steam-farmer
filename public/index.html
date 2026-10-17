@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=59">
+  <link rel="stylesheet" href="/style.css?v=58">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -457,98 +457,106 @@
           <div id="clusterStatusContainer" class="cluster-tabs-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
         </div>
       </details>
-      <details id="pioneerFeaturesPanel" class="cards-panel pioneer-panel" aria-label="Funciones Pioneras Valve" open>
-        <summary class="cards-panel-heading">
-          <div>
-            <span class="eyebrow" data-i18n="pioneerEyebrow">PROTOCOLOS BINARIOS VALVE · HEADLESS ENGINE</span>
-            <h3><span data-i18n="pioneerPanelTitle">Funciones Pioneras (CS2/TF2 GC, Steam Deck &amp; Tournament Ghost)</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
-          </div>
-          <span id="pioneerSummaryBadge" class="cards-summary">3 módulos listos</span>
-        </summary>
-        <div class="task-center-grid" style="margin-top:10px;">
-          <div class="task-center-box status-blue">
-            <span class="eyebrow">🎮 GAME COORDINATOR DROPS (CS2 &amp; TF2)</span>
-            <p id="gcStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="gcDefaultStatus">Conecta sin GPU al Game Coordinator (ClientToGC 4006) para reclamar el Weekly Care Package de CS2 y drops de TF2.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
-              <button id="btnConnectGC" type="button" class="btn-action-sm sam-quick-btn" data-i18n="connectGcBtn">Conectar GC CS2/TF2</button>
-              <button id="btnClaimCarePackage" type="button" class="btn-main sam-quick-btn" data-i18n="claimCarePackageBtn">Reclamar Weekly Care Package</button>
-            </div>
-          </div>
-          <div class="task-center-box status-purple">
-            <span class="eyebrow">📟 STEAM DECK SUITE (HARDWARE &amp; REWARDS)</span>
-            <p id="steamDeckStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="steamDeckDefaultStatus">Emula presencia de SteamOS (gaming_device_type = 2) y reclama cosméticos permanentes de Steam Deck.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
-              <button id="btnSpoofSteamDeck" type="button" class="btn-action-sm sam-quick-btn" data-i18n="spoofSteamDeckBtn">Simular presencia Steam Deck</button>
-              <button id="btnClaimSteamDeckRewards" type="button" class="btn-purple sam-quick-btn" data-i18n="claimSteamDeckRewardsBtn">Obtener Recompensas Permanentes de Steam Deck</button>
-            </div>
-          </div>
-          <div class="task-center-box status-green">
-            <span class="eyebrow">🏆 TOURNAMENT GHOST (0% ANCHO DE BANDA)</span>
-            <p id="tournamentGhostStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="tournamentDefaultStatus">Envía heartbeats de visualización a Broadcast.WatchBroadcast#1 sin descargar video para farmear drops de Majors.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-              <input id="tournamentBroadcastIdInput" type="text" placeholder="SteamID64 del Broadcast (ej. 76561198000000000)" style="flex:1; min-width:170px; padding:6px 10px; font-size:0.8rem;">
-              <button id="btnWatchTournamentGhost" type="button" class="btn-main sam-quick-btn" data-i18n="watchTournamentGhostBtn">Iniciar Farmeo Headless de Drops de Major</button>
-              <button id="btnStopTournamentGhost" type="button" class="btn-clear sam-quick-btn" data-i18n="stopTournamentGhostBtn" hidden>Detener</button>
-            </div>
-          </div>
-        </div>
-      </details>
-      <details id="pentagonElitePanel" class="cards-panel pioneer-panel" aria-label="Suite Pentágono Élite" open>
+      <details id="pentagonElitePanel" class="cards-panel pioneer-panel" aria-label="Suite Pentágono Élite Valve" open>
         <summary class="cards-panel-heading">
           <div>
             <span class="eyebrow" data-i18n="pentagonEyebrow">SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE</span>
-            <h3><span data-i18n="pentagonPanelTitle">El Pentágono de Élite: Mercado, Alquimia, URLs, Nivel y Vitrinas</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+            <h3 data-i18n="pentagonPanelTitle">El Pentágono de Élite: URLs, Mercado, Alquimia, Nivel y Vitrinas <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
           </div>
-          <span class="cards-summary" data-i18n="pentagonSummaryBadge">5 sistemas armados</span>
+          <span id="pentagonSummaryBadge" class="cards-summary">5 sistemas armados</span>
         </summary>
         <div class="task-center-grid" style="margin-top:10px;">
-          <!-- M1: Market Sniper -->
-          <div class="task-center-box status-green">
-            <span class="eyebrow">🎯 FRANCOTIRADOR DE MERCADO (100MS)</span>
-            <p id="marketSniperStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="marketSniperDesc">Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
-              <button id="btnStartMarketSniper" type="button" class="btn-main sam-quick-btn" data-i18n="startMarketSniperBtn">Activar Radar de Compras</button>
-              <button id="btnStopMarketSniper" type="button" class="btn-clear sam-quick-btn" data-i18n="stopMarketSniperBtn" hidden>Detener</button>
+
+          <!-- M1: Vanity URL Sniper -->
+          <div class="task-center-box status-blue">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="eyebrow">🏷️ FRANCOTIRADOR DE URLS DE 3 LETRAS</span>
+              <span id="vanityStatusBadge" style="padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:700; background:#334155; color:#cbd5e1;">DETENIDO</span>
+            </div>
+            <p class="task-center-body" style="margin:4px 0 6px 0;">Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.</p>
+            <input type="text" id="vanityWatchlistInput" value="pro, neo, won, god, rip, axe, fps, dev, bot, gem, ace, max, vip, top, 777, 999, 007" placeholder="Tags separadas por comas (ej. pro, neo, won)" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              <button id="btnStartVanity" type="button" class="btn-main sam-quick-btn">Iniciar Radar</button>
+              <button id="btnStopVanity" type="button" class="btn-clear sam-quick-btn" hidden>Detener Radar</button>
+              <button id="btnLoadDefaultTags" type="button" class="btn-action-sm sam-quick-btn">40 Tags Recomendadas</button>
+            </div>
+            <div id="vanityTerminalBox" style="background:#090d16; border:1px solid #1a2744; font-family:monospace; font-size:0.75rem; color:#00ffcc; height:100px; overflow-y:auto; padding:8px; border-radius:8px; display:flex; flex-direction:column-reverse;">
+              <div>[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]</div>
             </div>
           </div>
 
-          <!-- M2: Alchemy Transmuter -->
+          <!-- M2: Market Misprice Sniper -->
+          <div class="task-center-box status-green">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="eyebrow">🎯 FRANCOTIRADOR DE MERCADO (100MS)</span>
+              <span id="sniperStatusBadge" style="padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:700; background:#334155; color:#cbd5e1;">DETENIDO</span>
+            </div>
+            <p class="task-center-body" style="margin:4px 0 6px 0;">Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.</p>
+            <select id="sniperPresetSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
+              <option value="730|Dreams & Nightmares Case|15">Dreams &amp; Nightmares Case (CS2) - Máx $0.15 USD</option>
+              <option value="730|Recoil Case|15">Recoil Case (CS2) - Máx $0.15 USD</option>
+              <option value="730|Fracture Case|15">Fracture Case (CS2) - Máx $0.15 USD</option>
+              <option value="440|Mann Co. Supply Crate Key|150">Mann Co. Key (TF2) - Máx $1.50 USD</option>
+            </select>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              <button id="btnStartSniper" type="button" class="btn-main sam-quick-btn">Activar Radar</button>
+              <button id="btnStopSniper" type="button" class="btn-clear sam-quick-btn" hidden>Detener</button>
+            </div>
+            <div id="sniperTerminalBox" style="background:#090d16; border:1px solid #1a2744; font-family:monospace; font-size:0.75rem; color:#a3e635; height:100px; overflow-y:auto; padding:8px; border-radius:8px; display:flex; flex-direction:column-reverse;">
+              <div>[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]</div>
+            </div>
+          </div>
+
+          <!-- M3: Alchemy Transmuter -->
           <div class="task-center-box status-purple">
             <span class="eyebrow">♻️ BUCLE DE ALQUIMIA (TRASH-TO-CASH)</span>
-            <p id="alchemyStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="alchemyDesc">Convierte chatarra en gemas y forja Booster Packs de $3 a $5 USD para generar saldo Steam Wallet.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-              <input id="alchemyAppIdInput" type="number" value="730" placeholder="AppID" style="width:95px; padding:6px 10px; font-size:0.8rem;">
-              <button id="btnRunAlchemyCycle" type="button" class="btn-purple sam-quick-btn" data-i18n="runAlchemyBtn">Forjar Booster de Alto Margen</button>
+            <p class="task-center-body" style="margin:4px 0 6px 0;">Forja Booster Packs de $2.50 a $5.00 USD con gemas baratas para multiplicar tu saldo Steam Wallet.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+              <button id="btnLoadAlchemyCatalog" type="button" class="btn-action-sm sam-quick-btn">Consultar Juegos Rentables</button>
             </div>
-          </div>
-
-          <!-- M3: Vanity URL Sniper -->
-          <div class="task-center-box status-blue">
-            <span class="eyebrow">🏷️ FRANCOTIRADOR DE URLS DE 3 LETRAS</span>
-            <p id="vanityStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="vanityDesc">Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
-              <button id="btnStartVanitySniper" type="button" class="btn-action-sm sam-quick-btn" data-i18n="startVanitySniperBtn">Iniciar Radar de URLs</button>
-              <button id="btnStopVanitySniper" type="button" class="btn-clear sam-quick-btn" data-i18n="stopVanitySniperBtn" hidden>Detener</button>
-            </div>
+            <select id="alchemyBoosterSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
+              <option value="400">Portal (Costo: 750 gemas · Valor: ~$1.80 USD)</option>
+              <option value="550">Left 4 Dead 2 (Costo: 750 gemas · Valor: ~$2.10 USD)</option>
+              <option value="220">Half-Life 2 (Costo: 750 gemas · Valor: ~$1.95 USD)</option>
+              <option value="440">Team Fortress 2 (Costo: 750 gemas · Valor: ~$1.50 USD)</option>
+            </select>
+            <button id="btnCraftBooster" type="button" class="btn-purple sam-quick-btn">Forjar Booster Pack Seleccionado</button>
+            <p id="alchemyStatusText" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;"></p>
           </div>
 
           <!-- M4: Level Optimizer -->
           <div class="task-center-box status-green">
             <span class="eyebrow">📈 OPTIMIZADOR DE NIVEL 50/100 ($0.15/SET)</span>
-            <p id="levelOptimizerStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="levelOptimizerDesc">Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-              <input id="levelOptimizerAppIdInput" type="number" value="730" placeholder="AppID" style="width:95px; padding:6px 10px; font-size:0.8rem;">
-              <button id="btnCraftCheapestBadge" type="button" class="btn-main sam-quick-btn" data-i18n="craftCheapestBadgeBtn">Forjar Set Económico (+100 XP)</button>
+            <p class="task-center-body" style="margin:4px 0 6px 0;">Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+              <button id="btnLoadCheapSets" type="button" class="btn-action-sm sam-quick-btn">Ver Sets Más Baratos</button>
             </div>
+            <select id="cheapSetsSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
+              <option value="227300">POSTAL (5 cromos · ~$0.18 USD · +100 XP)</option>
+              <option value="252150">Grimm (5 cromos · ~$0.19 USD · +100 XP)</option>
+              <option value="400">Portal (8 cromos · ~$0.24 USD · +100 XP)</option>
+              <option value="550">Left 4 Dead 2 (8 cromos · ~$0.25 USD · +100 XP)</option>
+            </select>
+            <button id="btnCraftCheapBadge" type="button" class="btn-main sam-quick-btn">Forjar Insignia (+100 XP)</button>
+            <p id="levelOptStatusText" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;"></p>
           </div>
 
           <!-- M5: Long Artwork Patcher -->
           <div class="task-center-box status-purple">
             <span class="eyebrow">🖼️ PARCHEADOR DE VITRINAS INFINITAS (IHDR GLITCH)</span>
-            <p id="artworkPatchStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="artworkPatcherDesc">Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x10000px) a tu perfil.</p>
-            <input type="file" id="artworkFileInput" accept="image/png" style="display:none;">
-            <button id="btnSelectArtworkToPatch" type="button" class="btn-purple sam-quick-btn" style="margin-top:8px;" data-i18n="selectArtworkPatchBtn">Subir y Parchear PNG Infinito</button>
+            <p class="task-center-body" style="margin:4px 0 6px 0;">Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x3840+ px) a tu perfil.</p>
+            <input type="file" id="artworkFileInput" accept="image/png" style="width:100%; font-size:0.8rem; margin-bottom:6px;">
+            <button id="btnPatchArtwork" type="button" class="btn-purple sam-quick-btn">Parchear y Descargar PNG Infinito</button>
+            <div style="margin-top:6px; font-size:0.75rem; color:var(--text-muted);">
+              Script consola F12 Steam Artwork:
+              <div style="display:flex; gap:4px; margin-top:4px;">
+                <input type="text" id="artworkConsoleCmd" value="$J('#image_width').val(1000); $J('#image_height').val(1);" readonly style="flex:1; padding:4px 8px; font-size:0.7rem; font-family:monospace; background:#090d16; border:1px solid #1a2744; color:#38bdf8; border-radius:4px;">
+                <button id="btnCopyArtworkCmd" type="button" class="btn-action-sm" style="padding:4px 8px; font-size:0.7rem;">Copiar</button>
+              </div>
+            </div>
+            <p id="artworkStatusText" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;"></p>
           </div>
+
         </div>
       </details>
       <div class="section-heading"><div><span class="eyebrow" data-i18n="makeItYoursEyebrow">MAKE IT YOURS</span><h2 data-i18n="gameControlsTitle">Game controls</h2></div></div>
@@ -787,10 +795,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=59" defer></script>
-  <script src="/achievement-availability.js?v=59" defer></script>
-  <script src="/draft-settings.js?v=59" defer></script>
-  <script src="/achievement-live.js?v=59" defer></script>
-  <script src="/app.js?v=59" defer></script>
+  <script src="/achievement-rarity.js?v=58" defer></script>
+  <script src="/achievement-availability.js?v=58" defer></script>
+  <script src="/draft-settings.js?v=58" defer></script>
+  <script src="/achievement-live.js?v=58" defer></script>
+  <script src="/app.js?v=58" defer></script>
 </body>
 </html>
