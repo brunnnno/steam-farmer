@@ -599,6 +599,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       let size=0,done=false;const chunks=[];
       const cleanup=()=>{req.removeListener('data',data);req.removeListener('end',end);req.removeListener('error',error);req.removeListener('aborted',aborted);};
       const error=()=>{if(done)return;done=true;cleanup();chunks.length=0;reject(fail('The request could not be read.',400));};
+      const aborted=()=>error();
       const maxLimit = 15 * 1024 * 1024;
       const data=chunk=>{if(done)return;size+=chunk.length;if(size>maxLimit){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
       const end=()=>{if(done)return;done=true;cleanup();resolve(Buffer.concat(chunks,size));};
