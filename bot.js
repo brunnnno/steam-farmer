@@ -600,8 +600,8 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       const cleanup=()=>{req.removeListener('data',data);req.removeListener('end',end);req.removeListener('error',error);req.removeListener('aborted',aborted);};
       const error=()=>{if(done)return;done=true;cleanup();chunks.length=0;reject(fail('The request could not be read.',400));};
       const aborted=()=>error();
-      const maxLimit = 15 * 1024 * 1024;
-      const data=chunk=>{if(done)return;size+=chunk.length;if(size>maxLimit){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
+    const maxLimit = (req.url && (req.url.includes('/import') || req.url.includes('/bulk-apps'))) ? 15 * 1024 * 1024 : 65536;
+    const data=chunk=>{if(done)return;size+=chunk.length;if(size>maxLimit){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
       const end=()=>{if(done)return;done=true;cleanup();resolve(Buffer.concat(chunks,size));};
       req.on('data',data);req.once('end',end);req.once('error',error);req.once('aborted',aborted);
     });
@@ -1542,6 +1542,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
         const list = data?.watchlist || data?.tags;
         if (Array.isArray(list)) s.vanity.setWatchlist(list);
+        if (data?.mode) s.vanity.setMode(data.mode);
         s.vanity.start(Number(data?.intervalMs) || 1500);
         const vStat = s.vanity.getStatus();
         return json(res, 200, {
@@ -1550,6 +1551,18 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           vanity: vStat,
           vanitySniper: vStat,
           message: 'Radar de URLs cortas de 3 letras activado.'
+        });
+      }
+      if (url.pathname === '/api/pentagon/vanity/set-mode' && req.method === 'POST') {
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
+        if (data?.mode) s.vanity.setMode(data.mode);
+        const vStat = s.vanity.getStatus();
+        return json(res, 200, {
+          success: true,
+          status: vStat,
+          vanity: vStat,
+          vanitySniper: vStat,
+          message: `Modo cambiado a ${data?.mode}.`
         });
       }
       if (url.pathname === '/api/pentagon/vanity/stop' && req.method === 'POST') {

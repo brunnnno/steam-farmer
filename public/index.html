@@ -474,6 +474,13 @@
               <span id="vanityStatusBadge" style="padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:700; background:#334155; color:#cbd5e1;">DETENIDO</span>
             </div>
             <p class="task-center-body" style="margin:4px 0 6px 0;">Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.</p>
+            <div style="display:flex; gap:6px; margin-bottom:6px;">
+              <select id="vanityModeSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px;">
+                <option value="random">🎲 100% Aleatorio (Genera combinaciones de 3 caracteres libres)</option>
+                <option value="hybrid" selected>⚡ Modo Híbrido (Alterna Lista Legendaria + Random 3 Letras)</option>
+                <option value="watchlist">🎯 Solo Lista Fija de Tags</option>
+              </select>
+            </div>
             <input type="text" id="vanityWatchlistInput" value="pro, neo, won, god, rip, axe, fps, dev, bot, gem, ace, max, vip, top, 777, 999, 007" placeholder="Tags separadas por comas (ej. pro, neo, won)" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
               <button id="btnStartVanity" type="button" class="btn-main sam-quick-btn">Iniciar Radar</button>
@@ -493,10 +500,19 @@
             </div>
             <p class="task-center-body" style="margin:4px 0 6px 0;">Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.</p>
             <select id="sniperPresetSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
-              <option value="730|Dreams & Nightmares Case|15">Dreams &amp; Nightmares Case (CS2) - Máx $0.15 USD</option>
-              <option value="730|Recoil Case|15">Recoil Case (CS2) - Máx $0.15 USD</option>
-              <option value="730|Fracture Case|15">Fracture Case (CS2) - Máx $0.15 USD</option>
-              <option value="440|Mann Co. Supply Crate Key|150">Mann Co. Key (TF2) - Máx $1.50 USD</option>
+              <optgroup label="📦 Cajas y Llaves de Alta Rotación">
+                <option value="730|Dreams & Nightmares Case|15">Dreams &amp; Nightmares Case (CS2) - Máx $0.15 USD</option>
+                <option value="730|Recoil Case|15">Recoil Case (CS2) - Máx $0.15 USD</option>
+                <option value="730|Fracture Case|15">Fracture Case (CS2) - Máx $0.15 USD</option>
+                <option value="440|Mann Co. Supply Crate Key|150">Mann Co. Key (TF2) - Máx $1.50 USD</option>
+              </optgroup>
+              <optgroup label="🔫 5 Armas Élite (CS2 Skins)">
+                <option value="730|AK-47 | Redline (Field-Tested)|1200">AK-47 | Redline (Field-Tested) - Máx $12.00 USD</option>
+                <option value="730|AWP | Atheris (Field-Tested)|200">AWP | Atheris (Field-Tested) - Máx $2.00 USD</option>
+                <option value="730|Desert Eagle | Light Rail (Field-Tested)|80">Desert Eagle | Light Rail (FT) - Máx $0.80 USD</option>
+                <option value="730|M4A4 | Spider Lily (Field-Tested)|150">M4A4 | Spider Lily (Field-Tested) - Máx $1.50 USD</option>
+                <option value="730|USP-S | Ticket to Hell (Field-Tested)|50">USP-S | Ticket to Hell (FT) - Máx $0.50 USD</option>
+              </optgroup>
             </select>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
               <button id="btnStartSniper" type="button" class="btn-main sam-quick-btn">Activar Radar</button>

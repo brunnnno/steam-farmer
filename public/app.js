@@ -1045,10 +1045,7 @@ function renderAutomationsPanel(account) {
 }
 
 function renderPentagonPanel(account) {
-  const panel = $('pentagonElitePanel');
-  if (!panel) return;
-  startPentagonPolling();
-  pollPentagonStatus();
+  // Pentagon status is polled when activated or toggled
 }
 
 function buildBadgeCalcNodes(game) {
@@ -1646,6 +1643,7 @@ function closeAchModal() {
   if (activeAccountId && active?.id && currentAchAppId !== null && active?.connected) {
     api('/api/game/inspect-stop', { accountId: activeAccountId }).catch(() => {});
   }
+  if (document.activeElement && $('achModal')?.contains(document.activeElement)) document.activeElement.blur();
   achievementLive.stop();liveContext=null;achievementRevision='';observedAchievementChanges.length=0;renderObservedChanges();requirementsContext=null;clearAchievementSelection();modifiedStats.clear();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentStatsList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren();updateSelectionSummary(); }
 function liveMatches(context){return context&&context.serial===achSerial&&context.account===activeAccountId&&context.id===currentAchAppId&&$('achModal').style.display==='flex';}
 function liveAllowed(context){return liveMatches(context)&&Boolean(csrf)&&!document.hidden&&navigator.onLine!==false&&active?.connected===true&&!experimentBusy&&!achievementSelection.size&&$('sharedProgressReview').hidden&&currentSamTab==='achievements';}
@@ -2604,13 +2602,14 @@ function startPentagonPolling() {
 }
 
 async function startVanitySniper() {
+  const mode = $('vanityModeSelect')?.value || 'hybrid';
   const rawTags = ($('vanityWatchlistInput')?.value || '').trim();
   const tags = rawTags.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  if (!tags.length) { notice('Ingresa al menos 1 Vanity URL para monitorear.'); return; }
+  if (mode === 'watchlist' && !tags.length) { notice('Ingresa al menos 1 Vanity URL para monitorear en modo Lista Fija.'); return; }
   try {
     if ($('vanityTerminalBox')) {
       const box = $('vanityTerminalBox');
-      box.replaceChildren(element('div', '[Conectando con el radar de URLs de 3 letras de Steam...]'));
+      box.replaceChildren(element('div', `[Iniciando radar en modo ${mode.toUpperCase()}...]`));
     }
     if ($('vanityStatusBadge')) {
       $('vanityStatusBadge').textContent = 'CONECTANDO...';
@@ -2618,7 +2617,7 @@ async function startVanitySniper() {
       $('vanityStatusBadge').style.color = '#ecfdf5';
     }
     const targetAcc = activeAccountId || 'global';
-    const res = await api('/api/pentagon/vanity/start', { accountId: targetAcc, tags, watchlist: tags });
+    const res = await api('/api/pentagon/vanity/start', { accountId: targetAcc, tags, watchlist: tags, mode });
     notice(res.message || 'Radar de Vanity URLs iniciado.');
     startPentagonPolling();
     await pollPentagonStatus();
@@ -3082,6 +3081,20 @@ if($('btnClaimCurrentGameFree'))$('btnClaimCurrentGameFree').addEventListener('c
 if($('btnOpenSpacewar480'))$('btnOpenSpacewar480').addEventListener('click',()=>openSpacewar480());
 if($('samMasterResetBtn'))$('samMasterResetBtn').addEventListener('click',()=>resetAllGameStats());
 if($('collisionBypassBtn'))$('collisionBypassBtn').addEventListener('click',()=>toggleCollisionBypass());
+if($('vanityModeSelect'))$('vanityModeSelect').addEventListener('change', async (e) => {
+  const mode = e.target.value;
+  const targetAcc = activeAccountId || 'global';
+  try {
+    await api('/api/pentagon/vanity/set-mode', { accountId: targetAcc, mode });
+    notice(`Modo de búsqueda cambiado a: ${mode.toUpperCase()}`);
+  } catch {}
+});
+if($('pentagonElitePanel'))$('pentagonElitePanel').addEventListener('toggle', function() {
+  if (this.open) {
+    startPentagonPolling();
+    pollPentagonStatus();
+  }
+});
 if($('btnStartVanity'))$('btnStartVanity').addEventListener('click',()=>startVanitySniper());
 if($('btnStopVanity'))$('btnStopVanity').addEventListener('click',()=>stopVanitySniper());
 if($('btnLoadDefaultTags'))$('btnLoadDefaultTags').addEventListener('click',()=>loadDefaultVanityTags());
