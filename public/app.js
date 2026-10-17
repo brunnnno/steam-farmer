@@ -1047,69 +1047,8 @@ function renderAutomationsPanel(account) {
 function renderPentagonPanel(account) {
   const panel = $('pentagonElitePanel');
   if (!panel) return;
-  if (!account) {
-    if ($('vanityStatusBadge')) {
-      $('vanityStatusBadge').textContent = 'DEMO';
-      $('vanityStatusBadge').style.background = '#334155';
-      $('vanityStatusBadge').style.color = '#cbd5e1';
-    }
-    if ($('sniperStatusBadge')) {
-      $('sniperStatusBadge').textContent = 'DEMO';
-      $('sniperStatusBadge').style.background = '#334155';
-      $('sniperStatusBadge').style.color = '#cbd5e1';
-    }
-    return;
-  }
-  const pentagon = account.pentagonStatus;
-  if (pentagon) {
-    if (pentagon.vanitySniper) {
-      const v = pentagon.vanitySniper;
-      if ($('vanityStatusBadge')) {
-        $('vanityStatusBadge').textContent = v.running ? `ESCANEANDO (${v.activeChecks || 0})` : 'DETENIDO';
-        $('vanityStatusBadge').style.background = v.running ? '#059669' : '#334155';
-        $('vanityStatusBadge').style.color = v.running ? '#ecfdf5' : '#cbd5e1';
-      }
-      if ($('btnStartVanity')) $('btnStartVanity').hidden = Boolean(v.running);
-      if ($('btnStopVanity')) $('btnStopVanity').hidden = !v.running;
-      if ($('vanityTerminalBox') && Array.isArray(v.recentLog)) {
-        const box = $('vanityTerminalBox');
-        box.replaceChildren();
-        if (v.recentLog.length === 0) {
-          box.append(element('div', v.running ? '[Radar activo: consultando endpoints de Steam...]' : '[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]'));
-        } else {
-          for (const line of v.recentLog.slice(-20).reverse()) {
-            box.append(element('div', line));
-          }
-        }
-      }
-    }
-
-    if (pentagon.marketSniper) {
-      const m = pentagon.marketSniper;
-      if ($('sniperStatusBadge')) {
-        $('sniperStatusBadge').textContent = m.running ? `ESCANEANDO (${m.checksCount || 0})` : 'DETENIDO';
-        $('sniperStatusBadge').style.background = m.running ? '#059669' : '#334155';
-        $('sniperStatusBadge').style.color = m.running ? '#ecfdf5' : '#cbd5e1';
-      }
-      if ($('btnStartSniper')) $('btnStartSniper').hidden = Boolean(m.running);
-      if ($('btnStopSniper')) $('btnStopSniper').hidden = !m.running;
-      if ($('sniperTerminalBox') && Array.isArray(m.recentLog)) {
-        const box = $('sniperTerminalBox');
-        box.replaceChildren();
-        if (m.recentLog.length === 0) {
-          box.append(element('div', m.running ? '[Radar de mercado escaneando listings cada 1.5s...]' : '[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]'));
-        } else {
-          for (const line of m.recentLog.slice(-20).reverse()) {
-            box.append(element('div', line));
-          }
-        }
-      }
-    }
-
-    if (pentagon.vanitySniper?.running || pentagon.marketSniper?.running) {
-      startPentagonPolling();
-    }
-  }
+  startPentagonPolling();
+  pollPentagonStatus();
 }
 
 function buildBadgeCalcNodes(game) {
@@ -2555,52 +2494,96 @@ async function connectGameCoordinator(){
 
 let pentagonPollTimer = null;
 
+function calculateClientPngCrc32(buf) {
+  let c = 0xffffffff;
+  for (let n = 0; n < buf.length; n++) {
+    c = c ^ buf[n];
+    for (let k = 0; k < 8; k++) {
+      c = ((c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1));
+    }
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function patchPngBuffer(arrayBuffer, targetHeight = 3840) {
+  const bytes = new Uint8Array(arrayBuffer);
+  if (bytes.length < 33 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4E || bytes[3] !== 0x47) {
+    throw new Error('El archivo no es una imagen PNG válida.');
+  }
+  const view = new DataView(arrayBuffer);
+  const width = view.getUint32(16, false);
+  const origHeight = view.getUint32(20, false);
+
+  view.setUint32(20, targetHeight, false);
+
+  const ihdrSlice = bytes.subarray(12, 29);
+  const newCrc = calculateClientPngCrc32(ihdrSlice);
+  view.setUint32(29, newCrc, false);
+
+  const blob = new Blob([bytes], { type: 'image/png' });
+  const consoleScript = `$J('#image_width').val(${width}); $J('#image_height').val(1);`;
+  return {
+    width,
+    origHeight,
+    newHeight: targetHeight,
+    blob,
+    consoleScript,
+    message: `PNG parcheado: Altura extendida de ${origHeight}px a ${targetHeight}px con suma CRC32 corregida.`
+  };
+}
+
 async function pollPentagonStatus() {
-  if (!activeAccountId) return;
   try {
-    const res = await api(`/api/pentagon/status?accountId=${encodeURIComponent(activeAccountId)}`);
+    const targetAcc = activeAccountId || 'global';
+    const res = await api(`/api/pentagon/status?accountId=${encodeURIComponent(targetAcc)}`);
     if (!res) return;
 
-    if (res.vanitySniper) {
-      const v = res.vanitySniper;
+    // 1. Vanity URL Sniper
+    const v = res.vanity || res.vanitySniper;
+    if (v) {
+      const isRunning = Boolean(v.running || v.active);
+      const checks = v.activeChecks || v.checksCount || 0;
       if ($('vanityStatusBadge')) {
-        $('vanityStatusBadge').textContent = v.running ? `ESCANEANDO (${v.activeChecks || 0})` : 'DETENIDO';
-        $('vanityStatusBadge').style.background = v.running ? '#059669' : '#334155';
-        $('vanityStatusBadge').style.color = v.running ? '#ecfdf5' : '#cbd5e1';
+        $('vanityStatusBadge').textContent = isRunning ? `ESCANEANDO (${checks})` : 'DETENIDO';
+        $('vanityStatusBadge').style.background = isRunning ? '#059669' : '#334155';
+        $('vanityStatusBadge').style.color = isRunning ? '#ecfdf5' : '#cbd5e1';
       }
-      if ($('btnStartVanity')) $('btnStartVanity').hidden = Boolean(v.running);
-      if ($('btnStopVanity')) $('btnStopVanity').hidden = !v.running;
+      if ($('btnStartVanity')) $('btnStartVanity').hidden = isRunning;
+      if ($('btnStopVanity')) $('btnStopVanity').hidden = !isRunning;
 
       if ($('vanityTerminalBox') && Array.isArray(v.recentLog)) {
         const box = $('vanityTerminalBox');
         box.replaceChildren();
         if (v.recentLog.length === 0) {
-          box.append(element('div', v.running ? '[Radar activo: consultando endpoints de Steam...]' : '[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]'));
+          box.append(element('div', isRunning ? '[Radar activo: consultando endpoints de Steam...]' : '[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]'));
         } else {
-          for (const line of v.recentLog.slice(-20).reverse()) {
+          for (const line of v.recentLog.slice(-25).reverse()) {
             box.append(element('div', line));
           }
         }
       }
     }
 
-    if (res.marketSniper) {
-      const m = res.marketSniper;
+    // 2. Market Misprice Sniper
+    const m = res.sniper || res.marketSniper;
+    if (m) {
+      const isRunning = Boolean(m.running || m.active);
+      const checks = m.activeChecks || m.checksCount || 0;
       if ($('sniperStatusBadge')) {
-        $('sniperStatusBadge').textContent = m.running ? `ESCANEANDO (${m.checksCount || 0})` : 'DETENIDO';
-        $('sniperStatusBadge').style.background = m.running ? '#059669' : '#334155';
-        $('sniperStatusBadge').style.color = m.running ? '#ecfdf5' : '#cbd5e1';
+        $('sniperStatusBadge').textContent = isRunning ? `ESCANEANDO (${checks})` : 'DETENIDO';
+        $('sniperStatusBadge').style.background = isRunning ? '#059669' : '#334155';
+        $('sniperStatusBadge').style.color = isRunning ? '#ecfdf5' : '#cbd5e1';
       }
-      if ($('btnStartSniper')) $('btnStartSniper').hidden = Boolean(m.running);
-      if ($('btnStopSniper')) $('btnStopSniper').hidden = !m.running;
+      if ($('btnStartSniper')) $('btnStartSniper').hidden = isRunning;
+      if ($('btnStopSniper')) $('btnStopSniper').hidden = !isRunning;
 
       if ($('sniperTerminalBox') && Array.isArray(m.recentLog)) {
         const box = $('sniperTerminalBox');
         box.replaceChildren();
         if (m.recentLog.length === 0) {
-          box.append(element('div', m.running ? '[Radar de mercado escaneando listings cada 1.5s...]' : '[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]'));
+          box.append(element('div', isRunning ? '[Radar de mercado escaneando listings cada 1.5s...]' : '[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]'));
         } else {
-          for (const line of m.recentLog.slice(-20).reverse()) {
+          for (const line of m.recentLog.slice(-25).reverse()) {
             box.append(element('div', line));
           }
         }
@@ -2614,19 +2597,28 @@ async function pollPentagonStatus() {
 function startPentagonPolling() {
   if (pentagonPollTimer) return;
   pentagonPollTimer = setInterval(() => {
-    if (!document.hidden && activeAccountId) {
+    if (!document.hidden) {
       pollPentagonStatus();
     }
-  }, 2000);
+  }, 1500);
 }
 
 async function startVanitySniper() {
-  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
   const rawTags = ($('vanityWatchlistInput')?.value || '').trim();
   const tags = rawTags.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   if (!tags.length) { notice('Ingresa al menos 1 Vanity URL para monitorear.'); return; }
   try {
-    const res = await api('/api/pentagon/vanity/start', { accountId: activeAccountId, tags });
+    if ($('vanityTerminalBox')) {
+      const box = $('vanityTerminalBox');
+      box.replaceChildren(element('div', '[Conectando con el radar de URLs de 3 letras de Steam...]'));
+    }
+    if ($('vanityStatusBadge')) {
+      $('vanityStatusBadge').textContent = 'CONECTANDO...';
+      $('vanityStatusBadge').style.background = '#059669';
+      $('vanityStatusBadge').style.color = '#ecfdf5';
+    }
+    const targetAcc = activeAccountId || 'global';
+    const res = await api('/api/pentagon/vanity/start', { accountId: targetAcc, tags, watchlist: tags });
     notice(res.message || 'Radar de Vanity URLs iniciado.');
     startPentagonPolling();
     await pollPentagonStatus();
@@ -2636,9 +2628,9 @@ async function startVanitySniper() {
 }
 
 async function stopVanitySniper() {
-  if (!activeAccountId) return;
   try {
-    const res = await api('/api/pentagon/vanity/stop', { accountId: activeAccountId });
+    const targetAcc = activeAccountId || 'global';
+    const res = await api('/api/pentagon/vanity/stop', { accountId: targetAcc });
     notice(res.message || 'Radar de Vanity URLs detenido.');
     await pollPentagonStatus();
   } catch (e) {
@@ -2655,18 +2647,30 @@ function loadDefaultVanityTags() {
 }
 
 async function startMarketSniper() {
-  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
   const presetVal = $('sniperPresetSelect')?.value || '730|Dreams & Nightmares Case|15';
   const parts = presetVal.split('|');
   const appid = Number(parts[0]) || 730;
   const market_hash_name = parts[1] || 'Dreams & Nightmares Case';
   const max_price_cents = Number(parts[2]) || 15;
   try {
+    if ($('sniperTerminalBox')) {
+      const box = $('sniperTerminalBox');
+      box.replaceChildren(element('div', '[Conectando radar de mercado de Steam...]'));
+    }
+    if ($('sniperStatusBadge')) {
+      $('sniperStatusBadge').textContent = 'CONECTANDO...';
+      $('sniperStatusBadge').style.background = '#059669';
+      $('sniperStatusBadge').style.color = '#ecfdf5';
+    }
+    const targetAcc = activeAccountId || 'global';
     const res = await api('/api/pentagon/sniper/start', {
-      accountId: activeAccountId,
+      accountId: targetAcc,
       appid,
+      appId: appid,
       market_hash_name,
+      marketHashName: market_hash_name,
       max_price_cents,
+      maxPriceCents: max_price_cents,
       pollIntervalMs: 1500
     });
     notice(res.message || 'Radar de Mercado activado.');
@@ -2678,9 +2682,9 @@ async function startMarketSniper() {
 }
 
 async function stopMarketSniper() {
-  if (!activeAccountId) return;
   try {
-    const res = await api('/api/pentagon/sniper/stop', { accountId: activeAccountId });
+    const targetAcc = activeAccountId || 'global';
+    const res = await api('/api/pentagon/sniper/stop', { accountId: targetAcc });
     notice(res.message || 'Radar de Mercado detenido.');
     await pollPentagonStatus();
   } catch (e) {
@@ -2689,21 +2693,26 @@ async function stopMarketSniper() {
 }
 
 async function loadAlchemyCatalog() {
-  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
   try {
     if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Consultando generador de Booster Packs de Steam...';
-    const res = await api(`/api/pentagon/alchemy/catalog?accountId=${encodeURIComponent(activeAccountId)}`);
-    if ($('alchemyBoosterSelect') && Array.isArray(res.catalog)) {
+    const targetAcc = activeAccountId || 'global';
+    const res = await api(`/api/pentagon/alchemy/catalog?accountId=${encodeURIComponent(targetAcc)}`);
+    const catalog = res.catalog || res.list || [];
+    if ($('alchemyBoosterSelect') && Array.isArray(catalog)) {
       const select = $('alchemyBoosterSelect');
       select.replaceChildren();
-      for (const item of res.catalog) {
+      for (const item of catalog) {
         const opt = document.createElement('option');
-        opt.value = item.appid;
-        opt.textContent = `${item.name} (Gemas: ${item.gemsNeeded} · Valor Pack: ~$${item.estimatedPackValueUsd.toFixed(2)} USD · Margen: ${item.profitMargin})`;
+        const id = item.appid || item.appId;
+        const gems = item.gemsNeeded || item.gemCost || 750;
+        const val = Number(item.estimatedPackValueUsd || item.estimatedValueUsd || 2.0).toFixed(2);
+        const margin = item.profitMargin || '+150%';
+        opt.value = id;
+        opt.textContent = `${item.name} (Gemas: ${gems} · Valor Pack: ~$${val} USD · Margen: ${margin})`;
         select.appendChild(opt);
       }
     }
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Catálogo actualizado: ${res.catalog?.length || 0} packs disponibles.`;
+    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Catálogo actualizado: ${catalog.length} packs disponibles.`;
   } catch (e) {
     if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Error: ' + e.message;
     notice(e.message);
@@ -2716,7 +2725,7 @@ async function craftAlchemyBooster() {
   if (!appid) { notice('Selecciona un juego para forjar booster.'); return; }
   try {
     if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Forjando Booster Pack para AppID ${appid}...`;
-    const res = await api('/api/pentagon/alchemy/craft', { accountId: activeAccountId, appid });
+    const res = await api('/api/pentagon/alchemy/craft', { accountId: activeAccountId, appid, appId: appid });
     if ($('alchemyStatusText')) $('alchemyStatusText').textContent = res.message || 'Booster Pack forjado.';
     notice(res.message || 'Booster Pack forjado con éxito.');
   } catch (e) {
@@ -2726,21 +2735,24 @@ async function craftAlchemyBooster() {
 }
 
 async function loadCheapBadgeSets() {
-  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
   try {
     if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Analizando sets de cromos más económicos...';
-    const res = await api(`/api/pentagon/level/recommend?accountId=${encodeURIComponent(activeAccountId)}`);
-    if ($('cheapSetsSelect') && Array.isArray(res.recommendations)) {
+    const targetAcc = activeAccountId || 'global';
+    const res = await api(`/api/pentagon/level/recommend?accountId=${encodeURIComponent(targetAcc)}`);
+    const recs = res.recommendations || res.list || [];
+    if ($('cheapSetsSelect') && Array.isArray(recs)) {
       const select = $('cheapSetsSelect');
       select.replaceChildren();
-      for (const item of res.recommendations) {
+      for (const item of recs) {
         const opt = document.createElement('option');
-        opt.value = item.appid;
-        opt.textContent = `${item.name} (${item.cardCount} cromos · ~$${item.estimatedCostUsd.toFixed(2)} USD · +100 XP)`;
+        const id = item.appid || item.appId;
+        const cost = Number(item.estimatedCostUsd || 0.20).toFixed(2);
+        opt.value = id;
+        opt.textContent = `${item.name} (${item.cardCount} cromos · ~$${cost} USD · +100 XP)`;
         select.appendChild(opt);
       }
     }
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `Nivel actual: ${res.currentLevel || '?'} · ${res.recommendations?.length || 0} sets económicos disponibles.`;
+    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `${recs.length} sets económicos disponibles.`;
   } catch (e) {
     if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Error: ' + e.message;
     notice(e.message);
@@ -2753,7 +2765,7 @@ async function craftCheapBadge() {
   if (!appid) { notice('Selecciona un set de insignia.'); return; }
   try {
     if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `Fabricando insignia para AppID ${appid}...`;
-    const res = await api('/api/pentagon/level/craft', { accountId: activeAccountId, appid });
+    const res = await api('/api/pentagon/level/craft', { accountId: activeAccountId, appid, appId: appid });
     if ($('levelOptStatusText')) $('levelOptStatusText').textContent = res.message || 'Insignia fabricada.';
     notice(res.message || 'Insignia fabricada con éxito.');
   } catch (e) {
@@ -2778,27 +2790,22 @@ async function patchInfiniteArtwork() {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
-      const base64 = reader.result;
-      const res = await api('/api/pentagon/artwork/patch', {
-        imagePayload: base64,
-        targetHeight: 3840
-      });
+      const patched = patchPngBuffer(reader.result, 3840);
+      const url = URL.createObjectURL(patched.blob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = file.name.replace(/\.png$/i, '') + '_long_glitched.png';
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-      if (res.patchedBase64) {
-        const downloadLink = document.createElement('a');
-        downloadLink.href = res.patchedBase64;
-        downloadLink.download = file.name.replace(/\.png$/i, '') + '_long_glitched.png';
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-      }
-
-      if ($('artworkConsoleCmd') && res.consoleScript) {
-        $('artworkConsoleCmd').value = res.consoleScript;
+      if ($('artworkConsoleCmd') && patched.consoleScript) {
+        $('artworkConsoleCmd').value = patched.consoleScript;
       }
 
       if ($('artworkStatusText')) {
-        $('artworkStatusText').textContent = `✅ ${res.message || 'PNG parcheado y descargado automáticamente'}`;
+        $('artworkStatusText').textContent = `✅ ${patched.message}`;
       }
       notice('¡PNG parcheado con éxito! Se descargó automáticamente a tu PC.');
     } catch (e) {
@@ -2809,7 +2816,7 @@ async function patchInfiniteArtwork() {
   reader.onerror = () => {
     notice('Error al leer el archivo PNG local.');
   };
-  reader.readAsDataURL(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function copyArtworkConsoleCommand() {

@@ -599,8 +599,8 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       let size=0,done=false;const chunks=[];
       const cleanup=()=>{req.removeListener('data',data);req.removeListener('end',end);req.removeListener('error',error);req.removeListener('aborted',aborted);};
       const error=()=>{if(done)return;done=true;cleanup();chunks.length=0;reject(fail('The request could not be read.',400));};
-      const aborted=()=>error();
-      const data=chunk=>{if(done)return;size+=chunk.length;if(size>65536){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
+      const maxLimit = 15 * 1024 * 1024;
+      const data=chunk=>{if(done)return;size+=chunk.length;if(size>maxLimit){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
       const end=()=>{if(done)return;done=true;cleanup();resolve(Buffer.concat(chunks,size));};
       req.on('data',data);req.once('end',end);req.once('error',error);req.once('aborted',aborted);
     });
@@ -1488,81 +1488,142 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       }
 
       // --- PENTAGON ELITE ROUTES ---
-      if (url.pathname === '/api/pentagon/status' && req.method === 'GET') {
-        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
-          return json(res, 200, {
-            vanity: { active: false, checksCount: 0, lastCheckedTag: '', claimedTag: null, watchlistLength: 40, recentLog: [] },
-            sniper: { active: false, checksCount: 0, boughtCount: 0, target: { appId: 730, marketHashName: 'Dreams & Nightmares Case', maxPriceCents: 15 }, recentLog: [] }
-          });
+      if (!global.pentagonVanitySniper) {
+        global.pentagonVanitySniper = new VanityUrlSniper(() => '', () => '');
+      }
+      if (!global.pentagonMarketSniper) {
+        global.pentagonMarketSniper = new MarketSniper(() => '', () => '');
+      }
+
+      function resolvePentagonSniper(payload = {}, queryAccountId = null) {
+        let acc = null;
+        const id = payload.accountId || queryAccountId;
+        if (id && id !== 'demo' && id !== 'global') {
+          acc = cfg.accounts.find(a => a.id === id) || null;
         }
-        const acc = getAccount(req, url);
-        const { st } = ensureAccountServices(acc);
+        if (!acc && cfg.accounts.length > 0) {
+          acc = cfg.accounts[0];
+        }
+        if (acc) {
+          const { st } = ensureAccountServices(acc);
+          return {
+            acc,
+            st,
+            vanity: st.vanitySniper,
+            market: st.marketSniper,
+            alchemy: st.alchemyTransmuter,
+            level: st.levelOptimizer
+          };
+        }
+        return {
+          acc: null,
+          st: null,
+          vanity: global.pentagonVanitySniper,
+          market: global.pentagonMarketSniper,
+          alchemy: new AlchemyTransmuter(() => ''),
+          level: new LevelOptimizer(() => '')
+        };
+      }
+
+      if (url.pathname === '/api/pentagon/status' && req.method === 'GET') {
+        const s = resolvePentagonSniper({}, url.searchParams.get('accountId'));
+        const vStat = s.vanity.getStatus();
+        const mStat = s.market.getStatus();
         return json(res, 200, {
-          vanity: st.vanitySniper ? st.vanitySniper.getStatus() : { active: false, checksCount: 0, recentLog: [] },
-          sniper: st.marketSniper ? st.marketSniper.getStatus() : { active: false, checksCount: 0, recentLog: [] }
+          success: true,
+          vanity: vStat,
+          vanitySniper: vStat,
+          sniper: mStat,
+          marketSniper: mStat
         });
       }
       if (url.pathname === '/api/pentagon/vanity/start' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
         const list = data?.watchlist || data?.tags;
-        if (Array.isArray(list)) st.vanitySniper.setWatchlist(list);
-        st.vanitySniper.start(Number(data?.intervalMs) || 2500);
-        return json(res, 200, { success: true, status: st.vanitySniper.getStatus(), message: 'Radar de URLs cortas de 3 letras activado.' });
+        if (Array.isArray(list)) s.vanity.setWatchlist(list);
+        s.vanity.start(Number(data?.intervalMs) || 1500);
+        const vStat = s.vanity.getStatus();
+        return json(res, 200, {
+          success: true,
+          status: vStat,
+          vanity: vStat,
+          vanitySniper: vStat,
+          message: 'Radar de URLs cortas de 3 letras activado.'
+        });
       }
       if (url.pathname === '/api/pentagon/vanity/stop' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
-        st.vanitySniper.stop();
-        return json(res, 200, { success: true, status: st.vanitySniper.getStatus(), message: 'Radar de URLs cortas detenido.' });
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
+        s.vanity.stop();
+        const vStat = s.vanity.getStatus();
+        return json(res, 200, {
+          success: true,
+          status: vStat,
+          vanity: vStat,
+          vanitySniper: vStat,
+          message: 'Radar de URLs cortas detenido.'
+        });
       }
       if (url.pathname === '/api/pentagon/vanity/set-list' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
         const list = data?.watchlist || data?.tags || [];
-        st.vanitySniper.setWatchlist(list);
-        return json(res, 200, { success: true, status: st.vanitySniper.getStatus(), message: 'Lista de URLs actualizada.' });
+        s.vanity.setWatchlist(list);
+        const vStat = s.vanity.getStatus();
+        return json(res, 200, {
+          success: true,
+          status: vStat,
+          vanity: vStat,
+          vanitySniper: vStat,
+          message: 'Lista de URLs actualizada.'
+        });
       }
       if (url.pathname === '/api/pentagon/sniper/start' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
         const targetAppId = data?.appId || data?.appid || 730;
         const targetName = data?.marketHashName || data?.market_hash_name || 'Dreams & Nightmares Case';
         const targetPrice = Number(data?.maxPriceCents || data?.max_price_cents) || 15;
-        st.marketSniper.setTarget(targetAppId, targetName, targetPrice);
-        st.marketSniper.start(Number(data?.intervalMs || data?.pollIntervalMs) || 1500);
-        return json(res, 200, { success: true, status: st.marketSniper.getStatus(), message: 'Radar de liquidaciones activado.' });
+        s.market.setTarget(targetAppId, targetName, targetPrice);
+        s.market.start(Number(data?.intervalMs || data?.pollIntervalMs) || 1500);
+        const mStat = s.market.getStatus();
+        return json(res, 200, {
+          success: true,
+          status: mStat,
+          sniper: mStat,
+          marketSniper: mStat,
+          message: 'Radar de liquidaciones activado.'
+        });
       }
       if (url.pathname === '/api/pentagon/sniper/stop' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
-        st.marketSniper.stop();
-        return json(res, 200, { success: true, status: st.marketSniper.getStatus(), message: 'Radar de liquidaciones detenido.' });
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
+        s.market.stop();
+        const mStat = s.market.getStatus();
+        return json(res, 200, {
+          success: true,
+          status: mStat,
+          sniper: mStat,
+          marketSniper: mStat,
+          message: 'Radar de liquidaciones detenido.'
+        });
       }
       if (url.pathname === '/api/pentagon/alchemy/catalog' && req.method === 'GET') {
-        const acc = getAccount(req, url);
-        const { st } = ensureAccountServices(acc);
-        const list = await st.alchemyTransmuter.getProfitableBoosterCatalog();
+        const s = resolvePentagonSniper({}, url.searchParams.get('accountId'));
+        const list = await s.alchemy.getProfitableBoosterCatalog();
         return json(res, 200, { success: true, list, catalog: list });
       }
       if (url.pathname === '/api/pentagon/alchemy/craft' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
         const targetAppId = Number(data?.appId || data?.appid) || 730;
-        const result = await st.alchemyTransmuter.craftBooster(targetAppId);
+        const result = await s.alchemy.craftBooster(targetAppId);
         return json(res, 200, result);
       }
       if (url.pathname === '/api/pentagon/level/recommend' && req.method === 'GET') {
-        const acc = getAccount(req, url);
-        const { st } = ensureAccountServices(acc);
-        const list = await st.levelOptimizer.getRecommendedCheapSets();
+        const s = resolvePentagonSniper({}, url.searchParams.get('accountId'));
+        const list = await s.level.getRecommendedCheapSets();
         return json(res, 200, { success: true, list, recommendations: list });
       }
       if (url.pathname === '/api/pentagon/level/craft' && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
+        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
         const targetAppId = Number(data?.appId || data?.appid) || 400;
-        const result = await st.levelOptimizer.craftBadge(targetAppId);
+        const result = await s.level.craftBadge(targetAppId);
         return json(res, 200, result);
       }
       if (url.pathname === '/api/pentagon/artwork/patch' && req.method === 'POST') {
