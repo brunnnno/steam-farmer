@@ -187,7 +187,21 @@ const i18n = {
     unownedSectionDesc: "Valve valida la licencia en CMsgClientStoreUserStats2. Usa estas 4 vías REA verificadas: Préstamo Familiar (Steam Families), Licencia Temporal Free On-Demand, AppID 480 (Spacewar) o exportar configuración para OpenSteamTool.",
     exportOpenSteamToolBtn: "📦 Exportar Configuración para OpenSteamTool",
     claimCurrentGameFreeBtn: "🆓 Reclamar Licencia Temporal (Free On-Demand)",
-    openSpacewar480Btn: "🛸 Abrir AppID 480 (Spacewar)"
+    openSpacewar480Btn: "🛸 Abrir AppID 480 (Spacewar)",
+    samMasterResetBtn: "🔥 Resetear Todas las Estadísticas y Logros (Master Wipe)",
+    collisionBypassOnBtn: "🛡️ Farmeo En Línea Sin Pausas: Activado",
+    collisionBypassOffBtn: "🛡️ Farmeo En Línea Sin Pausas: Desactivado",
+    pioneerEyebrow: "PROTOCOLOS BINARIOS VALVE · HEADLESS ENGINE",
+    pioneerPanelTitle: "Funciones Pioneras (CS2/TF2 GC, Steam Deck & Tournament Ghost)",
+    gcDefaultStatus: "Conecta sin GPU al Game Coordinator (ClientToGC 4006) para reclamar el Weekly Care Package de CS2 y drops de TF2.",
+    connectGcBtn: "Conectar GC CS2/TF2",
+    claimCarePackageBtn: "Reclamar Weekly Care Package",
+    steamDeckDefaultStatus: "Emula presencia de SteamOS (gaming_device_type = 2) y reclama cosméticos permanentes de Steam Deck.",
+    spoofSteamDeckBtn: "Simular presencia Steam Deck",
+    claimSteamDeckRewardsBtn: "Obtener Recompensas Permanentes de Steam Deck",
+    tournamentDefaultStatus: "Envía heartbeats de visualización a Broadcast.WatchBroadcast#1 sin descargar video para farmear drops de Majors.",
+    watchTournamentGhostBtn: "Iniciar Farmeo Headless de Drops de Major",
+    stopTournamentGhostBtn: "Detener"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
@@ -356,7 +370,21 @@ const i18n = {
     unownedSectionDesc: "Valve validates game ownership on CMsgClientStoreUserStats2. Use these 4 verified REA pathways for unowned games: Steam Families loan tickets, Free On-Demand temporary licenses, AppID 480 (Spacewar), or OpenSteamTool local config export.",
     exportOpenSteamToolBtn: "📦 Export Configuration for OpenSteamTool",
     claimCurrentGameFreeBtn: "🆓 Claim Free On-Demand License",
-    openSpacewar480Btn: "🛸 Open AppID 480 (Spacewar)"
+    openSpacewar480Btn: "🛸 Open AppID 480 (Spacewar)",
+    samMasterResetBtn: "🔥 Reset All Statistics & Achievements (Master Wipe)",
+    collisionBypassOnBtn: "🛡️ Non-Stop Online Farming: ON",
+    collisionBypassOffBtn: "🛡️ Non-Stop Online Farming: OFF",
+    pioneerEyebrow: "VALVE BINARY PROTOCOLS · HEADLESS ENGINE",
+    pioneerPanelTitle: "Pioneer Features (CS2/TF2 GC, Steam Deck & Tournament Ghost)",
+    gcDefaultStatus: "Connect headlessly to the Game Coordinator (ClientToGC 4006) to claim CS2 Weekly Care Packages and TF2 drops.",
+    connectGcBtn: "Connect CS2/TF2 GC",
+    claimCarePackageBtn: "Claim Weekly Care Package",
+    steamDeckDefaultStatus: "Spoof SteamOS presence (gaming_device_type = 2) and claim permanent Steam Deck profile cosmetics.",
+    spoofSteamDeckBtn: "Simulate Steam Deck Presence",
+    claimSteamDeckRewardsBtn: "Claim Permanent Steam Deck Rewards",
+    tournamentDefaultStatus: "Send watch heartbeats to Broadcast.WatchBroadcast#1 with zero video bandwidth to farm Major drops.",
+    watchTournamentGhostBtn: "Start Headless Major Drops Farming",
+    stopTournamentGhostBtn: "Stop"
   }
 };
 function t(key) {
@@ -732,6 +760,11 @@ function updateActiveAccountControlsI18n(acc = active) {
     $('stealthPrivacyBtn').classList.toggle('stealth-privacy-active', isStealth);
     $('stealthPrivacyBtn').textContent = t(isStealth ? 'stealthFarmingOnBtn' : 'stealthFarmingOffBtn');
   }
+  if ($('collisionBypassBtn')) {
+    const isBypass = Boolean(acc.ignoreSessionCollision);
+    $('collisionBypassBtn').classList.toggle('collision-bypass-active', isBypass);
+    $('collisionBypassBtn').textContent = t(isBypass ? 'collisionBypassOnBtn' : 'collisionBypassOffBtn');
+  }
   if ($('loyaltyPointsText')) {
     const pts = Number(acc.steamPoints) || 0;
     $('loyaltyPointsText').textContent = `${pts.toLocaleString('en-US')} pts`;
@@ -760,6 +793,7 @@ function setGuestModeLayout(isGuest) {
   if ($('cardsBtn')) $('cardsBtn').hidden = guest;
   if ($('personaBtn')) $('personaBtn').hidden = guest;
   if ($('stealthPrivacyBtn')) $('stealthPrivacyBtn').hidden = guest;
+  if ($('collisionBypassBtn')) $('collisionBypassBtn').hidden = guest;
   if ($('badgeStatus')) $('badgeStatus').hidden = guest;
   if ($('accountsBarSection')) $('accountsBarSection').hidden = guest;
   if ($('sessionOverviewPanel')) $('sessionOverviewPanel').hidden = guest;
@@ -2085,8 +2119,12 @@ async function directApplyChanges({selection,bulkAction,resetCounters}={}){
     };
     const result=await api('/api/achievement/change',payload);
     if(serial===achSerial&&id===currentAchAppId&&account===activeAccountId){
-      rememberAchievements(previewKey(account,id,currentAchMethod),{achievements:currentAchList});
+      achievementPreviews.delete(previewKey(account,id,currentAchMethod));
+      achCache.delete(`${account}:${id}`);
       if($('undoLastOperationBtn'))$('undoLastOperationBtn').hidden=false;
+      if(typeof window.testUI==='undefined'){
+        await openAchModal(id,title,true,'protocol');
+      }
     }
     notice(result.message||'Steam confirmed the achievement changes.');
   }catch(e){
@@ -2398,16 +2436,97 @@ async function resetAllGameStats(){
   const stealth=Boolean($('stealthModeToggle')?.checked);
   experimentBusy=true;renderStatsModal();
   try{
-    const result=await api('/api/stats',{accountId:account,appid:id,resetAll:true,stealth});
+    const result=await api('/api/stats',{accountId:account,appid:id,resetAll:true,action:'reset_all',stealth});
     if(serial!==achSerial)return;
+    achievementPreviews.delete(previewKey(account,id,currentAchMethod));
+    achCache.delete(`${account}:${id}`);
     if(Array.isArray(result.stats))currentStatsList=result.stats;
+    if(Array.isArray(result.achievements)){
+      currentAchList=AchievementRarity.normalizeRows(result.achievements.map(a=>({...a,name:String(a.name||a.apiname||'Achievement'),description:String(a.description||''),unlocked:typeof a.unlocked==='boolean'?a.unlocked:false})));
+      renderAchModal(0);
+    }
     modifiedStats.clear();
-    notice(result.message||'All game statistics reset on Steam.');
+    notice(result.message||'Todas las estadísticas y logros del juego fueron reiniciados a 0 en los servidores de Steam.');
     renderStatsModal();
   }catch(e){
     notice(e.message);
   }finally{
     experimentBusy=false;renderStatsModal();
+  }
+}
+async function toggleCollisionBypass(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/toggle-collision-bypass',{accountId:activeAccountId});
+    if(active)active.ignoreSessionCollision=Boolean(res?.ignoreSessionCollision);
+    updateActiveAccountControlsI18n(active);
+    if(res?.message)notice(res.message);
+    await loadStatus();
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function connectGameCoordinator(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/gc/connect',{accountId:activeAccountId});
+    if($('gcStatusText')&&res?.message)$('gcStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function claimCs2WeeklyPackage(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/gc/cs2/claim-package',{accountId:activeAccountId});
+    if($('gcStatusText')&&res?.message)$('gcStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function spoofSteamDeckPresence(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/steamdeck/spoof',{accountId:activeAccountId});
+    if($('steamDeckStatusText')&&res?.message)$('steamDeckStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function claimSteamDeckPermanentRewards(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/steamdeck/claim-rewards',{accountId:activeAccountId});
+    if($('steamDeckStatusText')&&res?.message)$('steamDeckStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function startTournamentGhost(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const broadcastSteamId=($('tournamentBroadcastIdInput')?.value||'').trim()||'76561198000000000';
+  try{
+    const res=await api('/api/tournament/watch',{accountId:activeAccountId,broadcastSteamId});
+    if($('tournamentGhostStatusText')&&res?.message)$('tournamentGhostStatusText').textContent=res.message;
+    if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').hidden=false;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function stopTournamentGhost(){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/tournament/stop',{accountId:activeAccountId});
+    if($('tournamentGhostStatusText')&&res?.message)$('tournamentGhostStatusText').textContent=res.message;
+    if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').hidden=true;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
   }
 }
 
@@ -2662,6 +2781,14 @@ if($('platinumPaceMonthsBtn'))$('platinumPaceMonthsBtn').addEventListener('click
 if($('btnExportOpenSteamTool'))$('btnExportOpenSteamTool').addEventListener('click',()=>exportOpenSteamToolConfig());
 if($('btnClaimCurrentGameFree'))$('btnClaimCurrentGameFree').addEventListener('click',()=>claimCurrentGameFreeLicense());
 if($('btnOpenSpacewar480'))$('btnOpenSpacewar480').addEventListener('click',()=>openSpacewar480());
+if($('samMasterResetBtn'))$('samMasterResetBtn').addEventListener('click',()=>resetAllGameStats());
+if($('collisionBypassBtn'))$('collisionBypassBtn').addEventListener('click',()=>toggleCollisionBypass());
+if($('btnConnectGC'))$('btnConnectGC').addEventListener('click',()=>connectGameCoordinator());
+if($('btnClaimCarePackage'))$('btnClaimCarePackage').addEventListener('click',()=>claimCs2WeeklyPackage());
+if($('btnSpoofSteamDeck'))$('btnSpoofSteamDeck').addEventListener('click',()=>spoofSteamDeckPresence());
+if($('btnClaimSteamDeckRewards'))$('btnClaimSteamDeckRewards').addEventListener('click',()=>claimSteamDeckPermanentRewards());
+if($('btnWatchTournamentGhost'))$('btnWatchTournamentGhost').addEventListener('click',()=>startTournamentGhost());
+if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').addEventListener('click',()=>stopTournamentGhost());
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
 if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());

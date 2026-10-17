@@ -48,6 +48,9 @@ const {ResourceBudget}=require('./lib/resources');
 const {createPercentageReader}=require('./lib/rarity-history');
 const {revisionFor,changesBetween}=require('./lib/achievement-sync');
 const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge, estimateCardBatchNet, DEMO_CATALOG, fetchPublicDemoAchievements, exploreDiscoveryQueue, fetchSellableCards, quickSellCards, fetchHowLongToBeat } = require('./lib/steam-data');
+const { ValveGameCoordinatorHub } = require('./lib/cs2-coordinator');
+const { enableSteamDeckPresence, registerSteamDeckRewards } = require('./lib/steam-deck');
+const { TournamentGhostService } = require('./lib/tournament-ghost');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -295,11 +298,12 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
             : manualGames)
         : manualGames;
     if (!games.length && manualGames.length) games = manualGames;
-    if (st.inspectingAppId && st.connected && !st.isPaused && !st.isCollisionPaused && !st.isSleepPaused) {
+    const collisionActive = !acc.ignoreSessionCollision && st.isCollisionPaused;
+    if (st.inspectingAppId && st.connected && !st.isPaused && !collisionActive && !st.isSleepPaused) {
       const baseGames = Array.isArray(st.inspectPreviousGames) && st.inspectPreviousGames.length ? st.inspectPreviousGames : games;
       games = [st.inspectingAppId, ...baseGames.filter(x => x !== st.inspectingAppId)].slice(0, 32);
     }
-    if (!st.connected || st.isPaused || st.isCollisionPaused || st.isSleepPaused) games = [];
+    if (!st.connected || st.isPaused || collisionActive || st.isSleepPaused) games = [];
     const list = [...games]; if (games.length && acc.customStatus && list.length < 32) list.push(acc.customStatus);
     if (!force && JSON.stringify(list) === JSON.stringify(st.playedGames)) return;
     try {
@@ -391,6 +395,10 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     if (!token || !validClientToken(token)) { st.error = 'Please sign in again.'; return; }
     const client = new User({ renewRefreshTokens: !isEnvironmentAccount(acc), autoRelogin: false, dataDirectory: path.join(directory, 'steam-cache') });
     clients.set(acc.id, client); st.error = 'Connecting to Steam…';
+    st.gcHub?.destroy?.();
+    st.tournamentGhost?.stopWatching?.();
+    st.gcHub = new ValveGameCoordinatorHub(client, acc.id);
+    st.tournamentGhost = new TournamentGhostService(client, acc.id);
     const isCurrent = () => !closing && clients.get(acc.id) === client && cfg.accounts.includes(acc);
     client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
@@ -405,7 +413,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       try { st.tokenAccountMatches = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).sub === st.steamId64; } catch { st.tokenAccountMatches = false; }
       console.log(`[Steam] ${acc.id}: connected; token account matches: ${st.tokenAccountMatches}`);
       acc.mySteamID = st.steamId64;try{save();}catch{disconnect(acc.id);return;}
-      st.isCollisionPaused = Boolean(client.playingState?.blocked);
+      st.isCollisionPaused = !acc.ignoreSessionCollision && Boolean(client.playingState?.blocked);
       if (st.isCollisionPaused) timedManager.pauseAccount(acc.id); else timedManager.resumeAccount(acc.id);
       timedManager.rehydrate({
         accountId: acc.id,
@@ -435,8 +443,16 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         if (typeof client._send === 'function') protocolRead(client, checkApp).then(result => { if (isCurrent()) console.log(`[Steam protocol check] app=${checkApp} verified=${result.verified} count=${result.achievements.length} unlocked=${result.achievements.filter(a=>a.unlocked===true).length} serverControlled=${result.diagnostics.serverControlled}`); }).catch(err => { if (isCurrent()) console.warn(`[Steam protocol check] app=${checkApp}: ${err.status ? err.message : 'unavailable'}`); });
         steamRead(acc, st, checkApp, process.env.STEAM_API_KEY || '').then(result => { if (isCurrent()) console.log(`[Steam link check] account=${acc.id} app=${checkApp} source=${result.source || 'none'} personalVerified=${Boolean(result.verified)} count=${result.achievements?.length || 0} unlocked=${(result.achievements || []).filter(a=>a.unlocked===true).length} diagnostics=${JSON.stringify(result.diagnostics?.personal || {})}`); }).catch(() => { if (isCurrent()) console.warn(`[Steam link check] account=${acc.id}: achievement retrieval unavailable`); }); }
       if (acc.cardFarming) scan(acc).catch(() => {}); } });
-    client.on('playingState', blocked => {
+    client.on('playingState', (blocked, playingApp) => {
       if (!isCurrent()) return;
+      if (acc.ignoreSessionCollision) {
+        if (st.isCollisionPaused) {
+          st.isCollisionPaused = false;
+          timedManager.resumeAccount(acc.id);
+          farming(acc, true);
+        }
+        return;
+      }
       const changed = st.isCollisionPaused !== blocked; st.isCollisionPaused = blocked;
       if (blocked) timedManager.pauseAccount(acc.id);
       else timedManager.resumeAccount(acc.id);
@@ -483,8 +499,24 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     try { client.logOn({ refreshToken: token, logonID: crypto.randomInt(1, 0xffffffff), machineName: 'SteamFarmer personal' }); }
     catch { st.error = 'Could not use the saved session. Please sign in again.'; clients.delete(acc.id); }
   }
+  function ensureAccountServices(acc) {
+    const st = stateFor(acc.id);
+    const client = clients.get(acc.id);
+    if (client && (!st.gcHub || st.gcHub.client !== client)) {
+      st.gcHub?.destroy?.();
+      st.gcHub = new ValveGameCoordinatorHub(client, acc.id);
+    }
+    if (client && (!st.tournamentGhost || st.tournamentGhost.client !== client)) {
+      st.tournamentGhost?.stopWatching?.();
+      st.tournamentGhost = new TournamentGhostService(client, acc.id);
+    }
+    return { st, client };
+  }
   function disconnect(id) {
-    const st = states.get(id); if (st?.reconnectTimer) clearTimeout(st.reconnectTimer);
+    const st = states.get(id);
+    if (st?.reconnectTimer) clearTimeout(st.reconnectTimer);
+    st?.gcHub?.destroy?.();
+    st?.tournamentGhost?.stopWatching?.();
     const client = clients.get(id); clients.delete(id);
     if (client) { client.removeAllListeners(); client.on('error', () => {}); try { client.gamesPlayed([]); client.logOff(); } catch {} }
     states.delete(id);
@@ -516,7 +548,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           : st.isFarming
             ? 'manual'
             : 'idle';
-    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, stealthFarming: Boolean(acc.stealthFarming), steamPoints: st.steamPoints ?? null, totalCardsEarned: st.totalCardsEarned ?? null, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
+    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, ignoreSessionCollision: Boolean(acc.ignoreSessionCollision), stealthFarming: Boolean(acc.stealthFarming), privateApps: Boolean(acc.stealthFarming || acc.privateApps), steamDeckSpoofed: Boolean(st.steamDeckSpoofed), gcStatus: st.gcHub ? st.gcHub.getStatus() : { cs2: { connected: false, data: null }, tf2: { connected: false, data: null } }, tournamentStatus: st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false, broadcastId: null, heartbeatsSent: 0 }, steamPoints: st.steamPoints ?? null, totalCardsEarned: st.totalCardsEarned ?? null, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
@@ -1040,7 +1072,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Editing statistics requires the available connected main Steam account.',409);
         rate(`stats-write:${acc.id}`,20,60000);
-        const id=appId(data.appid),resetAll=Boolean(data.resetAll),stealth=Boolean(data.stealth);
+        const id=appId(data.appid),resetAll=Boolean(data.resetAll||data.action==='reset_all'),stealth=Boolean(data.stealth);
         if(experimentBusy.has(acc.id))throw fail('An operation is already running.',409);
         const existingUndoJob=timedManager.status(acc.id,id);
         if(existingUndoJob?.active)console.log(`[TimedSync] Manual achievement undo detected on app ${id}. Cancelling pending timed schedule.`);
@@ -1339,6 +1371,105 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           totalGames: acc.games.length,
           message: `Claimed 32 Free Farming Games pack (${resClaim.granted.length} new licenses granted · ${acc.games.length}/32 slots active).`
         });
+      }
+      if (url.pathname === '/api/toggle-collision-bypass' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st, client } = ensureAccountServices(acc);
+        acc.ignoreSessionCollision = data.ignoreSessionCollision !== undefined
+          ? Boolean(data.ignoreSessionCollision)
+          : !Boolean(acc.ignoreSessionCollision);
+        if (acc.ignoreSessionCollision) {
+          st.isCollisionPaused = false;
+          if (client?.playingState) client.playingState.blocked = false;
+          timedManager.resumeAccount(acc.id);
+        }
+        save();
+        farming(acc, true);
+        return json(res, 200, {
+          success: true,
+          ignoreSessionCollision: acc.ignoreSessionCollision,
+          message: acc.ignoreSessionCollision
+            ? 'Colisión de sesión ignorada: SteamFarmer seguirá farmeando en línea aunque uses Steam en tu PC.'
+            : 'Detección de colisión activada: Se pausará cuando juegues en tu PC.'
+        });
+      }
+      if (url.pathname === '/api/gc/status' && req.method === 'GET') {
+        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { cs2: { connected: false, data: null }, tf2: { connected: false, data: null } });
+        }
+        const acc = getAccount(req, url);
+        const { st } = ensureAccountServices(acc);
+        return json(res, 200, st.gcHub ? st.gcHub.getStatus() : { active: false });
+      }
+      if (url.pathname === '/api/gc/connect' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        const cs2Ok = st.gcHub ? st.gcHub.connectCS2() : false;
+        const tf2Ok = st.gcHub ? st.gcHub.connectTF2() : false;
+        return json(res, 200, {
+          success: Boolean(cs2Ok || tf2Ok),
+          cs2Connected: cs2Ok,
+          tf2Connected: tf2Ok,
+          status: st.gcHub ? st.gcHub.getStatus() : { active: false },
+          message: 'Conexión enviada al Game Coordinator de CS2 (730) y TF2 (440).'
+        });
+      }
+      if (url.pathname === '/api/gc/cs2/claim-package' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        const result = st.gcHub ? st.gcHub.claimWeeklyCarePackage() : { success: false, message: 'Game Coordinator no disponible.' };
+        return json(res, 200, result);
+      }
+      if (url.pathname === '/api/steamdeck/spoof' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st, client } = ensureAccountServices(acc);
+        const ok = enableSteamDeckPresence(client);
+        st.steamDeckSpoofed = Boolean(ok);
+        return json(res, 200, {
+          success: ok,
+          steamDeckSpoofed: st.steamDeckSpoofed,
+          message: ok ? 'Presencia de Steam Deck activada en amigos.' : 'No se pudo activar la presencia de Steam Deck.'
+        });
+      }
+      if (url.pathname === '/api/steamdeck/claim-rewards' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { client } = ensureAccountServices(acc);
+        try {
+          const result = await registerSteamDeckRewards(client, data.serialNumber || 'FXAA00000001');
+          return json(res, 200, result);
+        } catch (err) {
+          return json(res, 500, { success: false, message: err.message });
+        }
+      }
+      if (url.pathname === '/api/tournament/watch' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        const targetId = text(String(data.broadcastSteamId || '76561198000000000'), 64);
+        const ok = st.tournamentGhost ? st.tournamentGhost.startWatching(targetId) : false;
+        return json(res, 200, {
+          success: ok,
+          broadcastId: targetId,
+          status: st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false },
+          message: `Tournament Ghost activo en broadcast ${targetId}`
+        });
+      }
+      if (url.pathname === '/api/tournament/stop' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.tournamentGhost?.stopWatching?.();
+        return json(res, 200, {
+          success: true,
+          status: st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false },
+          message: 'Tournament Ghost detenido.'
+        });
+      }
+      if (url.pathname === '/api/tournament/status' && req.method === 'GET') {
+        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { active: false, broadcastId: null, heartbeatsSent: 0 });
+        }
+        const acc = getAccount(req, url);
+        const { st } = ensureAccountServices(acc);
+        return json(res, 200, st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false });
       }
       const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
       if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){
@@ -1757,6 +1888,11 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         }
         case '/api/persona': {
           acc.personaState = acc.personaState === 7 ? 1 : 7;
+          if (acc.ignoreSessionCollision && st.isCollisionPaused) {
+            st.isCollisionPaused = false;
+            const c = clients.get(acc.id);
+            if (c?.playingState) c.playingState.blocked = false;
+          }
           if (st.connected) {
             const client = clients.get(acc.id);
             if (client) {

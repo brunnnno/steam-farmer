@@ -1689,4 +1689,120 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(ostRes.data.format, "OpenSteamTool-REA-v1");
   assert.equal(ostRes.data.spacewarAppId, 480);
   assert.match(ostRes.data.luaScript, /addappid\(690790\)/);
+
+  // 28. v58: Definitive DiRT Rally 2.0 Master Wipe (stats: []), Online Collision Bypass (ignoreSessionCollision), CS2/TF2 GC, Steam Deck Rewards & Tournament Ghost
+  // 28a. Verify dirtClient received Master Wipe packet (explicit_reset: true, stats: [])
+  let dirtMasterWipeSeen = false;
+  dirtStats = new Map([[1, 1], [2, 25], [3, 0]]); // Only 1 of 2 achievements unlocked (simulating 30 of 70 in DiRT Rally 2.0)
+  dirtClient._send = (header, body, cb) => {
+    if (header.msg === EMsg.ClientStoreUserStats2) {
+      const decoded = Schema.CMsgClientStoreUserStats2.decode(body);
+      if (decoded.explicit_reset && (!decoded.stats || decoded.stats.length === 0)) {
+        dirtMasterWipeSeen = true;
+        for (const k of dirtStats.keys()) dirtStats.set(k, 0);
+      } else {
+        for (const s of decoded.stats || []) dirtStats.set(s.stat_id, s.stat_value >>> 0);
+      }
+      queueMicrotask(() => cb(Buffer.from(Schema.CMsgClientStoreUserStatsResponse.encode({
+        game_id: "690790", eresult: 1, crc_stats: 205, stats_out_of_date: false, stats_failed_validation: []
+      }).finish()), { msg: EMsg.ClientStoreUserStatsResponse }));
+    }
+  };
+  const dirtPartialInit = await readDirt();
+  const dirtPartialSel = [{ apiname: "AVIATION_SCHOOL", action: "remove" }];
+  const dirtPartialPlan = prepareChanges(dirtPartialInit, 690790, dirtPartialSel, new Map(), undefined, { bulk: true, resetCounters: true });
+  const dirtPartialRes = await applyChanges(dirtClient, 690790, dirtPartialSel, {
+    expectedRevision: dirtPartialPlan.revision,
+    bulk: true,
+    resetCounters: true,
+    allowRetoggle: true,
+    overrideCooldown: true,
+    send: store,
+    read: readDirt,
+    readHistory: async () => new Map(),
+    beforeSend: async p => ({ operationId: "33333333-3333-3333-3333-333333333333", ...p })
+  });
+  assert.equal(dirtPartialRes.outcome, "confirmed");
+  assert.equal(dirtMasterWipeSeen, true, "applyChanges must send explicit_reset:true with stats:[] even when only a subset of achievements was unlocked");
+  assert.equal(dirtStats.get(1), 0);
+  assert.equal(dirtStats.get(2), 0);
+
+  // 28b. Online Collision Bypass (ignoreSessionCollision): when enabled, playingState(true) in Online mode does NOT empty games to []
+  const bypassRes = await f.request("/api/toggle-collision-bypass", { accountId: "user2" });
+  assert.equal(bypassRes.response.status, 200);
+  assert.equal(bypassRes.data.ignoreSessionCollision, true);
+  assert.equal(f.app.cfg.accounts[0].ignoreSessionCollision, true);
+  client.emit("playingState", true, 730);
+  assert.equal(f.app.states.get("user2").isCollisionPaused, false);
+  assert.equal(client.calls.at(-1).length, 32, "With ignoreSessionCollision=true, Online mode must keep all 32 games active and never empty to []");
+
+  // 28c. CS2 & TF2 Headless Game Coordinator (lib/cs2-coordinator.js)
+  const gcSent = [];
+  client.sendToGC = (appId, msgType, proto, payload) => {
+    gcSent.push({ appId, msgType, payload });
+  };
+  const gcConnectRes = await f.request("/api/gc/connect", { accountId: "user2" });
+  assert.equal(gcConnectRes.response.status, 200);
+  assert.equal(gcConnectRes.data.success, true);
+  assert.ok(gcSent.some(m => m.appId === 730 && m.msgType === 4006));
+  assert.ok(gcSent.some(m => m.appId === 440 && m.msgType === 4006));
+
+  client.emit("receivedFromGC", 730, 4004, Buffer.alloc(0));
+  client.emit("receivedFromGC", 730, 9109, Buffer.from([1, 2, 3, 4]));
+  client.emit("receivedFromGC", 440, 4004, Buffer.alloc(0));
+
+  const gcStatusRes = await f.request("/api/gc/status?accountId=user2");
+  assert.equal(gcStatusRes.response.status, 200);
+  assert.equal(gcStatusRes.data.cs2.connected, true);
+  assert.equal(gcStatusRes.data.cs2.data.eligibleForCarePackage, true);
+  assert.equal(gcStatusRes.data.tf2.connected, true);
+
+  const gcClaimRes = await f.request("/api/gc/cs2/claim-package", { accountId: "user2" });
+  assert.equal(gcClaimRes.response.status, 200);
+  assert.equal(gcClaimRes.data.success, true);
+
+  // 28d. Steam Deck Presence Spoof & Permanent Rewards (lib/steam-deck.js)
+  let deckSpoofPacket = null;
+  const origSend = client._send;
+  client._send = (header, body, cb) => {
+    if (header.msg === EMsg.ClientChangeStatus) {
+      deckSpoofPacket = Schema.CMsgClientChangeStatus.decode(body);
+      return;
+    }
+    if (header.msg === EMsg.ServiceMethodCallFromClient && header.proto?.target_job_name === "LoyaltyRewards.RegisterForSteamDeckRewards#1") {
+      const resp = Buffer.from(Schema.CLoyaltyRewards_RegisterForSteamDeckRewards_Response.encode({
+        granted_profile_modifier: true
+      }).finish());
+      queueMicrotask(() => cb(resp, { msg: EMsg.ServiceMethodResponse, proto: { eresult: 1 } }));
+      return;
+    }
+    return origSend.call(client, header, body, cb);
+  };
+
+  const deckSpoofRes = await f.request("/api/steamdeck/spoof", { accountId: "user2" });
+  assert.equal(deckSpoofRes.response.status, 200);
+  assert.equal(deckSpoofRes.data.success, true);
+  assert.equal(deckSpoofPacket?.gaming_device_type, 2);
+
+  const deckClaimRes = await f.request("/api/steamdeck/claim-rewards", { accountId: "user2" });
+  assert.equal(deckClaimRes.response.status, 200);
+  assert.equal(deckClaimRes.data.success, true);
+  assert.equal(deckClaimRes.data.granted, true);
+  assert.equal(deckClaimRes.data.permanent, true);
+
+  // 28e. Tournament Ghost (lib/tournament-ghost.js)
+  const watchRes = await f.request("/api/tournament/watch", { accountId: "user2", broadcastSteamId: "76561198099999999" });
+  assert.equal(watchRes.response.status, 200);
+  assert.equal(watchRes.data.success, true);
+  assert.equal(watchRes.data.status.active, true);
+  assert.equal(watchRes.data.status.broadcastId, "76561198099999999");
+  assert.equal(watchRes.data.status.heartbeatsSent, 1);
+
+  const tStatusRes = await f.request("/api/tournament/status?accountId=user2");
+  assert.equal(tStatusRes.response.status, 200);
+  assert.equal(tStatusRes.data.active, true);
+
+  const tStopRes = await f.request("/api/tournament/stop", { accountId: "user2" });
+  assert.equal(tStopRes.response.status, 200);
+  assert.equal(tStopRes.data.status.active, false);
 });

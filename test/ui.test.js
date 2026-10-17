@@ -1239,4 +1239,90 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   await new Promise(r => setTimeout(r, 20));
   assert.ok(v57Calls.some(c => c.url.startsWith("/api/games/730/opensteamtool-export")));
   assert.match(w.document.getElementById("importJsonInput").value, /OpenSteamTool-REA-v1/);
+
+  // 16. Verify v58 UI: #samMasterResetBtn, #collisionBypassBtn, and #pioneerFeaturesPanel (GC, Steam Deck, Tournament Ghost)
+  const v58Calls = [];
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    v58Calls.push({ url, body });
+    if (url === "/api/stats" && body?.resetAll) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          appid: 730,
+          outcome: "confirmed",
+          resetAll: true,
+          stats: [],
+          achievements: [{ apiname: "DONOR_ACH_1", name: "Donor Secret Achievement", description: "Reset to 0", unlocked: false, percent: 12.5 }],
+          message: "Todas las estadísticas y logros del juego fueron reiniciados a 0 en los servidores de Steam."
+        })
+      };
+    }
+    if (url === "/api/toggle-collision-bypass") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          ignoreSessionCollision: true,
+          message: "Colisión de sesión ignorada: SteamFarmer seguirá farmeando en línea aunque uses Steam en tu PC."
+        })
+      };
+    }
+    if (url === "/api/gc/connect") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "Conexión enviada al Game Coordinator de CS2 (730) y TF2 (440)." }) };
+    }
+    if (url === "/api/gc/cs2/claim-package") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "Solicitud de reclamo del Weekly Care Package enviada al Game Coordinator de CS2." }) };
+    }
+    if (url === "/api/steamdeck/spoof") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "Presencia de Steam Deck activada en amigos." }) };
+    }
+    if (url === "/api/steamdeck/claim-rewards") {
+      return { ok: true, status: 200, json: async () => ({ success: true, granted: true, permanent: true, message: "¡Recompensas exclusivas de Steam Deck activadas permanentemente en tu cuenta de Steam!" }) };
+    }
+    if (url === "/api/tournament/watch") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "Tournament Ghost activo en broadcast 76561198011111111" }) };
+    }
+    if (url === "/api/tournament/stop") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "Tournament Ghost detenido." }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ accounts: [{ ...connectedAcc, tokenSource: "environment", tokenAccountMatches: true, ignoreSessionCollision: true }], presets: [], timezone: "UTC" }) };
+  };
+
+  // Click #samMasterResetBtn
+  const masterResetBtn = w.document.getElementById("samMasterResetBtn");
+  assert.ok(masterResetBtn);
+  masterResetBtn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v58Calls.some(c => c.url === "/api/stats" && c.body?.resetAll === true && c.body?.action === "reset_all"));
+
+  // Click #collisionBypassBtn
+  const colBypassBtn = w.document.getElementById("collisionBypassBtn");
+  assert.ok(colBypassBtn);
+  colBypassBtn.click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v58Calls.some(c => c.url === "/api/toggle-collision-bypass"));
+  assert.equal(colBypassBtn.classList.contains("collision-bypass-active"), true);
+
+  // Click Pioneer Feature buttons (GC, Steam Deck, Tournament Ghost)
+  w.document.getElementById("btnConnectGC").click();
+  w.document.getElementById("btnClaimCarePackage").click();
+  w.document.getElementById("btnSpoofSteamDeck").click();
+  w.document.getElementById("btnClaimSteamDeckRewards").click();
+  w.document.getElementById("tournamentBroadcastIdInput").value = "76561198011111111";
+  w.document.getElementById("btnWatchTournamentGhost").click();
+  await new Promise(r => setTimeout(r, 25));
+
+  assert.ok(v58Calls.some(c => c.url === "/api/gc/connect"));
+  assert.ok(v58Calls.some(c => c.url === "/api/gc/cs2/claim-package"));
+  assert.ok(v58Calls.some(c => c.url === "/api/steamdeck/spoof"));
+  assert.ok(v58Calls.some(c => c.url === "/api/steamdeck/claim-rewards"));
+  assert.ok(v58Calls.some(c => c.url === "/api/tournament/watch" && c.body?.broadcastSteamId === "76561198011111111"));
+  assert.equal(w.document.getElementById("btnStopTournamentGhost").hidden, false);
+
+  w.document.getElementById("btnStopTournamentGhost").click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v58Calls.some(c => c.url === "/api/tournament/stop"));
 });

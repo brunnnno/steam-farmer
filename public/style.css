@@ -2942,3 +2942,23 @@ body.oled-theme {
   border-color: rgba(52, 211, 153, 0.55);
   background: rgba(52, 211, 153, 0.14);
 }
+
+/* ==========================================================================
+   SteamFarmer v58 — Collision Bypass, Master Wipe & Pioneer Features Suite
+   ========================================================================== */
+
+#collisionBypassBtn.collision-bypass-active {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.5);
+  background: rgba(16, 185, 129, 0.16);
+}
+
+#samMasterResetBtn {
+  border-color: rgba(244, 63, 94, 0.45);
+  color: #fda4af;
+}
+
+#samMasterResetBtn:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: rgba(244, 63, 94, 0.75);
+}
