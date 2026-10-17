@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=58">
+  <link rel="stylesheet" href="/style.css?v=59">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -493,6 +493,64 @@
           </div>
         </div>
       </details>
+      <details id="pentagonElitePanel" class="cards-panel pioneer-panel" aria-label="Suite Pentágono Élite" open>
+        <summary class="cards-panel-heading">
+          <div>
+            <span class="eyebrow" data-i18n="pentagonEyebrow">SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE</span>
+            <h3><span data-i18n="pentagonPanelTitle">El Pentágono de Élite: Mercado, Alquimia, URLs, Nivel y Vitrinas</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+          </div>
+          <span class="cards-summary" data-i18n="pentagonSummaryBadge">5 sistemas armados</span>
+        </summary>
+        <div class="task-center-grid" style="margin-top:10px;">
+          <!-- M1: Market Sniper -->
+          <div class="task-center-box status-green">
+            <span class="eyebrow">🎯 FRANCOTIRADOR DE MERCADO (100MS)</span>
+            <p id="marketSniperStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="marketSniperDesc">Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnStartMarketSniper" type="button" class="btn-main sam-quick-btn" data-i18n="startMarketSniperBtn">Activar Radar de Compras</button>
+              <button id="btnStopMarketSniper" type="button" class="btn-clear sam-quick-btn" data-i18n="stopMarketSniperBtn" hidden>Detener</button>
+            </div>
+          </div>
+
+          <!-- M2: Alchemy Transmuter -->
+          <div class="task-center-box status-purple">
+            <span class="eyebrow">♻️ BUCLE DE ALQUIMIA (TRASH-TO-CASH)</span>
+            <p id="alchemyStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="alchemyDesc">Convierte chatarra en gemas y forja Booster Packs de $3 a $5 USD para generar saldo Steam Wallet.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <input id="alchemyAppIdInput" type="number" value="730" placeholder="AppID" style="width:95px; padding:6px 10px; font-size:0.8rem;">
+              <button id="btnRunAlchemyCycle" type="button" class="btn-purple sam-quick-btn" data-i18n="runAlchemyBtn">Forjar Booster de Alto Margen</button>
+            </div>
+          </div>
+
+          <!-- M3: Vanity URL Sniper -->
+          <div class="task-center-box status-blue">
+            <span class="eyebrow">🏷️ FRANCOTIRADOR DE URLS DE 3 LETRAS</span>
+            <p id="vanityStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="vanityDesc">Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnStartVanitySniper" type="button" class="btn-action-sm sam-quick-btn" data-i18n="startVanitySniperBtn">Iniciar Radar de URLs</button>
+              <button id="btnStopVanitySniper" type="button" class="btn-clear sam-quick-btn" data-i18n="stopVanitySniperBtn" hidden>Detener</button>
+            </div>
+          </div>
+
+          <!-- M4: Level Optimizer -->
+          <div class="task-center-box status-green">
+            <span class="eyebrow">📈 OPTIMIZADOR DE NIVEL 50/100 ($0.15/SET)</span>
+            <p id="levelOptimizerStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="levelOptimizerDesc">Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <input id="levelOptimizerAppIdInput" type="number" value="730" placeholder="AppID" style="width:95px; padding:6px 10px; font-size:0.8rem;">
+              <button id="btnCraftCheapestBadge" type="button" class="btn-main sam-quick-btn" data-i18n="craftCheapestBadgeBtn">Forjar Set Económico (+100 XP)</button>
+            </div>
+          </div>
+
+          <!-- M5: Long Artwork Patcher -->
+          <div class="task-center-box status-purple">
+            <span class="eyebrow">🖼️ PARCHEADOR DE VITRINAS INFINITAS (IHDR GLITCH)</span>
+            <p id="artworkPatchStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="artworkPatcherDesc">Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x10000px) a tu perfil.</p>
+            <input type="file" id="artworkFileInput" accept="image/png" style="display:none;">
+            <button id="btnSelectArtworkToPatch" type="button" class="btn-purple sam-quick-btn" style="margin-top:8px;" data-i18n="selectArtworkPatchBtn">Subir y Parchear PNG Infinito</button>
+          </div>
+        </div>
+      </details>
       <div class="section-heading"><div><span class="eyebrow" data-i18n="makeItYoursEyebrow">MAKE IT YOURS</span><h2 data-i18n="gameControlsTitle">Game controls</h2></div></div>
       <div class="input-row">
         <div class="search-box-wrapper">
@@ -729,10 +787,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=58" defer></script>
-  <script src="/achievement-availability.js?v=58" defer></script>
-  <script src="/draft-settings.js?v=58" defer></script>
-  <script src="/achievement-live.js?v=58" defer></script>
-  <script src="/app.js?v=58" defer></script>
+  <script src="/achievement-rarity.js?v=59" defer></script>
+  <script src="/achievement-availability.js?v=59" defer></script>
+  <script src="/draft-settings.js?v=59" defer></script>
+  <script src="/achievement-live.js?v=59" defer></script>
+  <script src="/app.js?v=59" defer></script>
 </body>
 </html>

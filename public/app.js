@@ -201,7 +201,22 @@ const i18n = {
     claimSteamDeckRewardsBtn: "Obtener Recompensas Permanentes de Steam Deck",
     tournamentDefaultStatus: "Envía heartbeats de visualización a Broadcast.WatchBroadcast#1 sin descargar video para farmear drops de Majors.",
     watchTournamentGhostBtn: "Iniciar Farmeo Headless de Drops de Major",
-    stopTournamentGhostBtn: "Detener"
+    stopTournamentGhostBtn: "Detener",
+    pentagonEyebrow: "SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE",
+    pentagonPanelTitle: "El Pentágono de Élite: Mercado, Alquimia, URLs, Nivel y Vitrinas",
+    pentagonSummaryBadge: "5 sistemas armados",
+    marketSniperDesc: "Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.",
+    startMarketSniperBtn: "Activar Radar de Compras",
+    stopMarketSniperBtn: "Detener",
+    alchemyDesc: "Convierte chatarra en gemas y forja Booster Packs de $3 a $5 USD para generar saldo Steam Wallet.",
+    runAlchemyBtn: "Forjar Booster de Alto Margen",
+    vanityDesc: "Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.",
+    startVanitySniperBtn: "Iniciar Radar de URLs",
+    stopVanitySniperBtn: "Detener",
+    levelOptimizerDesc: "Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).",
+    craftCheapestBadgeBtn: "Forjar Set Económico (+100 XP)",
+    artworkPatcherDesc: "Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x10000px) a tu perfil.",
+    selectArtworkPatchBtn: "Subir y Parchear PNG Infinito"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
@@ -384,7 +399,22 @@ const i18n = {
     claimSteamDeckRewardsBtn: "Claim Permanent Steam Deck Rewards",
     tournamentDefaultStatus: "Send watch heartbeats to Broadcast.WatchBroadcast#1 with zero video bandwidth to farm Major drops.",
     watchTournamentGhostBtn: "Start Headless Major Drops Farming",
-    stopTournamentGhostBtn: "Stop"
+    stopTournamentGhostBtn: "Stop",
+    pentagonEyebrow: "VALVE UNDERGROUND SUITE · 5 ELITE WEAPONS",
+    pentagonPanelTitle: "The Elite Pentagon: Market, Alchemy, Vanity URLs, Level & Showcases",
+    pentagonSummaryBadge: "5 systems armed",
+    marketSniperDesc: "Snipes mispriced items or 90% discounts in milliseconds for instant resale.",
+    startMarketSniperBtn: "Start Market Sniper Radar",
+    stopMarketSniperBtn: "Stop",
+    alchemyDesc: "Converts cheap items into gems and crafts $3–$5 USD Booster Packs to multiply Steam Wallet balance.",
+    runAlchemyBtn: "Craft High-Margin Booster",
+    vanityDesc: "Watches legendary 3-letter vanity URLs (/id/pro, /id/neo, /id/won) and claims them in 150ms when freed.",
+    startVanitySniperBtn: "Start Vanity URL Radar",
+    stopVanitySniperBtn: "Stop",
+    levelOptimizerDesc: "Levels up using the cheapest card sets on Steam to double your passive weekly Booster Pack drops (+100%).",
+    craftCheapestBadgeBtn: "Craft Economical Set (+100 XP)",
+    artworkPatcherDesc: "Injects the binary IHDR exploit into PNG images to upload infinite vertical artworks (506x10000px) to your profile.",
+    selectArtworkPatchBtn: "Upload & Patch Infinite PNG"
   }
 };
 function t(key) {
@@ -2529,6 +2559,92 @@ async function stopTournamentGhost(){
     notice(e.message);
   }
 }
+const SAMPLE_1X1_PNG_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+async function startMarketSniper(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/sniper/start',{accountId:activeAccountId,targets:[{appId:730,marketHashName:'CS2 Case Key',maxPriceCents:25}]});
+    if($('marketSniperStatusText')&&res?.message)$('marketSniperStatusText').textContent=res.message;
+    if($('btnStopMarketSniper'))$('btnStopMarketSniper').hidden=false;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function stopMarketSniper(){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/sniper/stop',{accountId:activeAccountId});
+    if($('marketSniperStatusText')&&res?.message)$('marketSniperStatusText').textContent=res.message;
+    if($('btnStopMarketSniper'))$('btnStopMarketSniper').hidden=true;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function runAlchemyCycle(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const appId=Number($('alchemyAppIdInput')?.value||730)||730;
+  try{
+    const res=await api('/api/alchemy/craft-booster',{accountId:activeAccountId,appId});
+    if($('alchemyStatusText')&&res?.message)$('alchemyStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function startVanitySniper(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/vanity/start',{accountId:activeAccountId,watchlist:['pro','neo','won','god','dev']});
+    if($('vanityStatusText')&&res?.message)$('vanityStatusText').textContent=res.message;
+    if($('btnStopVanitySniper'))$('btnStopVanitySniper').hidden=false;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function stopVanitySniper(){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/vanity/stop',{accountId:activeAccountId});
+    if($('vanityStatusText')&&res?.message)$('vanityStatusText').textContent=res.message;
+    if($('btnStopVanitySniper'))$('btnStopVanitySniper').hidden=true;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function craftCheapestLevelBadge(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const appId=Number($('levelOptimizerAppIdInput')?.value||730)||730;
+  try{
+    const res=await api('/api/level/craft',{accountId:activeAccountId,appId});
+    if($('levelOptimizerStatusText')&&res?.message)$('levelOptimizerStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function submitArtworkForIhdrPatch(imagePayload = SAMPLE_1X1_PNG_BASE64) {
+  try {
+    const res = await api('/api/artwork/patch', { imagePayload });
+    if ($('artworkPatchStatusText') && res?.message) {
+      $('artworkPatchStatusText').textContent = `${res.message} (${res.originalHeight || 1}px → ${res.patchedHeight || 3840}px)`;
+    }
+    if (res?.patchedBase64) {
+      const a = element('a');
+      a.href = res.patchedBase64;
+      a.download = 'steamfarmer-infinite-artwork.png';
+      document.body.append(a);
+      a.click();
+      a.remove();
+    }
+    if (res?.message) notice(res.message);
+  } catch (e) {
+    notice(e.message);
+  }
+}
 
 /* SamRewritten Timed Modifications, Copy User Timings, Undo, Bulk Apps & JSON Import/Export */
 async function refreshTimedStatus(){
@@ -2789,6 +2905,31 @@ if($('btnSpoofSteamDeck'))$('btnSpoofSteamDeck').addEventListener('click',()=>sp
 if($('btnClaimSteamDeckRewards'))$('btnClaimSteamDeckRewards').addEventListener('click',()=>claimSteamDeckPermanentRewards());
 if($('btnWatchTournamentGhost'))$('btnWatchTournamentGhost').addEventListener('click',()=>startTournamentGhost());
 if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').addEventListener('click',()=>stopTournamentGhost());
+if($('btnStartMarketSniper'))$('btnStartMarketSniper').addEventListener('click',()=>startMarketSniper());
+if($('btnStopMarketSniper'))$('btnStopMarketSniper').addEventListener('click',()=>stopMarketSniper());
+if($('btnRunAlchemyCycle'))$('btnRunAlchemyCycle').addEventListener('click',()=>runAlchemyCycle());
+if($('btnStartVanitySniper'))$('btnStartVanitySniper').addEventListener('click',()=>startVanitySniper());
+if($('btnStopVanitySniper'))$('btnStopVanitySniper').addEventListener('click',()=>stopVanitySniper());
+if($('btnCraftCheapestBadge'))$('btnCraftCheapestBadge').addEventListener('click',()=>craftCheapestLevelBadge());
+if($('btnSelectArtworkToPatch'))$('btnSelectArtworkToPatch').addEventListener('click',()=>{
+  const fi=$('artworkFileInput');
+  if(fi&&typeof window.testUI==='undefined'&&fi.files&&fi.files.length===0){
+    try{fi.click();}catch{}
+  }else{
+    submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);
+  }
+});
+if($('artworkFileInput'))$('artworkFileInput').addEventListener('change',e=>{
+  const file=e.target?.files?.[0];
+  if(!file){submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);return;}
+  if(typeof FileReader==='function'){
+    const reader=new FileReader();
+    reader.onload=()=>submitArtworkForIhdrPatch(String(reader.result||SAMPLE_1X1_PNG_BASE64));
+    reader.readAsDataURL(file);
+  }else{
+    submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);
+  }
+});
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
 if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());

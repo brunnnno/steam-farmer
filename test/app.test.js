@@ -1805,4 +1805,123 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const tStopRes = await f.request("/api/tournament/stop", { accountId: "user2" });
   assert.equal(tStopRes.response.status, 200);
   assert.equal(tStopRes.data.status.active, false);
+
+  // 29. v59 Pentagon Elite Suite: MarketSniperService, AlchemyTransmuter, VanityUrlSniper, LevelOptimizer & LongArtworkPatcher
+  const { MarketSniperService } = require("../lib/market-sniper");
+  const { AlchemyTransmuter } = require("../lib/alchemy-transmuter");
+  const { VanityUrlSniper } = require("../lib/vanity-sniper");
+  const { LevelOptimizer } = require("../lib/level-optimizer");
+  const { patchPngForInfiniteHeight } = require("../lib/long-artwork-patcher");
+
+  // 29a. Unit test MarketSniperService with mock fetch
+  const sniperCalls = [];
+  const sniper = new MarketSniperService("sessionid=abc12345; steamLoginSecure=tok", "user2", {
+    fetchImpl: async (url, opts) => {
+      sniperCalls.push({ url, method: opts?.method || "GET" });
+      if (url.includes("/render/")) {
+        return {
+          ok: true,
+          json: async () => ({
+            listinginfo: {
+              "99887766": { converted_price: 2, converted_fee: 1 }
+            }
+          })
+        };
+      }
+      if (url.includes("/market/buylisting/99887766")) {
+        return { ok: true, json: async () => ({ wallet_info: { success: 1 } }) };
+      }
+      return { ok: false };
+    }
+  });
+  sniper.setTargets([{ appId: 730, marketHashName: "AK-47 | Slate", maxPriceCents: 10 }]);
+  sniper.active = true;
+  await sniper._poll();
+  sniper.stopScanning();
+  assert.equal(sniper.getStatus().boughtCount, 1);
+  assert.ok(sniperCalls.some(c => c.url.includes("/market/buylisting/99887766") && c.method === "POST"));
+
+  // 29b. Unit test AlchemyTransmuter with mock fetch
+  const alchemy = new AlchemyTransmuter("sessionid=abc12345", {
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => url.includes("ajaxconverttogems") ? { success: 1, goo_value: 100 } : { purchase_eresult: 1 }
+    })
+  });
+  const gemRes = await alchemy.convertItemToGems("555111");
+  assert.equal(gemRes.success, 1);
+  const boosterRes = await alchemy.craftHighValueBooster(730);
+  assert.equal(boosterRes.success, true);
+
+  // 29c. Unit test VanityUrlSniper with mock fetch
+  const vanity = new VanityUrlSniper("sessionid=abc12345", "76561198000000001", {
+    fetchImpl: async (url, opts) => {
+      if (opts?.method === "POST") {
+        return { ok: true, json: async () => ({ success: 1 }) };
+      }
+      return {
+        status: 200,
+        text: async () => "<response><error>The specified profile could not be found.</error></response>"
+      };
+    }
+  });
+  vanity.setWatchlist(["pro"]);
+  vanity.active = true;
+  await vanity._checkLoop();
+  assert.equal(vanity.getStatus().claimedTag, "pro");
+  assert.equal(vanity.getStatus().active, false);
+
+  // 29d. Unit test LevelOptimizer with mock fetch
+  const lvlOpt = new LevelOptimizer("sessionid=abc12345", {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ Badge: { level: 5 } })
+    })
+  });
+  const lvlRes = await lvlOpt.craftBadge(730, 1);
+  assert.equal(lvlRes.success, true);
+  assert.equal(lvlRes.newLevel, 5);
+  assert.equal(lvlRes.xpGained, 100);
+
+  // 29e. Unit test patchPngForInfiniteHeight & REST routes in bot.js
+  const samplePngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const rawPngBuf = Buffer.from(samplePngB64, "base64");
+  const patchedObj = patchPngForInfiniteHeight(rawPngBuf);
+  assert.equal(patchedObj.success, true);
+  assert.equal(patchedObj.originalHeight, 1);
+  assert.equal(patchedObj.patchedHeight, 3840);
+  // Verify PNG magic signature 89 50 4E 47 0D 0A 1A 0A is intact
+  assert.deepEqual(patchedObj.patchedBuffer.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+  // Test bot.js REST routes for Pentagon Elite
+  const rSniperStart = await f.request("/api/sniper/start", { accountId: "user2", targets: [{ appId: 730, marketHashName: "CS2 Case Key", maxPriceCents: 25 }] });
+  assert.equal(rSniperStart.response.status, 200);
+  assert.equal(rSniperStart.data.success, true);
+  const rSniperStop = await f.request("/api/sniper/stop", { accountId: "user2" });
+  assert.equal(rSniperStop.response.status, 200);
+  assert.equal(rSniperStop.data.status.active, false);
+
+  const rAlchemy = await f.request("/api/alchemy/craft-booster", { accountId: "user2", appId: 730 });
+  assert.equal(rAlchemy.response.status, 200);
+  assert.equal(rAlchemy.data.success, true);
+
+  const rVanityStart = await f.request("/api/vanity/start", { accountId: "user2", watchlist: ["pro", "neo"] });
+  assert.equal(rVanityStart.response.status, 200);
+  assert.equal(rVanityStart.data.success, true);
+  const rVanityStatus = await f.request("/api/vanity/status?accountId=user2");
+  assert.equal(rVanityStatus.response.status, 200);
+  await f.request("/api/vanity/stop", { accountId: "user2" });
+
+  const rLevelCraft = await f.request("/api/level/craft", { accountId: "user2", appId: 730 });
+  assert.equal(rLevelCraft.response.status, 200);
+  assert.equal(rLevelCraft.data.success, true);
+  assert.equal(rLevelCraft.data.xpGained, 100);
+
+  const rArtworkPatch = await f.request("/api/artwork/patch", { imagePayload: `data:image/png;base64,${samplePngB64}` });
+  assert.equal(rArtworkPatch.response.status, 200);
+  assert.equal(rArtworkPatch.data.success, true);
+  assert.equal(rArtworkPatch.data.patchedHeight, 3840);
+  assert.match(rArtworkPatch.data.patchedBase64, /^data:image\/png;base64,/);
 });

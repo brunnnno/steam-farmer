@@ -51,6 +51,11 @@ const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge,
 const { ValveGameCoordinatorHub } = require('./lib/cs2-coordinator');
 const { enableSteamDeckPresence, registerSteamDeckRewards } = require('./lib/steam-deck');
 const { TournamentGhostService } = require('./lib/tournament-ghost');
+const { MarketSniperService } = require('./lib/market-sniper');
+const { AlchemyTransmuter } = require('./lib/alchemy-transmuter');
+const { VanityUrlSniper } = require('./lib/vanity-sniper');
+const { LevelOptimizer } = require('./lib/level-optimizer');
+const { patchPngForInfiniteHeight } = require('./lib/long-artwork-patcher');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -510,6 +515,27 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       st.tournamentGhost?.stopWatching?.();
       st.tournamentGhost = new TournamentGhostService(client, acc.id);
     }
+    if (!st.marketSniper) {
+      st.marketSniper = new MarketSniperService(st.webCookies, acc.id);
+    } else {
+      st.marketSniper.setCookies(st.webCookies);
+    }
+    if (!st.alchemyTransmuter) {
+      st.alchemyTransmuter = new AlchemyTransmuter(st.webCookies);
+    } else {
+      st.alchemyTransmuter.setCookies(st.webCookies);
+    }
+    const sid64 = st.steamId64 || acc.mySteamID || '';
+    if (!st.vanitySniper) {
+      st.vanitySniper = new VanityUrlSniper(st.webCookies, sid64);
+    } else {
+      st.vanitySniper.setContext(st.webCookies, sid64);
+    }
+    if (!st.levelOptimizer) {
+      st.levelOptimizer = new LevelOptimizer(st.webCookies);
+    } else {
+      st.levelOptimizer.setCookies(st.webCookies);
+    }
     return { st, client };
   }
   function disconnect(id) {
@@ -517,6 +543,8 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     if (st?.reconnectTimer) clearTimeout(st.reconnectTimer);
     st?.gcHub?.destroy?.();
     st?.tournamentGhost?.stopWatching?.();
+    st?.marketSniper?.stopScanning?.();
+    st?.vanitySniper?.stop?.();
     const client = clients.get(id); clients.delete(id);
     if (client) { client.removeAllListeners(); client.on('error', () => {}); try { client.gamesPlayed([]); client.logOff(); } catch {} }
     states.delete(id);
@@ -1470,6 +1498,115 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const acc = getAccount(req, url);
         const { st } = ensureAccountServices(acc);
         return json(res, 200, st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false });
+      }
+      // --- M1: MARKET SNIPER ---
+      if (url.pathname === '/api/sniper/start' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.marketSniper.setTargets(data.targets || []);
+        st.marketSniper.startScanning(Number(data.intervalMs) || 2500);
+        return json(res, 200, {
+          success: true,
+          status: st.marketSniper.getStatus(),
+          message: 'Francotirador de Mercado activado.'
+        });
+      }
+      if (url.pathname === '/api/sniper/stop' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.marketSniper?.stopScanning?.();
+        return json(res, 200, {
+          success: true,
+          status: st.marketSniper ? st.marketSniper.getStatus() : { active: false },
+          message: 'Francotirador de Mercado detenido.'
+        });
+      }
+      if (url.pathname === '/api/sniper/status' && req.method === 'GET') {
+        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { active: false, targetsCount: 0, boughtCount: 0 });
+        }
+        const acc = getAccount(req, url);
+        const { st } = ensureAccountServices(acc);
+        return json(res, 200, st.marketSniper ? st.marketSniper.getStatus() : { active: false });
+      }
+      // --- M2: ALCHEMY TRANSMUTER ---
+      if (url.pathname === '/api/alchemy/convert-gems' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        try {
+          const resData = await st.alchemyTransmuter.convertItemToGems(data.assetId || '1');
+          return json(res, 200, { success: true, ...resData });
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      if (url.pathname === '/api/alchemy/craft-booster' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        try {
+          const resData = await st.alchemyTransmuter.craftHighValueBooster(data.appId || 730);
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      // --- M3: VANITY URL SNIPER ---
+      if (url.pathname === '/api/vanity/start' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        if (Array.isArray(data.watchlist)) st.vanitySniper.setWatchlist(data.watchlist);
+        st.vanitySniper.start(Number(data.intervalMs) || 3000);
+        return json(res, 200, {
+          success: true,
+          status: st.vanitySniper.getStatus(),
+          message: 'Radar de URLs cortas de 3 letras activado.'
+        });
+      }
+      if (url.pathname === '/api/vanity/stop' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.vanitySniper?.stop?.();
+        return json(res, 200, {
+          success: true,
+          status: st.vanitySniper ? st.vanitySniper.getStatus() : { active: false },
+          message: 'Radar de URLs cortas detenido.'
+        });
+      }
+      if (url.pathname === '/api/vanity/status' && req.method === 'GET') {
+        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { active: false, watchlist: [], claimedTag: null });
+        }
+        const acc = getAccount(req, url);
+        const { st } = ensureAccountServices(acc);
+        return json(res, 200, st.vanitySniper ? st.vanitySniper.getStatus() : { active: false });
+      }
+      // --- M4: LEVEL OPTIMIZER ---
+      if (url.pathname === '/api/level/craft' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        try {
+          const resData = await st.levelOptimizer.craftBadge(data.appId || 730, data.series || 1);
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      // --- M5: LONG ARTWORK IHDR PATCHER ---
+      if (url.pathname === '/api/artwork/patch' && req.method === 'POST') {
+        try {
+          const base64Data = String(data.imagePayload || '').replace(/^data:image\/png;base64,/, '').trim();
+          const buffer = Buffer.from(base64Data, 'base64');
+          const patched = patchPngForInfiniteHeight(buffer, Number(data.targetHeight) || 3840);
+          return json(res, 200, {
+            success: true,
+            originalHeight: patched.originalHeight,
+            patchedHeight: patched.patchedHeight,
+            patchedBase64: `data:image/png;base64,${patched.patchedBuffer.toString('base64')}`,
+            message: patched.message
+          });
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
       }
       const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
       if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){
