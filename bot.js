@@ -61,7 +61,7 @@ function createApp(options = {}) {
   const environmentToken = process.env.STEAM_REFRESH_TOKEN || '';
   const environmentAccountId = process.env.STEAM_ACCOUNT_ID || 'main';
   if (environmentToken && !validClientToken(environmentToken)) throw new Error('STEAM_REFRESH_TOKEN is invalid or has expired.');
-  if (environmentToken && !cfg.accounts.some(acc => acc.id === environmentAccountId)) cfg.accounts.push({ id: environmentAccountId, name: 'Main account', user: '', games: [], gameNames: {} });
+  if (environmentToken && !cfg.accounts.some(acc => acc.id === environmentAccountId)) cfg.accounts.push({ id: environmentAccountId, name: 'Main account', user: '', games: [], gameNames: {}, personaState: 1 });
   const isEnvironmentAccount = acc => Boolean(environmentToken && acc.id === environmentAccountId);
   const vault = new Vault(directory);
   const isAuthorizedAccount = acc => Boolean(acc && (isEnvironmentAccount(acc) || vault.records?.[acc.id]));
@@ -73,7 +73,7 @@ function createApp(options = {}) {
   if (!cfg.accounts.length && cfg.user) cfg.accounts.push({ id: crypto.randomUUID(), name: cfg.user, user: cfg.user, games: cfg.games || [], gameNames: cfg.gameNames || {}, refreshToken: cfg.refreshToken });
   for (const acc of cfg.accounts) {
     acc.games = [...new Set((acc.games || []).map(appId))].slice(0, 32); acc.gameNames ||= {};
-    acc.sleepMode ||= { enabled: false, start: 3, end: 8 }; acc.chatAdmins ||= [];
+    acc.sleepMode ||= { enabled: false, start: 3, end: 8 }; acc.chatAdmins ||= []; acc.personaState = acc.personaState === 7 ? 7 : 1;
     if (acc.refreshToken && validClientToken(acc.refreshToken)) vault.set(acc.id, acc.refreshToken);
     delete acc.refreshToken; delete acc.pass; delete acc.unlockedAchievements; delete acc.achievementQueue;
   }
@@ -278,11 +278,15 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     const st = stateFor(acc.id); syncSleep(acc);
     const client = clients.get(acc.id); if (!client) return;
     const timedSyncApps = timedManager.activeNonStealthApps(acc.id);
+    const manualGames = (acc.games || []).slice(0, 32);
     let games = timedSyncApps.length
       ? [...new Set(timedSyncApps)].slice(0, 32)
       : acc.cardFarming
-        ? (st.cardsReady ? selectOptimalCardGames(st.cardDropGames, acc.games) : [])
-        : acc.games.slice(0, 32);
+        ? (st.cardsReady && Array.isArray(st.cardDropGames) && st.cardDropGames.length
+            ? selectOptimalCardGames(st.cardDropGames, manualGames)
+            : manualGames)
+        : manualGames;
+    if (!games.length && manualGames.length) games = manualGames;
     if (st.inspectingAppId && st.connected && !st.isPaused && !st.isCollisionPaused && !st.isSleepPaused) {
       const baseGames = Array.isArray(st.inspectPreviousGames) && st.inspectPreviousGames.length ? st.inspectPreviousGames : games;
       games = [st.inspectingAppId, ...baseGames.filter(x => x !== st.inspectingAppId)].slice(0, 32);
@@ -390,7 +394,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
         executeItemFactory: (accId, appid, jobCfg) => makeTimedItemExecutor(accId, appid, Boolean(jobCfg?.stealth)),
         isCollisionPaused: accId => Boolean(stateFor(accId).isCollisionPaused)
       }).catch(() => {});
-      client.setPersona(acc.personaState ?? SteamUser.EPersonaState.Online); farming(acc);
+      acc.personaState = acc.personaState === 7 ? 7 : (SteamUser.EPersonaState?.Online ?? 1); client.setPersona(acc.personaState); farming(acc);
       notify(`${acc.name} connected`, 'Steam session connected.');
       resolveNames(acc).catch(() => {});
     });
@@ -494,7 +498,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           : st.isFarming
             ? 'manual'
             : 'idle';
-    return { ...acc, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
+    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }

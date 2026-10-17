@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=54">
+  <link rel="stylesheet" href="/style.css?v=55">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -74,8 +74,8 @@
           </div>
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
-<button class="btn-action-sm" data-event-4="">Refresh</button><details class="control-menu achievement-reading-options" id="achReadingOptions"><summary>Reading options</summary><div class="control-menu-content"><label for="achReadMode">Reading method</label><select id="achReadMode" aria-label="Achievement reading mode"><option value="auto">Automatic (recommended)</option><option value="protocol">Verify through Steam session</option><option value="web">Community reading</option></select><small>Automatic works for everyday use. Steam-session verification checks activation compatibility; community reading provides an alternative when information is unavailable.</small></div></details>
-          <button class="btn-action-sm" data-event-5="">Close</button>
+<button class="btn-action-sm" data-event-4="" data-i18n="samRefreshBtn">Refresh</button><details class="control-menu achievement-reading-options" id="achReadingOptions"><summary data-i18n="samReadingOptionsBtn">Reading options</summary><div class="control-menu-content"><label for="achReadMode" data-i18n="samReadingMethodLabel">Reading method</label><select id="achReadMode" aria-label="Achievement reading mode"><option value="auto" data-i18n="readModeAuto">Automatic (recommended)</option><option value="protocol" data-i18n="readModeProtocol">Verify through Steam session</option><option value="web" data-i18n="readModeWeb">Community reading</option></select><small>Automatic works for everyday use. Steam-session verification checks activation compatibility; community reading provides an alternative when information is unavailable.</small></div></details>
+          <button class="btn-action-sm" data-event-5="" data-i18n="samCloseBtn">Close</button>
         </div>
       </div>
 
@@ -86,10 +86,15 @@
           <button id="tabToolsBtn" type="button" class="sam-tab-btn" data-i18n="samTabTools">Timed, Timings &amp; Tools</button>
           <button id="tabLeaderboardsBtn" type="button" class="sam-tab-btn" data-i18n="samTabLeaderboards">Leaderboards</button>
         </div>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <button id="undoLastOperationBtn" type="button" class="btn-action-sm" hidden>Undo last change</button>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <button id="undoLastOperationBtn" type="button" class="btn-action-sm" data-i18n="samUndoBtn" hidden>Undo last change</button>
+          <label class="sam-stealth-toggle" title="Reset progress statistics to 0 when locking achievements so Steam does not auto-re-unlock them">
+            <input type="checkbox" id="samResetStatsOnLockToggle" checked>
+            <span data-i18n="samResetStatsOnLockLabel">Reset progress statistics to 0 on lock (prevents Steam from auto-re-unlocking)</span>
+          </label>
           <label class="sam-stealth-toggle" title="Modify achievements and stats without leaving the game displayed as In-Game">
-            <input type="checkbox" id="stealthModeToggle"> Silent mode (no In-Game status)
+            <input type="checkbox" id="stealthModeToggle">
+            <span data-i18n="samSilentModeLabel">Silent mode (no In-Game status)</span>
           </label>
         </div>
       </div>
@@ -101,28 +106,28 @@
       <div id="achMainPanel">
         <div class="ach-toolbar">
           <div class="ach-filters">
-            <button class="filter-btn active" data-filter="status" data-val="all" data-event-6="">All</button>
-            <button class="filter-btn" data-filter="status" data-val="unlocked" data-event-7="">✓ Unlocked</button>
-            <button class="filter-btn" data-filter="status" data-val="locked" data-event-8="">Locked</button>
+            <button class="filter-btn active" data-filter="status" data-val="all" data-event-6="" data-i18n="filterAllBtn">All</button>
+            <button class="filter-btn" data-filter="status" data-val="unlocked" data-event-7="" data-i18n="filterUnlockedBtn">✓ Unlocked</button>
+            <button class="filter-btn" data-filter="status" data-val="locked" data-event-8="" data-i18n="filterLockedBtn">Locked</button>
             
             <span style="color:rgba(255,255,255,0.2);">|</span>
-            <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9=""><span class="rarity-dot mythic"></span>Mythic &lt;5%</button>
-            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10=""><span class="rarity-dot epic"></span>Epic 5-20%</button>
-            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11=""><span class="rarity-dot rare"></span>Rare 20-50%</button>
-            <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn"><span class="rarity-dot common"></span>Common &gt;50%</button>
+            <button class="filter-btn" data-filter="rarity" data-val="mythic" data-event-9=""><span class="rarity-dot mythic"></span><span data-i18n="filterMythicBtn">Mythic &lt;5%</span></button>
+            <button class="filter-btn" data-filter="rarity" data-val="epic" data-event-10=""><span class="rarity-dot epic"></span><span data-i18n="filterEpicBtn">Epic 5-20%</span></button>
+            <button class="filter-btn" data-filter="rarity" data-val="rare" data-event-11=""><span class="rarity-dot rare"></span><span data-i18n="filterRareBtn">Rare 20-50%</span></button>
+            <button class="filter-btn" data-filter="rarity" data-val="common" id="filterRarityCommonBtn"><span class="rarity-dot common"></span><span data-i18n="filterCommonBtn">Common &gt;50%</span></button>
             <span style="color:rgba(255,255,255,0.2);">|</span>
             <button class="filter-btn" type="button" id="btnDependencyTreeFilter" data-i18n="dependencyTreeBtn">Progression Tree (Dependency Tree)</button>
           </div>
           
           <div style="display:flex; gap:10px; align-items:center;">
-            <select id="achCompatibilityFilter" aria-label="Achievement compatibility filter"><option value="all">Compatibility: All</option><option value="attemptable">Can attempt from this panel</option><option value="unavailable">Not available from this panel</option><option value="unknown">Needs verification / data</option></select>
+            <select id="achCompatibilityFilter" aria-label="Achievement compatibility filter"><option value="all" data-i18n="compatAll">Compatibility: All</option><option value="attemptable" data-i18n="compatAttemptable">Can attempt from this panel</option><option value="unavailable" data-i18n="compatUnavailable">Not available from this panel</option><option value="unknown" data-i18n="compatUnknown">Needs verification / data</option></select>
             <select id="achSortSelect" data-event-12="" style="padding:8px 12px; font-size:0.85rem; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-              <option value="default">Sort: Default</option>
-              <option value="unlocked_first">Unlocked first</option>
-              <option value="locked_first">Locked first</option>
-              <option value="rarity_rare">Rarest first</option>
-              <option value="percentage_desc">Percentage: highest first</option>
-              <option value="alpha">Alphabetical (A-Z)</option>
+              <option value="default" data-i18n="sortDefault">Sort: Default</option>
+              <option value="unlocked_first" data-i18n="sortUnlockedFirst">Unlocked first</option>
+              <option value="locked_first" data-i18n="sortLockedFirst">Locked first</option>
+              <option value="rarity_rare" data-i18n="sortRarityRare">Rarest first</option>
+              <option value="percentage_desc" data-i18n="sortPercentageDesc">Percentage: highest first</option>
+              <option value="alpha" data-i18n="sortAlpha">Alphabetical (A-Z)</option>
             </select>
             <input type="text" id="achSearchInput" placeholder="Search achievement..." style="max-width:200px; padding:8px 14px; font-size:0.85rem;" data-event-13="">
           </div>
@@ -234,15 +239,15 @@
       <div id="achLeaderboardsPanel" hidden>
         <div class="sam-stats-toolbar" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 24px; border-bottom:1px solid var(--border);">
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <label for="leaderboardSelect" style="font-size:0.82rem; font-weight:700; color:var(--text-muted);">Leaderboard:</label>
+            <label for="leaderboardSelect" data-i18n="leaderboardSelectLabel" style="font-size:0.82rem; font-weight:700; color:var(--text-muted);">Leaderboard:</label>
             <select id="leaderboardSelect" aria-label="Select game leaderboard" style="padding:8px 12px; border-radius:8px; background:var(--surface-3); border:1px solid var(--border); color:#fff;"></select>
-            <button id="refreshLeaderboardsBtn" type="button" class="btn-action-sm">Refresh Top 10</button>
+            <button id="refreshLeaderboardsBtn" type="button" class="btn-action-sm" data-i18n="refreshLeaderboardsBtn">Refresh Top 10</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <input type="number" id="leaderboardScoreInput" placeholder="Score / Time (ms)..." style="width:170px; padding:8px 12px;">
             <select id="leaderboardMethodSelect" aria-label="Leaderboard upload method" style="padding:8px 12px; border-radius:8px; background:var(--surface-3); border:1px solid var(--border); color:#fff;">
-              <option value="keep_best">Keep Best</option>
-              <option value="force_update">Force Update</option>
+              <option value="keep_best" data-i18n="lbMethodKeepBest">Keep Best</option>
+              <option value="force_update" data-i18n="lbMethodForceUpdate">Force Update</option>
             </select>
             <button id="uploadLeaderboardScoreBtn" type="button" class="btn-main" data-i18n="uploadLeaderboardBtn">Upload Score to Steam World Leaderboard</button>
           </div>
@@ -253,9 +258,9 @@
             <table class="ach-table">
               <thead>
                 <tr>
-                  <th style="width:80px;">Rank</th>
-                  <th>Player</th>
-                  <th style="width:180px;">Score / Time</th>
+                  <th style="width:80px;" data-i18n="lbColRank">RANK</th>
+                  <th data-i18n="lbColPlayer">PLAYER</th>
+                  <th style="width:180px;" data-i18n="lbColScore">SCORE / TIME</th>
                 </tr>
               </thead>
               <tbody id="leaderboardTopTableBody"></tbody>
@@ -475,6 +480,7 @@
         <div class="landing-hero-copy">
           <span id="landingHeroEyebrow" class="landing-eyebrow" data-i18n="landingHeroEyebrow">AUTONOMOUS STEAM CLOUD CONTROL ROOM · v2.4.0</span>
           <h2 id="landingHeroTitle" class="landing-hero-title" data-i18n="landingHeroTitle">Autonomous Steam Cloud Control Room</h2>
+          <div id="landingValueBanner" class="landing-value-banner" data-i18n="landingValueBanner">Boost up to 32 Steam Games Simultaneously · 100% Free · 24/7 Autonomous Cloud</div>
           <p id="landingHeroLead" class="landing-hero-lead" data-i18n="landingHeroLead">Start Boosting Your Steam Hours, Cards &amp; Achievements in the Cloud</p>
           <p id="landingHeroSubtitle" class="landing-hero-subtitle" data-i18n="landingHeroSubtitle">Farm trading cards 24/7 in the cloud without keeping your PC on using ASF's optimal 2-hour rule, manage achievements and INT/FLOAT stats via native Steam protocol, and schedule humanized Box-Muller unlocks with PostgreSQL persistence.</p>
           <div class="landing-cta-row">
@@ -657,10 +663,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=54" defer></script>
-  <script src="/achievement-availability.js?v=54" defer></script>
-  <script src="/draft-settings.js?v=54" defer></script>
-  <script src="/achievement-live.js?v=54" defer></script>
-  <script src="/app.js?v=54" defer></script>
+  <script src="/achievement-rarity.js?v=55" defer></script>
+  <script src="/achievement-availability.js?v=55" defer></script>
+  <script src="/draft-settings.js?v=55" defer></script>
+  <script src="/achievement-live.js?v=55" defer></script>
+  <script src="/app.js?v=55" defer></script>
 </body>
 </html>

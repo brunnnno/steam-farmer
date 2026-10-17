@@ -132,6 +132,42 @@ const i18n = {
     faqA3: "Acumula 2 horas en paralelo en juegos nuevos para habilitar los drops de Valve y luego farmea de a 1 juego a la vez para máxima velocidad de cartas.",
     faqQ4: "¿Tengo que dejar mi computadora prendida?",
     faqA4: "No. Funciona 24/7 en la nube (Render o Docker) con persistencia en PostgreSQL, por lo que tus horas, cromos y colas siguen activos con tu PC apagada.",
+    landingValueBanner: "FARMEA HASTA 32 JUEGOS DE STEAM EN SIMULTÁNEO TOTALMENTE GRATIS 24/7 EN LA NUBE",
+    samRefreshBtn: "Actualizar",
+    samReadingOptionsBtn: "Opciones de lectura",
+    samReadingMethodLabel: "Método de lectura",
+    samCloseBtn: "Cerrar",
+    samUndoBtn: "Deshacer último cambio",
+    samSilentModeLabel: "Modo silencioso (sin estado En Juego)",
+    samResetStatsOnLockLabel: "Reiniciar estadísticas de progreso a 0 al bloquear (evita que Steam los re-desbloquee automáticamente)",
+    readModeAuto: "Automático (recomendado)",
+    readModeProtocol: "Verificar por sesión de Steam",
+    readModeWeb: "Lectura comunitaria",
+    filterAllBtn: "Todos",
+    filterUnlockedBtn: "✓ Desbloqueados",
+    filterLockedBtn: "Bloqueados",
+    filterMythicBtn: "Mítico <5%",
+    filterEpicBtn: "Épico 5-20%",
+    filterRareBtn: "Raro 20-50%",
+    filterCommonBtn: "Común >50%",
+    compatAll: "Compatibilidad: Todos",
+    compatAttemptable: "Activables desde el panel",
+    compatUnavailable: "No disponibles desde el panel",
+    compatUnknown: "Requiere verificación / datos",
+    sortDefault: "Orden: Predeterminado",
+    sortUnlockedFirst: "Desbloqueados primero",
+    sortLockedFirst: "Bloqueados primero",
+    sortRarityRare: "Más raros primero",
+    sortPercentageDesc: "Porcentaje: mayor primero",
+    sortAlpha: "Alfabético (A-Z)",
+    leaderboardSelectLabel: "Tabla de clasificación:",
+    refreshLeaderboardsBtn: "Actualizar Top 10",
+    lbMethodKeepBest: "Conservar mejor puntuación",
+    lbMethodForceUpdate: "Forzar actualización",
+    lbColRank: "PUESTO",
+    lbColPlayer: "JUGADOR",
+    lbColScore: "PUNTUACIÓN / TIEMPO",
+    noLeaderboardScores: "No se encontraron puntuaciones oficiales en las tablas de Steam para este juego.",
     deckVerified: "🟢 Verificado",
     deckPlayable: "🟡 Jugable",
     deckUnsupported: "⚪ No compatible"
@@ -248,6 +284,42 @@ const i18n = {
     faqA3: "Games under 2 hours are farmed in parallel (up to 32 at once) to reach Valve's drop threshold quickly, then farmed 1 game at a time past 2 hours for maximum card drop frequency.",
     faqQ4: "Do I need to keep my computer turned on?",
     faqA4: "No. SteamFarmer runs 24/7 in the cloud (Render or Docker) with PostgreSQL persistence, so your hours, card drops, and Gaussian schedules continue even with your PC off.",
+    landingValueBanner: "Boost up to 32 Steam Games Simultaneously · 100% Free · 24/7 Autonomous Cloud",
+    samRefreshBtn: "Refresh",
+    samReadingOptionsBtn: "Reading options",
+    samReadingMethodLabel: "Reading method",
+    samCloseBtn: "Close",
+    samUndoBtn: "Undo last change",
+    samSilentModeLabel: "Silent mode (no In-Game status)",
+    samResetStatsOnLockLabel: "Reset progress statistics to 0 on lock (prevents Steam from auto-re-unlocking)",
+    readModeAuto: "Automatic (recommended)",
+    readModeProtocol: "Verify through Steam session",
+    readModeWeb: "Community reading",
+    filterAllBtn: "All",
+    filterUnlockedBtn: "✓ Unlocked",
+    filterLockedBtn: "Locked",
+    filterMythicBtn: "Mythic <5%",
+    filterEpicBtn: "Epic 5-20%",
+    filterRareBtn: "Rare 20-50%",
+    filterCommonBtn: "Common >50%",
+    compatAll: "Compatibility: All",
+    compatAttemptable: "Can attempt from this panel",
+    compatUnavailable: "Not available from this panel",
+    compatUnknown: "Needs verification / data",
+    sortDefault: "Sort: Default",
+    sortUnlockedFirst: "Unlocked first",
+    sortLockedFirst: "Locked first",
+    sortRarityRare: "Rarest first",
+    sortPercentageDesc: "Percentage: highest first",
+    sortAlpha: "Alphabetical (A-Z)",
+    leaderboardSelectLabel: "Leaderboard:",
+    refreshLeaderboardsBtn: "Refresh Top 10",
+    lbMethodKeepBest: "Keep Best",
+    lbMethodForceUpdate: "Force Update",
+    lbColRank: "RANK",
+    lbColPlayer: "PLAYER",
+    lbColScore: "SCORE / TIME",
+    noLeaderboardScores: "No official Steam leaderboard scores found for this game.",
     deckVerified: "🟢 Deck Verified",
     deckPlayable: "🟡 Deck Playable",
     deckUnsupported: "⚪ Deck Unsupported"
@@ -1645,11 +1717,17 @@ function renderAchModal(page=achievementPage) {
   const confirmed=currentAchList.filter(a=>a.unlocked===true).length, unknown=currentAchList.filter(a=>a.unlocked===null).length;
   const totalPct = currentAchList.length ? Math.round((confirmed / currentAchList.length) * 100) : 0;
   if (unknown === currentAchList.length && unknown > 0) {
-    $('achProgressText').textContent = `${unknown} achievements · Personal state not verified`;
+    $('achProgressText').textContent = currentLang === 'es'
+      ? `${unknown} logros · Estado personal sin verificar (Personal state not verified)`
+      : `${unknown} achievements · Personal state not verified`;
   } else if (sets.length > 1) {
-    $('achProgressText').textContent = `${confirmed}/${currentAchList.length} verified achievements unlocked · Base Game: ${baseConfirmed}/${baseAchs.length} (${basePct}%${baseCompleted ? ' · Completed ★' : ''}) · Total w/ DLCs: ${confirmed}/${currentAchList.length} (${totalPct}%)${unknown ? ` · ${unknown} not verified` : ''}`;
+    $('achProgressText').textContent = currentLang === 'es'
+      ? `${confirmed}/${currentAchList.length} logros verificados desbloqueados · Base Game: ${baseConfirmed}/${baseAchs.length} (${basePct}%${baseCompleted ? ' · Completed ★' : ''}) · Total w/ DLCs: ${confirmed}/${currentAchList.length} (${totalPct}%)${unknown ? ` · ${unknown} not verified` : ''}`
+      : `${confirmed}/${currentAchList.length} verified achievements unlocked · Base Game: ${baseConfirmed}/${baseAchs.length} (${basePct}%${baseCompleted ? ' · Completed ★' : ''}) · Total w/ DLCs: ${confirmed}/${currentAchList.length} (${totalPct}%)${unknown ? ` · ${unknown} not verified` : ''}`;
   } else {
-    $('achProgressText').textContent = `${confirmed}/${currentAchList.length} verified achievements unlocked${baseCompleted ? ' · Completed ★' : ''}${unknown ? ` · ${unknown} not verified` : ''}`;
+    $('achProgressText').textContent = currentLang === 'es'
+      ? `${confirmed}/${currentAchList.length} logros verificados desbloqueados${baseCompleted ? ' · Completado ★' : ''}${unknown ? ` · ${unknown} not verified` : ''}`
+      : `${confirmed}/${currentAchList.length} verified achievements unlocked${baseCompleted ? ' · Completed ★' : ''}${unknown ? ` · ${unknown} not verified` : ''}`;
   }
   $('achProgressFill').style.width=(currentAchSet==='base'&&baseAchs.length?baseConfirmed/baseAchs.length*100:(currentAchList.length?confirmed/currentAchList.length*100:0))+'%';
   if(currentAchMethod==='cached')$('achProgressText').textContent='Previous reading · '+$('achProgressText').textContent;
@@ -1720,10 +1798,10 @@ function renderAchModal(page=achievementPage) {
     const table=element('table',undefined,'ach-table');
     const thead=element('thead'),headRow=element('tr');
     const thIcon=element('th');thIcon.style.width='52px';
-    const thName=element('th','Achievement','ach-th-name'+(achSortState.col==='name'?' sort-'+achSortState.dir:''));thName.dataset.sort='name';thName.addEventListener('click',()=>sortAchievementTable('name'));
-    const thPct=element('th','Global %','ach-th-pct'+(achSortState.col==='pct'?' sort-'+achSortState.dir:''));thPct.style.width='90px';thPct.dataset.sort='pct';thPct.addEventListener('click',()=>sortAchievementTable('pct'));
-    const thRarity=element('th','Rarity','ach-th-rarity');thRarity.style.width='80px';
-    const thDate=element('th','Unlock date','ach-th-date'+(achSortState.col==='date'?' sort-'+achSortState.dir:''));thDate.style.width='130px';thDate.dataset.sort='date';thDate.addEventListener('click',()=>sortAchievementTable('date'));
+    const thName=element('th',currentLang==='es'?'Logro':'Achievement','ach-th-name'+(achSortState.col==='name'?' sort-'+achSortState.dir:''));thName.dataset.sort='name';thName.addEventListener('click',()=>sortAchievementTable('name'));
+    const thPct=element('th',currentLang==='es'?'% Global':'Global %','ach-th-pct'+(achSortState.col==='pct'?' sort-'+achSortState.dir:''));thPct.style.width='90px';thPct.dataset.sort='pct';thPct.addEventListener('click',()=>sortAchievementTable('pct'));
+    const thRarity=element('th',currentLang==='es'?'Rareza':'Rarity','ach-th-rarity');thRarity.style.width='80px';
+    const thDate=element('th',currentLang==='es'?'Fecha de desbloqueo':'Unlock date','ach-th-date'+(achSortState.col==='date'?' sort-'+achSortState.dir:''));thDate.style.width='130px';thDate.dataset.sort='date';thDate.addEventListener('click',()=>sortAchievementTable('date'));
     const thAction=element('th','','ach-th-action');thAction.style.width='100px';
     headRow.append(thIcon,thName,thPct,thRarity,thDate,thAction);
     thead.append(headRow);
@@ -1831,7 +1909,7 @@ async function directApplyChanges({selection,bulkAction,resetCounters}={}){
   if(currentAchMethod!=='protocol'||!currentAchAppId||!isAuthorizedAccount(active))return;
   const id=currentAchAppId,account=activeAccountId,title=currentAchGameName,serial=achSerial;
   const stealth=Boolean($('stealthModeToggle')?.checked);
-  const effectiveReset=resetCounters!==undefined?Boolean(resetCounters):(bulkAction==='lock_all'||(Array.isArray(selection)&&selection.some(i=>i.action==='remove')));
+  const resetToggle=$('samResetStatsOnLockToggle'); const wantReset=resetToggle?resetToggle.checked:true; const effectiveReset=resetCounters!==undefined?Boolean(resetCounters):(wantReset&&(bulkAction==='lock_all'||(Array.isArray(selection)&&selection.some(i=>i.action==='remove'))));
   const nowSec=Math.floor(Date.now()/1000);
   const rollback=new Map(currentAchList.map(r=>[r.apiname,{
     unlocked:r.unlocked,
@@ -2045,6 +2123,16 @@ async function loadLeaderboardEntries(leaderboardId = currentLeaderboardId) {
     const tbody = $('leaderboardTopTableBody');
     if (tbody) {
       tbody.replaceChildren();
+      if (!Array.isArray(data.topEntries) || !data.topEntries.length) {
+        const emptyTr = element('tr');
+        const emptyTd = element('td', t('noLeaderboardScores'));
+        emptyTd.colSpan = 3;
+        emptyTd.style.textAlign = 'center';
+        emptyTd.style.padding = '18px';
+        emptyTd.style.color = 'var(--text-muted)';
+        emptyTr.append(emptyTd);
+        tbody.append(emptyTr);
+      }
       for (const entry of data.topEntries || []) {
         const tr = element('tr', undefined, 'ach-item');
         const tdRank = element('td', `#${entry.rank}`);
@@ -2818,6 +2906,7 @@ if($('clusterCardsAllBtn'))$('clusterCardsAllBtn').addEventListener('click',()=>
 if($('btnViewGrid'))$('btnViewGrid').addEventListener('click',()=>setLibraryViewMode('grid'));
 if($('btnViewList'))$('btnViewList').addEventListener('click',()=>setLibraryViewMode('list'));
 if($('langSelect')){$('langSelect').value=currentLang;$('langSelect').addEventListener('change',e=>applyLanguage(e.target.value));}
+if($('samResetStatsOnLockToggle'))$('samResetStatsOnLockToggle').checked=true;
 if($('btnOledTheme'))$('btnOledTheme').addEventListener('click',()=>toggleOledTheme());
 if($('copySteamIdBtn'))$('copySteamIdBtn').addEventListener('click',async()=>{
   const rawSid=active?.linkedSteamId||active?.steamId64||active?.mySteamID||'';

@@ -1077,4 +1077,17 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   await new Promise(r => setTimeout(r, 20));
   assert.equal(uploadedLbPayload?.score, 1234567);
   assert.match(w.document.getElementById("leaderboardUserRankCard").textContent, /#1 Mundial/);
+
+  // 13. Verify v55: 1:1 i18n key parity, Spanish SAM modal translations, Reset Stats on Lock toggle (#samResetStatsOnLockToggle), 32-game value banner (#landingValueBanner), and empty leaderboard message
+  const appJsSource = fs.readFileSync(path.join(__dirname, "../public/app.js"), "utf8");
+  const esKeys = [...appJsSource.slice(appJsSource.indexOf("es: {"), appJsSource.indexOf("en: {")).matchAll(/^\s*([A-Za-z0-9_]+):/gm)].map(m => m[1]);
+  const enKeys = [...appJsSource.slice(appJsSource.indexOf("en: {"), appJsSource.indexOf("function t(key)")).matchAll(/^\s*([A-Za-z0-9_]+):/gm)].map(m => m[1]);
+  assert.deepEqual(esKeys.slice(1), enKeys.slice(1), "i18n.es and i18n.en must have 100% 1:1 key parity");
+
+  assert.ok(w.document.getElementById("samResetStatsOnLockToggle")?.checked, "samResetStatsOnLockToggle must exist and be checked by default");
+  assert.match(w.document.getElementById("landingValueBanner").textContent, /32 JUEGOS DE STEAM EN SIMULTÁNEO|32 Steam Games Simultaneously/i);
+  assert.equal(w.document.querySelector('[data-event-4]').textContent, "Actualizar");
+  assert.equal(w.document.querySelector('[data-event-5]').textContent, "Cerrar");
+  assert.equal(w.document.getElementById("undoLastOperationBtn").textContent, "Deshacer último cambio");
+  assert.match(w.document.getElementById("achProgressText").textContent, /logros verificados desbloqueados/);
 });

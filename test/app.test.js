@@ -1430,4 +1430,90 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const hltbRouteRes = await f.request("/api/achievement/hltb?title=Portal");
   assert.equal(hltbRouteRes.response.status, 200);
   assert.equal(hltbRouteRes.data.completionistHours, 4);
+
+  // 25. v55: 32-Game Card Farming Fallback (cardsReady=false or cardDropGames=[]), Online Persona Default (1), DiRT Rally 2.0 incrementonly Stat Zeroing on Lock, and Clean Empty Leaderboards
+  // 25a. Persona default is strictly 1 (Online)
+  const statusCheck = await f.request("/api/status");
+  const accView = statusCheck.data.accounts.find(a => a.id === "user2");
+  assert.equal(accView.personaState, 1, "Default personaState must be 1 (Online)");
+
+  // 25b. Card farming fallback: when cardFarming=true but cardsReady=false or cardDropGames=[], bot must farm manual games (up to 32) instead of []
+  f.app.cfg.accounts[0].games = [730, 440, 620, 550];
+  f.app.cfg.accounts[0].cardFarming = true;
+  st2.cardsReady = false;
+  st2.cardDropGames = [];
+  await f.request("/api/custom-status", { accountId: "user2", status: "" });
+  assert.deepEqual(client.calls.at(-1), [730, 440, 620, 550], "When cardsReady is false, farming must fall back to manual games instead of []");
+
+  st2.cardsReady = true;
+  st2.cardDropGames = [];
+  await f.request("/api/custom-status", { accountId: "user2", status: "" });
+  assert.deepEqual(client.calls.at(-1), [730, 440, 620, 550], "When cardDropGames is empty (0 drops left), farming must fall back to manual games");
+
+  // 25c. Clean Empty Leaderboards: unpopulated leaderboard (103) must return empty topEntries (no fake CS2 players like s1mple_pro or ZywOo_CS)
+  const emptyLbRes = await f.request("/api/leaderboards/entries?accountId=user2&appid=690790&leaderboardId=103");
+  assert.equal(emptyLbRes.response.status, 200);
+  assert.deepEqual(emptyLbRes.data.topEntries, [], "Unpopulated leaderboard must not return fake players");
+  assert.equal(emptyLbRes.data.userEntry, null);
+
+  // 25d. DiRT Rally 2.0 scenario: Tier 1 lock_all with resetCounters:true sends explicit_reset:true with zeroed incrementonly and progress stats
+  const { prepareChanges } = require("../lib/achievement-changes");
+  const { applyChanges, store } = require("../lib/achievement-writer");
+  const Schema = require("steam-user/protobufs/generated/_load.js");
+  const EMsg = require("steam-user/enums/EMsg");
+  const dirtSchema = kv({
+    "690790": {
+      stats: {
+        1: {
+          type: "4",
+          bits: {
+            0: { name: "AVIATION_SCHOOL", progress: { max_val: "25", value: { operation: "statvalue", operand1: "JUMPS_STAT" } } },
+            1: { name: "EXPENSIVE_HOBBY", progress: { max_val: "1000000", value: { operation: "statvalue", operand1: "CREDITS_STAT" } } }
+          }
+        },
+        2: { type: "INT", name: "JUMPS_STAT", min: "0", max: "25", incrementonly: "1" },
+        3: { type: "INT", name: "CREDITS_STAT", min: "0", max: "1000000", incrementonly: "1" }
+      }
+    }
+  });
+  let dirtStats = new Map([[1, 3], [2, 25], [3, 1000000]]);
+  const dirtClient = Object.assign(new (require("node:events").EventEmitter)(), {
+    steamID: { toString: () => "76561198000000001" },
+    _currentJobID: 0,
+    _jobs: new Map(),
+    gamesPlayed() {},
+    _send(header, body, cb) {
+      if (header.msg === EMsg.ClientStoreUserStats2) {
+        const decoded = Schema.CMsgClientStoreUserStats2.decode(body);
+        if (decoded.explicit_reset) {
+          for (const s of decoded.stats) dirtStats.set(s.stat_id, s.stat_value >>> 0);
+        }
+        queueMicrotask(() => cb(Buffer.from(Schema.CMsgClientStoreUserStatsResponse.encode({
+          game_id: "690790", eresult: 1, crc_stats: 200, stats_out_of_date: false, stats_failed_validation: []
+        }).finish()), { msg: EMsg.ClientStoreUserStatsResponse }));
+      }
+    }
+  });
+  const readDirt = async () => ({
+    game_id: "690790", eresult: 1, crc_stats: 199, schema: dirtSchema,
+    stats: [...dirtStats].map(([stat_id, stat_value]) => ({ stat_id, stat_value }))
+  });
+  const dirtInit = await readDirt();
+  const dirtSel = [{ apiname: "AVIATION_SCHOOL", action: "remove" }, { apiname: "EXPENSIVE_HOBBY", action: "remove" }];
+  const dirtPlan = prepareChanges(dirtInit, 690790, dirtSel, new Map(), undefined, { bulk: true, resetCounters: true });
+  const dirtRes = await applyChanges(dirtClient, 690790, dirtSel, {
+    expectedRevision: dirtPlan.revision,
+    bulk: true,
+    resetCounters: true,
+    allowRetoggle: true,
+    overrideCooldown: true,
+    send: store,
+    read: readDirt,
+    readHistory: async () => new Map(),
+    beforeSend: async p => ({ operationId: "22222222-2222-2222-2222-222222222222", ...p })
+  });
+  assert.equal(dirtRes.outcome, "confirmed");
+  assert.equal(dirtStats.get(1), 0, "Achievement bits must be 0");
+  assert.equal(dirtStats.get(2), 0, "incrementonly JUMPS_STAT must be reset to 0 via explicit_reset:true");
+  assert.equal(dirtStats.get(3), 0, "incrementonly CREDITS_STAT must be reset to 0 via explicit_reset:true");
 });

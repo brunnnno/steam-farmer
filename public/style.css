@@ -2763,3 +2763,68 @@ body.oled-theme {
   font-weight: 700;
   color: var(--primary);
 }
+
+/* ==========================================================================
+   SteamFarmer v55 — 32-Game Value Highlight & Mobile Responsive Polish
+   ========================================================================== */
+
+.landing-value-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.16) 0%, rgba(56, 189, 248, 0.14) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.42);
+  color: #6ee7b7;
+  font-size: clamp(12px, 1.3vw, 14px);
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  box-shadow: 0 0 24px rgba(52, 211, 153, 0.15);
+}
+
+@media (max-width: 768px) {
+  .utility-bar,
+  .corner-toolbar {
+    justify-content: flex-start;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 12px;
+  }
+  .utility-bar .acc-pill,
+  .corner-toolbar .acc-pill {
+    flex-shrink: 0;
+  }
+  .ach-modal-card {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .floating-showcase-deck {
+    width: 100%;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+  .faq-accordion-list {
+    grid-template-columns: 1fr;
+  }
+  .landing-cta-row button {
+    width: 100%;
+    justify-content: center;
+  }
+  .ach-header,
+  .sam-tabs-bar,
+  .ach-toolbar {
+    padding: 10px 14px;
+  }
+}
