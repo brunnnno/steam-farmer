@@ -802,6 +802,7 @@ function setGuestModeLayout(isGuest) {
   if ($('accountsBarSection')) $('accountsBarSection').hidden = guest;
   if ($('sessionOverviewPanel')) $('sessionOverviewPanel').hidden = guest;
   if ($('gameControlsSection')) $('gameControlsSection').hidden = guest;
+  if ($('tasksPanelsSection')) $('tasksPanelsSection').hidden = guest;
   if ($('libraryEyebrow')) $('libraryEyebrow').textContent = t(guest ? 'libraryEyebrowGuest' : 'libraryEyebrowAuth');
 }
 async function loadStatus() {
