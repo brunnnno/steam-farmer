@@ -1326,4 +1326,19 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
     await new Promise(r => setTimeout(r, 20));
     assert.ok(v58Calls.some(c => c.url === "/api/tournament/stop"));
   }
+
+  // CS2 Zero-Inventory Spoofer (Pilar 4)
+  if (w.document.getElementById("btnLockCs2Privacy")) {
+    w.document.getElementById("btnLockCs2Privacy").click();
+    w.document.getElementById("btnGenerateCs2Spoof").click();
+    w.document.getElementById("btnExportCs2Desktop").click();
+    if (w.document.getElementById("btnCopyCs2Bbcode")) {
+      w.document.getElementById("btnCopyCs2Bbcode").click();
+    }
+    await new Promise(r => setTimeout(r, 25));
+    assert.ok(v58Calls.some(c => c.url === "/api/overwatch/cs2-spoof/lock-inventory"));
+    assert.ok(v58Calls.some(c => c.url === "/api/overwatch/cs2-spoof/generate"));
+    assert.ok(v58Calls.some(c => c.url === "/api/overwatch/cs2-spoof/export-desktop"));
+  }
 });
+

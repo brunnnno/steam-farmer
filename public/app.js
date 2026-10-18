@@ -3143,6 +3143,37 @@ if($('btnCopyCombineBox'))$('btnCopyCombineBox').addEventListener('click',async(
     notice('BBCode Combine Overwatch copiado. En el Título de tu caja pon el carácter invisible (U+2800) y pega este texto.');
   } catch(e) { notice('BBCode copiado.'); }
 });
+if($('btnLockCs2Privacy'))$('btnLockCs2Privacy').addEventListener('click',async()=>{
+  try {
+    notice('Bloqueando inventario en Privado (manteniendo Perfil 100% Público)...');
+    const res = await api('/api/overwatch/cs2-spoof/lock-inventory', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    if ($('cs2PrivacyStatusText')) $('cs2PrivacyStatusText').textContent = res.message || res.privacyApplied || 'Privacidad actualizada';
+    notice(res.message || 'Inventario bloqueado en Privado con éxito.');
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnGenerateCs2Spoof'))$('btnGenerateCs2Spoof').addEventListener('click',async()=>{
+  try {
+    notice('Generando vitrina CS2 con las 7 skins más caras + enlaces 3D...');
+    const res = await api('/api/overwatch/cs2-spoof/generate', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    if ($('cs2SpoofResultArea')) $('cs2SpoofResultArea').style.display = 'block';
+    if ($('cs2InspectBbcodeText')) $('cs2InspectBbcodeText').value = res.bbcode || '';
+    if ($('cs2SpoofStatusMsg')) $('cs2SpoofStatusMsg').textContent = '✅ Vitrina y BBCode 3D generados.';
+    notice('Vitrina y enlaces 3D generados. Copia el BBCode para tu perfil.');
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnExportCs2Desktop'))$('btnExportCs2Desktop').addEventListener('click',async()=>{
+  try {
+    notice('Exportando vitrina CS2 a tu Escritorio...');
+    const res = await api('/api/overwatch/cs2-spoof/export-desktop', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    notice(res.message || 'Vitrina exportada a tu Escritorio (fake_cs2_showcase_636px.svg).');
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnCopyCs2Bbcode'))$('btnCopyCs2Bbcode').addEventListener('click',()=>{
+  const txt = $('cs2InspectBbcodeText') ? $('cs2InspectBbcodeText').value : '';
+  if (txt) {
+    try { navigator.clipboard.writeText(txt); notice('BBCode de inspección 3D copiado.'); } catch(e) { notice('Copia el texto del recuadro.'); }
+  }
+});
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
 if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());

@@ -63,6 +63,13 @@ const {
   generateDupedShowcaseScript,
   generateFavoriteGameScript
 } = require('./lib/elite-pentagon');
+const {
+  ZERO_OWNERSHIP_CS2_LOADOUT,
+  lockInventoryPrivacyOnly,
+  generateFakeCs2ShowcaseSvg,
+  buildZeroInventoryInspectBbcode,
+  exportFakeCs2ShowcaseToDesktop
+} = require('./lib/rea-overwatch-2003');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -1716,6 +1723,42 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const steamId = acc?.linkedSteamId || acc?.mySteamID || 'STEAM_0:1:792295';
         const box = generateCombineOverwatchBox(steamId, 69);
         return json(res, 200, { success: true, ...box });
+      }
+      if ((url.pathname === '/api/overwatch/cs2-spoof/lock-inventory' || url.pathname === '/api/pentagon/cs2-spoof/lock-inventory') && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const st = states.get(acc.id);
+        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
+        const cookieString = st?.webCookies || '';
+        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
+
+        if (!st?.connected || !cookieString) {
+          return json(res, 200, {
+            success: true,
+            demo: true,
+            privacyApplied: 'Profile: PUBLIC | Inventory: PRIVATE (Simulado)',
+            message: 'Ajuste preparado: Inventario Privado con Perfil 100% Público. Para aplicarlo en Steam, conéctate en SteamFarmer o configura Inventario: Privado en Ajustes de Privacidad.'
+          });
+        }
+
+        const lockRes = await lockInventoryPrivacyOnly({ steamId64, sessionId, cookieString });
+        return json(res, 200, { success: lockRes.ok, ...lockRes, message: lockRes.ok ? 'Inventario bloqueado en Privado con éxito (Perfil Público).' : 'No se pudo actualizar la privacidad en Steam.' });
+      }
+      if ((url.pathname === '/api/overwatch/cs2-spoof/generate' || url.pathname === '/api/pentagon/cs2-spoof/generate') && (req.method === 'GET' || req.method === 'POST')) {
+        const title = String(data?.title || 'Expositor de objetos');
+        const inspectData = buildZeroInventoryInspectBbcode();
+        const svg = generateFakeCs2ShowcaseSvg({ showcaseTitle: title });
+        return json(res, 200, {
+          success: true,
+          brailleBlankTitle: inspectData.brailleBlankTitle,
+          bbcode: inspectData.bbcode,
+          showcaseSvg: svg,
+          loadout: ZERO_OWNERSHIP_CS2_LOADOUT
+        });
+      }
+      if ((url.pathname === '/api/overwatch/cs2-spoof/export-desktop' || url.pathname === '/api/pentagon/cs2-spoof/export-desktop') && req.method === 'POST') {
+        const desktopPath = path.join(process.env.USERPROFILE || process.env.HOME || '.', 'OneDrive', 'Desktop');
+        const exportRes = exportFakeCs2ShowcaseToDesktop(fs.existsSync(desktopPath) ? desktopPath : path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Desktop'));
+        return json(res, 200, { success: exportRes.ok, ...exportRes, message: 'Vitrina CS2 exportada a tu Escritorio (fake_cs2_showcase_636px.svg).' });
       }
       const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
       if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){

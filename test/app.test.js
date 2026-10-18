@@ -1806,3 +1806,47 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(tStopRes.response.status, 200);
   assert.equal(tStopRes.data.status.active, false);
 });
+
+test('Pilar 4: CS2 Zero-Inventory Showcase Spoofer generates pixel-perfect SVG, 3D inspect BBCode, and handles privacy lock', async t => {
+  const {
+    ZERO_OWNERSHIP_CS2_LOADOUT,
+    generateFakeCs2ShowcaseSvg,
+    buildZeroInventoryInspectBbcode,
+    lockInventoryPrivacyOnly
+  } = require('../lib/rea-overwatch-2003');
+
+  assert.equal(ZERO_OWNERSHIP_CS2_LOADOUT.length, 7);
+  assert.equal(ZERO_OWNERSHIP_CS2_LOADOUT[0].name, '★ Karambit | Case Hardened');
+  assert.ok(ZERO_OWNERSHIP_CS2_LOADOUT[0].inspectLink.includes('csgo_econ_action_preview'));
+
+  const svg = generateFakeCs2ShowcaseSvg({ showcaseTitle: 'Expositor de objetos' });
+  assert.ok(svg.includes('<svg'));
+  assert.ok(svg.includes('width="636"'));
+  assert.ok(svg.includes('height="190"'));
+  assert.ok(svg.includes('Karambit'));
+  assert.ok(svg.includes('Dragon Lore'));
+
+  const bbcodeData = buildZeroInventoryInspectBbcode();
+  assert.equal(bbcodeData.brailleBlankTitle, '\u2800\u2800\u2800');
+  assert.ok(bbcodeData.bbcode.includes('[table equalcells=1]'));
+  assert.ok(bbcodeData.bbcode.includes('steam://rungame/730/'));
+  assert.ok(bbcodeData.bbcode.includes('Inspeccionar en el juego...'));
+
+  const mockLock = await lockInventoryPrivacyOnly({});
+  assert.equal(mockLock.ok, false);
+
+  const f = await fixture(t, { accounts: [{ id: 'user1', name: 'User 1', games: [] }] });
+  await f.login();
+
+  const genRes = await f.request('/api/overwatch/cs2-spoof/generate', { accountId: 'user1' });
+  assert.equal(genRes.response.status, 200);
+  assert.equal(genRes.data.success, true);
+  assert.equal(genRes.data.loadout.length, 7);
+  assert.ok(genRes.data.showcaseSvg.includes('Expositor de objetos'));
+
+  const lockRes = await f.request('/api/overwatch/cs2-spoof/lock-inventory', { accountId: 'user1' });
+  assert.equal(lockRes.response.status, 200);
+  assert.equal(lockRes.data.success, true);
+  assert.equal(lockRes.data.demo, true);
+});
+
