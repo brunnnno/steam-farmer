@@ -3107,6 +3107,42 @@ if($('btnLoadCheapSets'))$('btnLoadCheapSets').addEventListener('click',()=>load
 if($('btnCraftCheapBadge'))$('btnCraftCheapBadge').addEventListener('click',()=>craftCheapBadge());
 if($('btnPatchArtwork'))$('btnPatchArtwork').addEventListener('click',()=>patchInfiniteArtwork());
 if($('btnCopyArtworkCmd'))$('btnCopyArtworkCmd').addEventListener('click',()=>copyArtworkConsoleCommand());
+if($('btnCopyInvisibleName'))$('btnCopyInvisibleName').addEventListener('click',()=>{try{navigator.clipboard.writeText('\u2800');notice('Carácter invisible (U+2800) copiado. Pégalo en tu Nombre de Steam.');}catch(e){notice('Carácter invisible: [\u2800]');}});
+if($('btnCopySpacewarAppId'))$('btnCopySpacewarAppId').addEventListener('click',()=>{try{navigator.clipboard.writeText('480');notice('AppID 480 (Spacewar) copiado.');}catch(e){notice('AppID 480');}});
+if($('btnClaimHiddenLicenses'))$('btnClaimHiddenLicenses').addEventListener('click',async()=>{
+  try {
+    notice('Reclamando 6 licencias ocultas/retiradas (Codename Gordon, Spacewar, Source SDK, SteamVR, HLDS, Source DS)...');
+    const res = await api('/api/pentagon/licenses/claim-hidden', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    notice(res.message || 'Licencias ocultas reclamadas con éxito.');
+    await loadStatus();
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnRotation2003'))$('btnRotation2003').addEventListener('click',async()=>{
+  try {
+    notice('Activando rotación histórica 2003 + Half-Life: Alyx en paralelo...');
+    const res = await api('/api/pentagon/rotation-2003', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    notice(res.message || 'Rotación 2003 + Alyx activada.');
+    await loadStatus();
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnCopyFavGameScript'))$('btnCopyFavGameScript').addEventListener('click',()=>{
+  const val = $('favGameSelect') ? $('favGameSelect').value : '753';
+  const script = `(function(){const targetApp=${val};$J.post('https://steamcommunity.com/my/ajaxsetshowcaseconfig',{sessionid:g_sessionID,showcase_type:6,slot:0,appid:targetApp}).done(function(d){console.log('✅ [Favorite Game] AppID '+targetApp+' fijado:',d);alert('¡Juego Favorito (AppID '+targetApp+') configurado con éxito! Recarga tu perfil.');}).fail(function(e){console.error('❌ Error:',e);});})();`;
+  try { navigator.clipboard.writeText(script); notice('Script F12 para fijar Juego Favorito (AppID ' + val + ') copiado al portapapeles.'); } catch(e) { notice('Copia el script de la consola.'); }
+});
+if($('btnCopyDupedShowcaseScript'))$('btnCopyDupedShowcaseScript').addEventListener('click',()=>{
+  const app = $('dupedAppIdInput') ? $('dupedAppIdInput').value : '546560';
+  const ach = $('dupedAchInput') ? $('dupedAchInput').value : 'Lambda';
+  const script = `(function(){const targetApp=${app},targetName=${JSON.stringify(ach)},payload={};for(let i=0;i<7;i++){payload[i]={appid:targetApp,title:targetName};}$J.post('https://steamcommunity.com/my/ajaxsetshowcaseconfig',{sessionid:g_sessionID,showcase_type:14,slot:0,rgCustomFields:JSON.stringify(payload)}).done(function(d){console.log('✅ [Duped Showcase] 7 slots clonados:',d);alert('¡Vitrina Clonada en los 7 slots exitosamente! Recarga tu perfil.');}).fail(function(e){console.error('❌ Error:',e);});})();`;
+  try { navigator.clipboard.writeText(script); notice('Script F12 para clonar ' + ach + ' en los 7 slots copiado.'); } catch(e) { notice('Copia el script de la consola.'); }
+});
+if($('btnCopyCombineBox'))$('btnCopyCombineBox').addEventListener('click',async()=>{
+  const bbcode = `[quote]\n[b]C17 // OVERWATCH BROADCAST DISPATCH[/b]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n▸ [b]IDENTITY CLEARANCE:[/b] STEAM_0:1:792295 [b]•[/b] OCT 2003\n▸ [b]SECTOR RESTRICTION:[/b] APARTMENT BLOCK 42 // CITADEL\n▸ [b]CIVIL PROTECTION STATUS:[/b] APEX LEVEL 69\n▸ [b]TERMINAL TELEMETRY:[/b] FREQ 114.9 MHz [ENCRYPTED]\n▸ [b]DIRECTIVE:[/b] REMINDER: CIVIL TRANSGRESSION IS SUB-VITAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[i]"Attention ground units: Anti-citizen activity reported in sector."[/i]\n[/quote]`;
+  try {
+    navigator.clipboard.writeText(bbcode);
+    notice('BBCode Combine Overwatch copiado. En el Título de tu caja pon el carácter invisible (U+2800) y pega este texto.');
+  } catch(e) { notice('BBCode copiado.'); }
+});
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
 if($('stealthPrivacyBtn'))$('stealthPrivacyBtn').addEventListener('click',()=>toggleStealthPrivacy());

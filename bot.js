@@ -51,10 +51,22 @@ const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge,
 const { ValveGameCoordinatorHub } = require('./lib/cs2-coordinator');
 const { enableSteamDeckPresence, registerSteamDeckRewards } = require('./lib/steam-deck');
 const { TournamentGhostService } = require('./lib/tournament-ghost');
-const { VanityUrlSniper, MarketSniper, AlchemyTransmuter, LevelOptimizer, patchPngForInfiniteHeight } = require('./lib/elite-pentagon');
+const {
+  VanityUrlSniper,
+  MarketSniper,
+  AlchemyTransmuter,
+  LevelOptimizer,
+  patchPngForInfiniteHeight,
+  HIDDEN_RETIRED_APPIDS,
+  HISTORICAL_2003_ALYX_ROTATION,
+  generateCombineOverwatchBox,
+  generateDupedShowcaseScript,
+  generateFavoriteGameScript
+} = require('./lib/elite-pentagon');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
+  rotation2003: { name: '2003 + Alyx Rotation', games: [10, 20, 30, 40, 50, 60, 70, 80, 90, 92, 100, 130, 210, 220, 240, 480, 243750, 250820, 546560] },
   aaa: { name: 'AAA Hits', games: [271590, 1938090, 1091500, 292030, 379720] }
 };
 const WRITE_UNAVAILABLE = 'This legacy route cannot change achievements. Use the dashboard to review and confirm a concrete selection.';
@@ -1657,6 +1669,53 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         } catch (e) {
           return json(res, 400, { success: false, message: e.message });
         }
+      }
+      if (url.pathname === '/api/pentagon/licenses/claim-hidden' && req.method === 'POST') {
+        const acc = getAccount(req, url, data), st = stateFor(acc.id), client = clients.get(acc.id);
+        if (!st.connected || !client) throw fail('Connect your Steam account first.', 409);
+        const resClaim = await claimFreeLicenses(client, HIDDEN_RETIRED_APPIDS);
+        for (const gid of HIDDEN_RETIRED_APPIDS) {
+          if (acc.games.length >= 32) break;
+          if (!acc.games.includes(gid)) acc.games.push(gid);
+        }
+        save();
+        farming(acc, true);
+        return json(res, 200, {
+          success: true,
+          eresult: resClaim.eresult,
+          granted: resClaim.granted,
+          grantedPackages: resClaim.grantedPackages || [],
+          message: 'Licencias ocultas/retiradas reclamadas con éxito (Codename Gordon, Spacewar, Source SDK, SteamVR, HLDS, Source DS).'
+        });
+      }
+      if (url.pathname === '/api/pentagon/rotation-2003' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        acc.games = [...new Set([...acc.games, ...HISTORICAL_2003_ALYX_ROTATION])].slice(0, 32);
+        save();
+        farming(acc, true);
+        return json(res, 200, {
+          success: true,
+          games: acc.games,
+          message: 'Rotación histórica de 2003 + Half-Life: Alyx activada en paralelo.'
+        });
+      }
+      if (url.pathname === '/api/pentagon/showcase/dupe' && req.method === 'POST') {
+        const scType = Number(data?.showcaseType) || 14;
+        const targetApp = Number(data?.appId) || 546560;
+        const targetName = String(data?.targetName || 'Lambda');
+        const script = generateDupedShowcaseScript(scType, targetApp, targetName);
+        return json(res, 200, { success: true, script, message: 'Script para clonar en los 7 slots generado.' });
+      }
+      if (url.pathname === '/api/pentagon/showcase/favorite-game' && req.method === 'POST') {
+        const targetApp = Number(data?.appId) || 753;
+        const script = generateFavoriteGameScript(targetApp);
+        return json(res, 200, { success: true, script, appId: targetApp, message: 'Script para fijar Juego Favorito generado.' });
+      }
+      if (url.pathname === '/api/pentagon/showcase/combine-box' && (req.method === 'GET' || req.method === 'POST')) {
+        const acc = getAccount(req, url, data);
+        const steamId = acc?.linkedSteamId || acc?.mySteamID || 'STEAM_0:1:792295';
+        const box = generateCombineOverwatchBox(steamId, 69);
+        return json(res, 200, { success: true, ...box });
       }
       const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
       if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){
