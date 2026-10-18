@@ -581,6 +581,14 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     if (!id) throw fail('Select an account explicitly.');
     const acc = cfg.accounts.find(a => a.id === id); if (!acc) throw fail('Account not found.', 404); return acc;
   }
+  function getAccountOrFallback(req, url, data = {}) {
+    const id = data?.accountId || url.searchParams.get('accountId');
+    if (id && id !== 'demo') {
+      const acc = cfg.accounts.find(a => a.id === id);
+      if (acc) return acc;
+    }
+    return cfg.accounts[0] || { id: 'demo' };
+  }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
     const timedSyncApps = timedManager.activeNonStealthApps(acc.id);
@@ -1731,13 +1739,13 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         return json(res, 200, { success: true, script, appId: targetApp, message: 'Script para fijar Juego Favorito generado.' });
       }
       if (url.pathname === '/api/pentagon/showcase/combine-box' && (req.method === 'GET' || req.method === 'POST')) {
-        const acc = getAccount(req, url, data);
+        const acc = getAccountOrFallback(req, url, data);
         const steamId = acc?.linkedSteamId || acc?.mySteamID || 'STEAM_0:1:792295';
         const box = generateCombineOverwatchBox(steamId, 69);
         return json(res, 200, { success: true, ...box });
       }
       if ((url.pathname === '/api/overwatch/cs2-spoof/lock-inventory' || url.pathname === '/api/pentagon/cs2-spoof/lock-inventory') && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
+        const acc = getAccountOrFallback(req, url, data);
         const st = states.get(acc.id);
         const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
         const cookieString = st?.webCookies || '';
@@ -1773,7 +1781,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         return json(res, 200, { success: exportRes.ok, ...exportRes, message: 'Vitrina CS2 exportada a tu Escritorio (fake_cs2_showcase_636px.svg).' });
       }
       if ((url.pathname === '/api/overwatch/presence/apply' || url.pathname === '/api/pentagon/presence/apply') && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
+        const acc = getAccountOrFallback(req, url, data);
         const client = clients.get(acc.id);
         const appIdTarget = Number(data?.appId) || 70;
         const statusText = String(data?.status || 'Ciudad 17 // Terminal Overwatch 2003');
@@ -1795,7 +1803,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       }
       // EXPLOIT 1: Ghost Workshop Item (AppID 767)
       if ((url.pathname === '/api/overwatch/workshop/publish-ghost' || url.pathname === '/api/pentagon/workshop/publish-ghost') && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
+        const acc = getAccountOrFallback(req, url, data);
         const st = states.get(acc.id);
         const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
         const cookieString = st?.webCookies || '';
@@ -1834,7 +1842,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
 
       // EXPLOIT 2: Zero Hour Store Review Bypass (0.0h Badge)
       if ((url.pathname === '/api/overwatch/reviews/zero-hour' || url.pathname === '/api/pentagon/reviews/zero-hour') && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
+        const acc = getAccountOrFallback(req, url, data);
         const st = states.get(acc.id);
         const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
         const cookieString = st?.webCookies || '';
@@ -1872,13 +1880,13 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
 
       // EXPLOIT 4: 2003 Relic / Orphaned Clan Favorite Group
       if ((url.pathname === '/api/overwatch/groups/set-relic' || url.pathname === '/api/pentagon/groups/set-relic') && req.method === 'POST') {
-        const acc = getAccount(req, url, data);
+        const acc = getAccountOrFallback(req, url, data);
         const st = states.get(acc.id);
         const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
         const cookieString = st?.webCookies || '';
         const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
 
-        const clanId = String(data?.clanId || '103582791429521412');
+        const clanId = String(data?.clanId || '103582791429625600');
         const result = await setFavoriteRelicGroup({
           clanId,
           cookieString,

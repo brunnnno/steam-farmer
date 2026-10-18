@@ -3127,10 +3127,11 @@ if($('btnRotation2003'))$('btnRotation2003').addEventListener('click',async()=>{
 });
 if($('btnApplyPresence2003'))$('btnApplyPresence2003').addEventListener('click',async()=>{
   try {
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
     notice('Inyectando Rich Presence de 2003 jugadores y Modo Fantasma VR...');
     const res = await api('/api/overwatch/presence/apply', {
       method: 'POST',
-      body: JSON.stringify({ accountId: activeAccountId, appId: 70, groupSize: '2003', status: 'Ciudad 17 // Terminal Overwatch 2003', ghost: true })
+      body: JSON.stringify({ accountId: targetAcc, appId: 70, groupSize: '2003', status: 'Ciudad 17 // Terminal Overwatch 2003', ghost: true })
     });
     notice(res.message || 'Lobby de 2003 jugadores y modo fantasma VR aplicados.');
   } catch(e) { notice('Error: ' + e.message); }
@@ -3155,16 +3156,18 @@ if($('btnCopyCombineBox'))$('btnCopyCombineBox').addEventListener('click',async(
 });
 if($('btnLockCs2Privacy'))$('btnLockCs2Privacy').addEventListener('click',async()=>{
   try {
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
     notice('Bloqueando inventario en Privado (manteniendo Perfil 100% Público)...');
-    const res = await api('/api/overwatch/cs2-spoof/lock-inventory', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    const res = await api('/api/overwatch/cs2-spoof/lock-inventory', { method: 'POST', body: JSON.stringify({ accountId: targetAcc }) });
     if ($('cs2PrivacyStatusText')) $('cs2PrivacyStatusText').textContent = res.message || res.privacyApplied || 'Privacidad actualizada';
     notice(res.message || 'Inventario bloqueado en Privado con éxito.');
   } catch(e) { notice('Error: ' + e.message); }
 });
 if($('btnGenerateCs2Spoof'))$('btnGenerateCs2Spoof').addEventListener('click',async()=>{
   try {
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
     notice('Generando vitrina CS2 con las 7 skins más caras + enlaces 3D...');
-    const res = await api('/api/overwatch/cs2-spoof/generate', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    const res = await api('/api/overwatch/cs2-spoof/generate', { method: 'POST', body: JSON.stringify({ accountId: targetAcc }) });
     if ($('cs2SpoofResultArea')) $('cs2SpoofResultArea').style.display = 'block';
     if ($('cs2InspectBbcodeText')) $('cs2InspectBbcodeText').value = res.bbcode || '';
     if ($('cs2SpoofStatusMsg')) $('cs2SpoofStatusMsg').textContent = '✅ Vitrina y BBCode 3D generados.';
@@ -3173,8 +3176,9 @@ if($('btnGenerateCs2Spoof'))$('btnGenerateCs2Spoof').addEventListener('click',as
 });
 if($('btnExportCs2Desktop'))$('btnExportCs2Desktop').addEventListener('click',async()=>{
   try {
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
     notice('Exportando vitrina CS2 a tu Escritorio...');
-    const res = await api('/api/overwatch/cs2-spoof/export-desktop', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
+    const res = await api('/api/overwatch/cs2-spoof/export-desktop', { method: 'POST', body: JSON.stringify({ accountId: targetAcc }) });
     notice(res.message || 'Vitrina exportada a tu Escritorio (fake_cs2_showcase_636px.svg).');
   } catch(e) { notice('Error: ' + e.message); }
 });
@@ -3187,11 +3191,12 @@ if($('btnCopyCs2Bbcode'))$('btnCopyCs2Bbcode').addEventListener('click',()=>{
 // Exploit 1: Ghost Workshop Item (AppID 767)
 if($('btnPublishGhostWorkshop'))$('btnPublishGhostWorkshop').addEventListener('click',async()=>{
   try {
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
     const title = $('workshopTitleInput') ? $('workshopTitleInput').value : 'Overwatch 2003 Kernel // Valve Steam Client';
     notice('Publicando ítem Ghost en Steam Workshop para AppID 767 (Steam Client)...');
     const res = await api('/api/overwatch/workshop/publish-ghost', {
       method: 'POST',
-      body: JSON.stringify({ accountId: activeAccountId, appId: 767, title })
+      body: JSON.stringify({ accountId: targetAcc, appId: 767, title })
     });
     if ($('workshopStatusArea')) {
       $('workshopStatusArea').style.display = 'block';
@@ -3214,12 +3219,13 @@ if($('btnCopyWorkshopScript'))$('btnCopyWorkshopScript').addEventListener('click
 // Exploit 2: Reseña 0.0 Horas
 if($('btnSubmitZeroHourReview'))$('btnSubmitZeroHourReview').addEventListener('click',async()=>{
   try {
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
     const appId = $('reviewAppIdSelect') ? $('reviewAppIdSelect').value : '70';
     const text = $('reviewTextInput') ? $('reviewTextInput').value : 'C17 // OVERWATCH 2003 TELEMETRY VERIFIED.';
     notice('Publicando reseña oficial de 0.0 Horas en Steam Store para AppID ' + appId + '...');
     const res = await api('/api/overwatch/reviews/zero-hour', {
       method: 'POST',
-      body: JSON.stringify({ accountId: activeAccountId, appId: Number(appId), comment: text, ratedUp: true })
+      body: JSON.stringify({ accountId: targetAcc, appId: Number(appId), comment: text, ratedUp: true })
     });
     if ($('reviewStatusArea')) {
       $('reviewStatusArea').style.display = 'block';
@@ -3242,11 +3248,12 @@ if($('btnCopyReviewScript'))$('btnCopyReviewScript').addEventListener('click',as
 // Exploit 4: Clan Reliquia 2003 / Grupo Favorito
 if($('btnSetRelicGroup'))$('btnSetRelicGroup').addEventListener('click',async()=>{
   try {
-    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429521412';
+    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
+    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429625600';
     notice('Fijando Clan Reliquia ' + clanId + ' como Grupo Favorito en tu perfil...');
     const res = await api('/api/overwatch/groups/set-relic', {
       method: 'POST',
-      body: JSON.stringify({ accountId: activeAccountId, clanId })
+      body: JSON.stringify({ accountId: targetAcc, clanId })
     });
     if ($('relicGroupStatusArea')) {
       $('relicGroupStatusArea').style.display = 'block';
@@ -3257,7 +3264,7 @@ if($('btnSetRelicGroup'))$('btnSetRelicGroup').addEventListener('click',async()=
 });
 if($('btnCopyRelicGroupScript'))$('btnCopyRelicGroupScript').addEventListener('click',async()=>{
   try {
-    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429521412';
+    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429625600';
     const res = await api('/api/overwatch/groups/relics?clanId=' + clanId);
     if (res.script) {
       await navigator.clipboard.writeText(res.script);
