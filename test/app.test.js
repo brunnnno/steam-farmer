@@ -1848,5 +1848,101 @@ test('Pilar 4: CS2 Zero-Inventory Showcase Spoofer generates pixel-perfect SVG, 
   assert.equal(lockRes.response.status, 200);
   assert.equal(lockRes.data.success, true);
   assert.equal(lockRes.data.demo, true);
+
+  // Test forgeModGameId, Rich Presence and Ghost Mode
+  const { forgeModGameId, injectGlitchedRichPresence, setGhostModeAndFlags } = require('../lib/rea-overwatch-2003');
+  const modId = forgeModGameId(546560);
+  assert.ok(typeof modId === 'string');
+  assert.ok(BigInt(modId) > 0n);
+
+  const mockRp = injectGlitchedRichPresence(null, { appId: 70, groupSize: '2003' });
+  assert.equal(mockRp.ok, false);
+  assert.equal(mockRp.demo, true);
+
+  const mockGhost = setGhostModeAndFlags(null);
+  assert.equal(mockGhost.ok, false);
+  assert.equal(mockGhost.demo, true);
+
+  const presRes = await f.request('/api/overwatch/presence/apply', { accountId: 'user1', appId: 70, groupSize: '2003', ghost: true });
+  assert.equal(presRes.response.status, 200);
+  assert.equal(presRes.data.success, true);
+  assert.ok(presRes.data.message);
+
+  // Test Exploit 1: Ghost Workshop Item (AppID 767)
+  const {
+    generateGhostWorkshopScript,
+    generateWorkshopShowcaseScript,
+    publishGhostWorkshopItem,
+    generateZeroHourReviewScript,
+    submitZeroHourReview,
+    HISTORICAL_RELIC_GROUPS,
+    generateFavoriteGroupScript,
+    setFavoriteRelicGroup
+  } = require('../lib/rea-overwatch-2003');
+
+  const wsScript = generateGhostWorkshopScript({ appId: 767, title: 'Test Mod' });
+  assert.ok(wsScript.includes('https://steamcommunity.com/sharedfiles/edititem/767/3/'));
+  assert.ok(wsScript.includes('showcase_type: 9'));
+
+  const wsShowcaseScript = generateWorkshopShowcaseScript('123456789');
+  assert.ok(wsShowcaseScript.includes('123456789'));
+  assert.ok(wsShowcaseScript.includes('showcase_type: 9'));
+
+  const wsPubMock = await publishGhostWorkshopItem({});
+  assert.equal(wsPubMock.ok, false);
+  assert.equal(wsPubMock.demo, true);
+
+  const wsRes = await f.request('/api/overwatch/workshop/publish-ghost', { accountId: 'user1', appId: 767, title: 'Overwatch Kernel' });
+  assert.equal(wsRes.response.status, 200);
+  assert.equal(wsRes.data.success, true);
+  assert.ok(wsRes.data.script.includes('showcase_type: 9'));
+
+  const wsScriptRes = await f.request('/api/overwatch/workshop/script?appId=767');
+  assert.equal(wsScriptRes.response.status, 200);
+  assert.equal(wsScriptRes.data.success, true);
+  assert.ok(wsScriptRes.data.script.includes('767'));
+
+  // Test Exploit 2: 0.0 Hours Official Store Review Bypass
+  const revScript = generateZeroHourReviewScript({ appId: 70, ratedUp: true });
+  assert.ok(revScript.includes('https://store.steampowered.com/friends/recommendgame/'));
+  assert.ok(revScript.includes('playtime_at_review: 0'));
+  assert.ok(revScript.includes('showcase_type: 10'));
+
+  const revMock = await submitZeroHourReview({});
+  assert.equal(revMock.ok, false);
+  assert.equal(revMock.demo, true);
+
+  const revRes = await f.request('/api/overwatch/reviews/zero-hour', { accountId: 'user1', appId: 70, comment: 'Pioneer 2003' });
+  assert.equal(revRes.response.status, 200);
+  assert.equal(revRes.data.success, true);
+  assert.ok(revRes.data.script.includes('playtime_at_review: 0'));
+
+  const revScriptRes = await f.request('/api/overwatch/reviews/script?appId=70');
+  assert.equal(revScriptRes.response.status, 200);
+  assert.equal(revScriptRes.data.success, true);
+  assert.ok(revScriptRes.data.script.includes('70'));
+
+  // Test Exploit 4: 2003 Relic / Orphaned Clan Favorite Group
+  assert.ok(HISTORICAL_RELIC_GROUPS.length >= 6);
+  assert.equal(HISTORICAL_RELIC_GROUPS[0].clanId, '103582791429521412');
+  assert.equal(HISTORICAL_RELIC_GROUPS[0].name, 'Valve');
+
+  const groupScript = generateFavoriteGroupScript('103582791429521412');
+  assert.ok(groupScript.includes('103582791429521412'));
+  assert.ok(groupScript.includes('showcase_type: 8'));
+
+  const groupMock = await setFavoriteRelicGroup({});
+  assert.equal(groupMock.ok, false);
+  assert.equal(groupMock.demo, true);
+
+  const groupRes = await f.request('/api/overwatch/groups/set-relic', { accountId: 'user1', clanId: '103582791429521412' });
+  assert.equal(groupRes.response.status, 200);
+  assert.equal(groupRes.data.success, true);
+  assert.equal(groupRes.data.clanId, '103582791429521412');
+
+  const groupsListRes = await f.request('/api/overwatch/groups/relics');
+  assert.equal(groupsListRes.response.status, 200);
+  assert.equal(groupsListRes.data.success, true);
+  assert.ok(groupsListRes.data.groups.length >= 6);
 });
 

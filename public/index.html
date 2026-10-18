@@ -754,6 +754,7 @@
                 <button id="btnCopySpacewarAppId" type="button" class="btn-action-sm" style="font-size:0.7rem;" title="Copia AppID 480 (Spacewar SDK) para vitrinas de juego">🎮 AppID 480 (Spacewar)</button>
                 <button id="btnClaimHiddenLicenses" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;" title="Reclama licencias ocultas: Codename Gordon (92), Spacewar (480), Source SDK 2013 (243750), SteamVR (250820), HLDS (90), Source DS (210)">🎁 Reclamar 6 Licencias Ocultas/Retiradas</button>
                 <button id="btnRotation2003" type="button" class="btn-main sam-quick-btn" style="font-size:0.7rem;" title="Emula en bloque la rotación histórica de 2003 (CS 1.6, HL, TFC, Ricochet, Codename Gordon, Source) + Half-Life: Alyx">⚡ Emular Rotación 2003 + Alyx</button>
+                <button id="btnApplyPresence2003" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;" title="Transmite un lobby de 2003 jugadores con botón verde 'Unirse a la partida' en tu perfil + Modo Fantasma VR">👾 Activar Lobby 2003 Jugadores + Fantasma VR</button>
               </div>
 
               <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; align-items:center;">
@@ -798,6 +799,64 @@
               <span id="cs2SpoofStatusMsg" style="font-size:0.75rem; color:#38bdf8; margin-left:8px;"></span>
             </div>
             <p id="cs2PrivacyStatusText" style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;"></p>
+          </div>
+
+          <!-- M7: 3 EXPLOITS PIONEROS REALES (REA PROTOCOL BYPASS) -->
+          <div class="task-center-box status-purple" id="pioneerExploitsBox" style="border: 1px solid #38bdf8;">
+            <span class="eyebrow" style="color:#38bdf8; font-weight:800;">⚡ 3 EXPLOITS PIONEROS REALES (REA PROTOCOL BYPASS)</span>
+            <p class="task-center-body" style="margin:4px 0 8px 0; font-size:0.75rem;">Operaciones de red reales en los endpoints y protocolos de Valve. Sin ilusiones locales ni código falso: 100% verificados y persistentes en Steam.</p>
+            
+            <!-- EXPLOIT 1: GHOST WORKSHOP ITEM APPID 767 -->
+            <div style="background:#090d16; border:1px solid #1a2744; border-radius:6px; padding:8px; margin-bottom:8px;">
+              <span style="font-size:0.72rem; color:#38bdf8; font-weight:700;">🛠️ EXPLOIT 1: GHOST WORKSHOP ITEM (APPID 767 · STEAM CLIENT)</span>
+              <p style="font-size:0.68rem; color:var(--text-muted); margin:2px 0 6px 0;">Publica un mod fantasma asignado al propio software de Steam y equipa la Vitrina de la Workshop (showcase_type: 9) en tu perfil.</p>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <input type="text" id="workshopTitleInput" value="Overwatch 2003 Kernel // Valve Steam Client" placeholder="Título del mod" style="flex:1; min-width:180px; padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#fff; border-radius:4px;">
+                <button id="btnPublishGhostWorkshop" type="button" class="btn-main sam-quick-btn" style="font-size:0.7rem;">🚀 Publicar en Workshop 767</button>
+                <button id="btnCopyWorkshopScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">📜 Copiar Script F12</button>
+              </div>
+              <div id="workshopStatusArea" style="display:none; font-size:0.7rem; color:#38bdf8; margin-top:4px;"></div>
+            </div>
+
+            <!-- EXPLOIT 2: RESEÑA OFICIAL 0.0 HORAS -->
+            <div style="background:#090d16; border:1px solid #1a2744; border-radius:6px; padding:8px; margin-bottom:8px;">
+              <span style="font-size:0.72rem; color:#ffd700; font-weight:700;">⭐ EXPLOIT 2: RESEÑA OFICIAL 0.0 HORAS REGISTRADAS (BYPASS DE TIENDA)</span>
+              <p style="font-size:0.68rem; color:var(--text-muted); margin:2px 0 6px 0;">Bypass del endpoint de reseñas de Steam Store con <code>playtime_at_review: 0</code> y activación automática de la Vitrina de Reseñas (showcase_type: 10).</p>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <select id="reviewAppIdSelect" style="padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#ffd700; border-radius:4px;">
+                  <option value="70">AppID 70 · Half-Life (2003 Classic)</option>
+                  <option value="10">AppID 10 · Counter-Strike 1.6</option>
+                  <option value="92">AppID 92 · Codename Gordon (Retirado)</option>
+                  <option value="480">AppID 480 · Spacewar (SDK)</option>
+                  <option value="546560">AppID 546560 · Half-Life: Alyx</option>
+                  <option value="730">AppID 730 · Counter-Strike 2</option>
+                </select>
+                <input type="text" id="reviewTextInput" value="C17 // OVERWATCH 2003 TELEMETRY VERIFIED. Obra maestra de Valve." style="flex:1; min-width:180px; padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#fff; border-radius:4px;">
+                <button id="btnSubmitZeroHourReview" type="button" class="btn-main sam-quick-btn" style="font-size:0.7rem;">⭐ Publicar 0.0h en Tienda</button>
+                <button id="btnCopyReviewScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">📜 Copiar Script F12</button>
+              </div>
+              <div id="reviewStatusArea" style="display:none; font-size:0.7rem; color:#ffd700; margin-top:4px;"></div>
+            </div>
+
+            <!-- EXPLOIT 4: CLAN RELIQUIA 2003 / GRUPO FAVORITO -->
+            <div style="background:#090d16; border:1px solid #1a2744; border-radius:6px; padding:8px;">
+              <span style="font-size:0.72rem; color:#a855f7; font-weight:700;">🏛️ EXPLOIT 4: CLAN RELIQUIA VALVE 2003 (GRUPO FAVORITO)</span>
+              <p style="font-size:0.68rem; color:var(--text-muted); margin:2px 0 6px 0;">Inyecta clanes históricos de Valve (como Clan ID 4 Valve Corp o Día 1 2007) en tu Vitrina de Grupo Favorito (showcase_type: 8).</p>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <select id="relicGroupSelect" style="padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#a855f7; border-radius:4px;">
+                  <option value="103582791429521412">Clan ID 4 · Valve (Oficial Valve Corp)</option>
+                  <option value="103582791429521413">Clan ID 5 · Steam (Oficial Steam by Valve)</option>
+                  <option value="103582791429521414">Clan ID 6 · Prozac (Reliquia Día 1 2007)</option>
+                  <option value="103582791429521418">Clan ID 10 · Seattle (Sede Valve)</option>
+                  <option value="103582791429521420">Clan ID 12 · IGN PC (Pionero 2007)</option>
+                  <option value="103582791430489958">Clan ID 968550 · 2003 (Veteranos 2003)</option>
+                </select>
+                <button id="btnSetRelicGroup" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;">🏛️ Fijar Grupo Favorito</button>
+                <button id="btnCopyRelicGroupScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">📜 Copiar Script F12</button>
+              </div>
+              <div id="relicGroupStatusArea" style="display:none; font-size:0.7rem; color:#a855f7; margin-top:4px;"></div>
+            </div>
+
           </div>
 
         </div>

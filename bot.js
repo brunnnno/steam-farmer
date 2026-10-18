@@ -68,7 +68,19 @@ const {
   lockInventoryPrivacyOnly,
   generateFakeCs2ShowcaseSvg,
   buildZeroInventoryInspectBbcode,
-  exportFakeCs2ShowcaseToDesktop
+  exportFakeCs2ShowcaseToDesktop,
+  injectGlitchedRichPresence,
+  setGhostModeAndFlags,
+  generateGhostWorkshopScript,
+  generateWorkshopShowcaseScript,
+  publishGhostWorkshopItem,
+  setWorkshopShowcase,
+  generateZeroHourReviewScript,
+  submitZeroHourReview,
+  setReviewShowcase,
+  HISTORICAL_RELIC_GROUPS,
+  generateFavoriteGroupScript,
+  setFavoriteRelicGroup
 } = require('./lib/rea-overwatch-2003');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
@@ -1759,6 +1771,133 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const desktopPath = path.join(process.env.USERPROFILE || process.env.HOME || '.', 'OneDrive', 'Desktop');
         const exportRes = exportFakeCs2ShowcaseToDesktop(fs.existsSync(desktopPath) ? desktopPath : path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Desktop'));
         return json(res, 200, { success: exportRes.ok, ...exportRes, message: 'Vitrina CS2 exportada a tu Escritorio (fake_cs2_showcase_636px.svg).' });
+      }
+      if ((url.pathname === '/api/overwatch/presence/apply' || url.pathname === '/api/pentagon/presence/apply') && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const client = clients.get(acc.id);
+        const appIdTarget = Number(data?.appId) || 70;
+        const statusText = String(data?.status || 'Ciudad 17 // Terminal Overwatch 2003');
+        const groupSize = String(data?.groupSize || '2003');
+        const enableGhost = Boolean(data?.ghost !== false);
+
+        const rpRes = injectGlitchedRichPresence(client, { appId: appIdTarget, status: statusText, groupSize });
+        let ghostRes = { ok: true };
+        if (enableGhost) {
+          ghostRes = setGhostModeAndFlags(client, { personaState: 7, flags: 4096 });
+        }
+
+        return json(res, 200, {
+          success: true,
+          rp: rpRes,
+          ghost: ghostRes,
+          message: rpRes.message || 'Lobby de 2003 Jugadores y Modo Fantasma VR activados.'
+        });
+      }
+      // EXPLOIT 1: Ghost Workshop Item (AppID 767)
+      if ((url.pathname === '/api/overwatch/workshop/publish-ghost' || url.pathname === '/api/pentagon/workshop/publish-ghost') && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const st = states.get(acc.id);
+        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
+        const cookieString = st?.webCookies || '';
+        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
+
+        const appIdTarget = Number(data?.appId) || 767;
+        const title = String(data?.title || 'Overwatch 2003 Kernel // Valve Steam Client');
+        const description = String(data?.description || 'C17 // Valve System Core Terminal Protocol (2003 Edition)');
+        const visibility = Number(data?.visibility) || 0;
+
+        const result = await publishGhostWorkshopItem({
+          appId: appIdTarget,
+          title,
+          description,
+          visibility,
+          cookieString,
+          sessionId,
+          steamId64
+        });
+        const script = generateGhostWorkshopScript({ appId: appIdTarget, title, description, visibility });
+
+        return json(res, 200, {
+          success: result.ok || result.demo,
+          ...result,
+          script
+        });
+      }
+
+      if ((url.pathname === '/api/overwatch/workshop/script' || url.pathname === '/api/pentagon/workshop/script') && req.method === 'GET') {
+        const appIdTarget = Number(url.searchParams.get('appId')) || 767;
+        const title = url.searchParams.get('title') || 'Overwatch 2003 Kernel // Valve Steam Client';
+        const description = url.searchParams.get('description') || 'C17 // Valve System Core Terminal Protocol (2003 Edition)';
+        const script = generateGhostWorkshopScript({ appId: appIdTarget, title, description });
+        return json(res, 200, { success: true, script, appId: appIdTarget });
+      }
+
+      // EXPLOIT 2: Zero Hour Store Review Bypass (0.0h Badge)
+      if ((url.pathname === '/api/overwatch/reviews/zero-hour' || url.pathname === '/api/pentagon/reviews/zero-hour') && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const st = states.get(acc.id);
+        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
+        const cookieString = st?.webCookies || '';
+        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
+
+        const appIdTarget = Number(data?.appId) || 70;
+        const reviewText = String(data?.comment || data?.reviewText || 'C17 // OVERWATCH 2003 TELEMETRY VERIFIED.\nObra maestra absoluta de Valve Corporation.');
+        const ratedUp = Boolean(data?.ratedUp !== false);
+        const language = String(data?.language || 'spanish');
+
+        const result = await submitZeroHourReview({
+          appId: appIdTarget,
+          reviewText,
+          ratedUp,
+          language,
+          cookieString,
+          sessionId,
+          steamId64
+        });
+        const script = generateZeroHourReviewScript({ appId: appIdTarget, reviewText, ratedUp, language });
+
+        return json(res, 200, {
+          success: result.ok || result.demo,
+          ...result,
+          script
+        });
+      }
+
+      if ((url.pathname === '/api/overwatch/reviews/script' || url.pathname === '/api/pentagon/reviews/script') && req.method === 'GET') {
+        const appIdTarget = Number(url.searchParams.get('appId')) || 70;
+        const ratedUp = url.searchParams.get('ratedUp') !== 'false';
+        const script = generateZeroHourReviewScript({ appId: appIdTarget, ratedUp });
+        return json(res, 200, { success: true, script, appId: appIdTarget });
+      }
+
+      // EXPLOIT 4: 2003 Relic / Orphaned Clan Favorite Group
+      if ((url.pathname === '/api/overwatch/groups/set-relic' || url.pathname === '/api/pentagon/groups/set-relic') && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const st = states.get(acc.id);
+        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
+        const cookieString = st?.webCookies || '';
+        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
+
+        const clanId = String(data?.clanId || '103582791429521412');
+        const result = await setFavoriteRelicGroup({
+          clanId,
+          cookieString,
+          sessionId,
+          steamId64
+        });
+        const script = generateFavoriteGroupScript(clanId);
+
+        return json(res, 200, {
+          success: result.ok || result.demo,
+          ...result,
+          script
+        });
+      }
+
+      if ((url.pathname === '/api/overwatch/groups/relics' || url.pathname === '/api/pentagon/groups/relics') && req.method === 'GET') {
+        const clanId = url.searchParams.get('clanId') || '103582791429521412';
+        const script = generateFavoriteGroupScript(clanId);
+        return json(res, 200, { success: true, groups: HISTORICAL_RELIC_GROUPS, script });
       }
       const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
       if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){

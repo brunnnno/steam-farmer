@@ -3125,6 +3125,16 @@ if($('btnRotation2003'))$('btnRotation2003').addEventListener('click',async()=>{
     await loadStatus();
   } catch(e) { notice('Error: ' + e.message); }
 });
+if($('btnApplyPresence2003'))$('btnApplyPresence2003').addEventListener('click',async()=>{
+  try {
+    notice('Inyectando Rich Presence de 2003 jugadores y Modo Fantasma VR...');
+    const res = await api('/api/overwatch/presence/apply', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: activeAccountId, appId: 70, groupSize: '2003', status: 'Ciudad 17 // Terminal Overwatch 2003', ghost: true })
+    });
+    notice(res.message || 'Lobby de 2003 jugadores y modo fantasma VR aplicados.');
+  } catch(e) { notice('Error: ' + e.message); }
+});
 if($('btnCopyFavGameScript'))$('btnCopyFavGameScript').addEventListener('click',()=>{
   const val = $('favGameSelect') ? $('favGameSelect').value : '753';
   const script = `(function(){const targetApp=${val};$J.post('https://steamcommunity.com/my/ajaxsetshowcaseconfig',{sessionid:g_sessionID,showcase_type:6,slot:0,appid:targetApp}).done(function(d){console.log('✅ [Favorite Game] AppID '+targetApp+' fijado:',d);alert('¡Juego Favorito (AppID '+targetApp+') configurado con éxito! Recarga tu perfil.');}).fail(function(e){console.error('❌ Error:',e);});})();`;
@@ -3173,6 +3183,87 @@ if($('btnCopyCs2Bbcode'))$('btnCopyCs2Bbcode').addEventListener('click',()=>{
   if (txt) {
     try { navigator.clipboard.writeText(txt); notice('BBCode de inspección 3D copiado.'); } catch(e) { notice('Copia el texto del recuadro.'); }
   }
+});
+// Exploit 1: Ghost Workshop Item (AppID 767)
+if($('btnPublishGhostWorkshop'))$('btnPublishGhostWorkshop').addEventListener('click',async()=>{
+  try {
+    const title = $('workshopTitleInput') ? $('workshopTitleInput').value : 'Overwatch 2003 Kernel // Valve Steam Client';
+    notice('Publicando ítem Ghost en Steam Workshop para AppID 767 (Steam Client)...');
+    const res = await api('/api/overwatch/workshop/publish-ghost', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: activeAccountId, appId: 767, title })
+    });
+    if ($('workshopStatusArea')) {
+      $('workshopStatusArea').style.display = 'block';
+      $('workshopStatusArea').textContent = res.message || 'Solicitud procesada con éxito.';
+    }
+    notice(res.message || 'Ítem de la Workshop creado para AppID 767.');
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnCopyWorkshopScript'))$('btnCopyWorkshopScript').addEventListener('click',async()=>{
+  try {
+    const title = $('workshopTitleInput') ? $('workshopTitleInput').value : 'Overwatch 2003 Kernel // Valve Steam Client';
+    const res = await api('/api/overwatch/workshop/script?appId=767&title=' + encodeURIComponent(title));
+    if (res.script) {
+      await navigator.clipboard.writeText(res.script);
+      notice('Script F12 de Workshop 767 copiado al portapapeles. Pégalo en la consola de steamcommunity.com');
+    }
+  } catch(e) { notice('Error al copiar script: ' + e.message); }
+});
+
+// Exploit 2: Reseña 0.0 Horas
+if($('btnSubmitZeroHourReview'))$('btnSubmitZeroHourReview').addEventListener('click',async()=>{
+  try {
+    const appId = $('reviewAppIdSelect') ? $('reviewAppIdSelect').value : '70';
+    const text = $('reviewTextInput') ? $('reviewTextInput').value : 'C17 // OVERWATCH 2003 TELEMETRY VERIFIED.';
+    notice('Publicando reseña oficial de 0.0 Horas en Steam Store para AppID ' + appId + '...');
+    const res = await api('/api/overwatch/reviews/zero-hour', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: activeAccountId, appId: Number(appId), comment: text, ratedUp: true })
+    });
+    if ($('reviewStatusArea')) {
+      $('reviewStatusArea').style.display = 'block';
+      $('reviewStatusArea').textContent = res.message || 'Reseña de 0.0 horas registrada con éxito.';
+    }
+    notice(res.message || 'Reseña de 0.0 horas registrada.');
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnCopyReviewScript'))$('btnCopyReviewScript').addEventListener('click',async()=>{
+  try {
+    const appId = $('reviewAppIdSelect') ? $('reviewAppIdSelect').value : '70';
+    const res = await api('/api/overwatch/reviews/script?appId=' + appId);
+    if (res.script) {
+      await navigator.clipboard.writeText(res.script);
+      notice('Script F12 de Reseña 0.0h copiado al portapapeles. Pégalo en la consola de store.steampowered.com');
+    }
+  } catch(e) { notice('Error al copiar script: ' + e.message); }
+});
+
+// Exploit 4: Clan Reliquia 2003 / Grupo Favorito
+if($('btnSetRelicGroup'))$('btnSetRelicGroup').addEventListener('click',async()=>{
+  try {
+    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429521412';
+    notice('Fijando Clan Reliquia ' + clanId + ' como Grupo Favorito en tu perfil...');
+    const res = await api('/api/overwatch/groups/set-relic', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: activeAccountId, clanId })
+    });
+    if ($('relicGroupStatusArea')) {
+      $('relicGroupStatusArea').style.display = 'block';
+      $('relicGroupStatusArea').textContent = res.message || 'Grupo configurado con éxito.';
+    }
+    notice(res.message || 'Grupo reliquia configurado.');
+  } catch(e) { notice('Error: ' + e.message); }
+});
+if($('btnCopyRelicGroupScript'))$('btnCopyRelicGroupScript').addEventListener('click',async()=>{
+  try {
+    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429521412';
+    const res = await api('/api/overwatch/groups/relics?clanId=' + clanId);
+    if (res.script) {
+      await navigator.clipboard.writeText(res.script);
+      notice('Script F12 de Grupo Reliquia copiado al portapapeles. Pégalo en la consola de steamcommunity.com');
+    }
+  } catch(e) { notice('Error al copiar script: ' + e.message); }
 });
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());
