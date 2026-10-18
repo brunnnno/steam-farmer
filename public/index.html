@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
   <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=58">
+  <link rel="stylesheet" href="/style.css?v=59">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -388,6 +388,227 @@
     </section>
 
     <section id="gameControlsSection" class="controls" aria-label="Game controls">
+      <details id="cardsPanel" class="cards-panel" aria-label="Automatic card farming" hidden>
+        <summary class="cards-panel-heading"><div><span class="eyebrow">AUTOMATIC CARD FARMING · ASF 2H RULE</span><h3>Card drops <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3></div><span id="cardsSummary" class="cards-summary"></span></summary>
+        <p id="cardsStatus" class="cards-panel-status" aria-live="polite"></p>
+        <div id="cardsList" class="cards-list"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center;">
+          <button id="loadInventoryCardsBtn" type="button" class="btn-action-sm" data-i18n="checkMarketableCardsBtn">Check Marketable Cards</button>
+          <button id="quickSellCardsBtn" type="button" class="btn-main" data-i18n="quickSellBtn">Quick-Sell Cards on Market</button>
+          <input id="marketIdentitySecretInput" type="password" placeholder="Optional: Steam Guard identity_secret (2FA auto-confirm)" style="flex:1; min-width:220px; padding:8px 12px; font-size:0.8rem;">
+        </div>
+        <p id="marketEarningsEstimate" class="cards-panel-status market-net-estimator-banner" data-i18n="marketEstimateDefault">Estimated net wallet payout: check inventory to calculate (-5% Valve fee &amp; -10% developer fee).</p>
+        <div id="marketCardsList" class="cards-list" style="margin-top:8px;"></div>
+        <details id="badgeCrafterSection" class="badge-crafter-panel">
+          <summary class="cards-panel-heading">
+            <div>
+              <span class="eyebrow">AUTO BADGE CRAFTER</span>
+              <h3>Craft Badges <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+            </div>
+            <span id="craftableBadgesCount" class="cards-summary">0 ready</span>
+          </summary>
+          <div id="craftableBadgesList" class="craftable-list" style="display:flex; gap:6px; flex-wrap:wrap; width:100%; margin-top:8px;"></div>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+            <input id="craftBadgeAppIdInput" type="number" placeholder="AppID" style="width:120px;">
+            <button id="craftBadgeBtn" type="button" class="btn-purple" data-i18n="craftBadgeBtn">Craft Badge (5/5 sets)</button>
+          </div>
+        </details>
+        <small id="cardsUpdated" class="cards-footnote"></small>
+        <small class="cards-footnote">Pending counts come from Steam badges (games &lt;2h farm in parallel; games &ge;2h farm 1 at a time for maximum drop rate). This automatic list does not replace your saved manual games.</small>
+      </details>
+            <details id="automationsPanel" class="cards-panel automations-panel" aria-label="Active Automations &amp; Tasks">
+        <summary class="cards-panel-heading">
+          <div>
+            <span class="eyebrow">TASK CENTER · LIVE ENGINE</span>
+            <h3>Active Automations &amp; Tasks <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+          </div>
+          <span id="automationsSummary" class="cards-summary">Ready</span>
+        </summary>
+        <div class="task-center-grid">
+          <div id="taskCardFarming" class="task-center-box status-green">
+            <span class="eyebrow"><span class="status-dot green"></span> 1. CURRENT FARMING PHASE</span>
+            <div id="taskCenterFarming" class="task-center-body">Idle</div>
+          </div>
+          <div id="taskCardCards" class="task-center-box status-purple">
+            <span class="eyebrow"><span class="status-dot purple"></span> 2. CARDS &amp; BADGE CRAFTER</span>
+            <div id="taskCenterCards" class="task-center-body">Ready to scan card drops &amp; sets.</div>
+          </div>
+          <div id="taskCardTimed" class="task-center-box status-blue">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span class="eyebrow"><span class="status-dot blue"></span> 3. SCHEDULED ACHIEVEMENTS</span>
+              <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancel all active schedules</button>
+            </div>
+            <div id="taskCenterTimedList" class="task-center-body">No active timed schedules.</div>
+          </div>
+          <div id="taskCardDiscovery" class="task-center-box">
+            <span class="eyebrow">4. AUTO DISCOVERY QUEUE</span>
+            <div id="taskCenterDiscovery" class="task-center-body">Daily queue ready.</div>
+          </div>
+        </div>
+        <div id="clusterPanelBox" class="cluster-panel-box" style="margin-top:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <span class="eyebrow">MULTI-ACCOUNT IDLE CLUSTER · PARALLEL BOTS</span>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button id="clusterStartAllBtn" type="button" class="btn-action-sm sam-quick-btn">Start All Bots</button>
+              <button id="clusterPauseAllBtn" type="button" class="btn-action-sm sam-quick-btn">Pause All</button>
+              <button id="clusterCardsAllBtn" type="button" class="btn-purple sam-quick-btn">Farm Cards on All</button>
+            </div>
+          </div>
+          <div id="clusterStatusContainer" class="cluster-tabs-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
+        </div>
+      </details>
+      <details id="pioneerFeaturesPanel" class="cards-panel pioneer-panel" aria-label="Funciones Pioneras Valve" open>
+        <summary class="cards-panel-heading">
+          <div>
+            <span class="eyebrow" data-i18n="pioneerEyebrow">PROTOCOLOS BINARIOS VALVE · HEADLESS ENGINE</span>
+            <h3><span data-i18n="pioneerPanelTitle">Funciones Pioneras (CS2/TF2 GC, Steam Deck &amp; Tournament Ghost)</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+          </div>
+          <span id="pioneerSummaryBadge" class="cards-summary">3 módulos listos</span>
+        </summary>
+        <div class="task-center-grid" style="margin-top:10px;">
+          <div class="task-center-box status-blue">
+            <span class="eyebrow">🎮 GAME COORDINATOR DROPS (CS2 &amp; TF2)</span>
+            <p id="gcStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="gcDefaultStatus">Conecta sin GPU al Game Coordinator (ClientToGC 4006) para reclamar el Weekly Care Package de CS2 y drops de TF2.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnConnectGC" type="button" class="btn-action-sm sam-quick-btn" data-i18n="connectGcBtn">Conectar GC CS2/TF2</button>
+              <button id="btnClaimCarePackage" type="button" class="btn-main sam-quick-btn" data-i18n="claimCarePackageBtn">Reclamar Weekly Care Package</button>
+            </div>
+          </div>
+          <div class="task-center-box status-purple">
+            <span class="eyebrow">📟 STEAM DECK SUITE (HARDWARE &amp; REWARDS)</span>
+            <p id="steamDeckStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="steamDeckDefaultStatus">Emula presencia de SteamOS (gaming_device_type = 2) y reclama cosméticos permanentes de Steam Deck.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnSpoofSteamDeck" type="button" class="btn-action-sm sam-quick-btn" data-i18n="spoofSteamDeckBtn">Simular presencia Steam Deck</button>
+              <button id="btnClaimSteamDeckRewards" type="button" class="btn-purple sam-quick-btn" data-i18n="claimSteamDeckRewardsBtn">Obtener Recompensas Permanentes de Steam Deck</button>
+            </div>
+          </div>
+          <div class="task-center-box status-green">
+            <span class="eyebrow">🏆 TOURNAMENT GHOST (0% ANCHO DE BANDA)</span>
+            <p id="tournamentGhostStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="tournamentDefaultStatus">Envía heartbeats de visualización a Broadcast.WatchBroadcast#1 sin descargar video para farmear drops de Majors.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <input id="tournamentBroadcastIdInput" type="text" placeholder="SteamID64 del Broadcast (ej. 76561198000000000)" style="flex:1; min-width:170px; padding:6px 10px; font-size:0.8rem;">
+              <button id="btnWatchTournamentGhost" type="button" class="btn-main sam-quick-btn" data-i18n="watchTournamentGhostBtn">Iniciar Farmeo Headless de Drops de Major</button>
+              <button id="btnStopTournamentGhost" type="button" class="btn-clear sam-quick-btn" data-i18n="stopTournamentGhostBtn" hidden>Detener</button>
+            </div>
+          </div>
+        </div>
+      </details>
+      <details id="pentagonElitePanel" class="cards-panel pioneer-panel" aria-label="Suite Pentágono Élite" open>
+        <summary class="cards-panel-heading">
+          <div>
+            <span class="eyebrow" data-i18n="pentagonEyebrow">SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE</span>
+            <h3><span data-i18n="pentagonPanelTitle">El Pentágono de Élite: Mercado, Alquimia, URLs, Nivel y Vitrinas</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+          </div>
+          <span class="cards-summary" data-i18n="pentagonSummaryBadge">5 sistemas armados</span>
+        </summary>
+        <div class="task-center-grid" style="margin-top:10px;">
+          <!-- M1: Market Sniper -->
+          <div class="task-center-box status-green">
+            <span class="eyebrow">🎯 FRANCOTIRADOR DE MERCADO (100MS)</span>
+            <p id="marketSniperStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="marketSniperDesc">Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnStartMarketSniper" type="button" class="btn-main sam-quick-btn" data-i18n="startMarketSniperBtn">Activar Radar de Compras</button>
+              <button id="btnStopMarketSniper" type="button" class="btn-clear sam-quick-btn" data-i18n="stopMarketSniperBtn" hidden>Detener</button>
+            </div>
+          </div>
+
+          <!-- M2: Alchemy Transmuter -->
+          <div class="task-center-box status-purple">
+            <span class="eyebrow">♻️ BUCLE DE ALQUIMIA (TRASH-TO-CASH)</span>
+            <p id="alchemyStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="alchemyDesc">Convierte chatarra en gemas y forja Booster Packs de $3 a $5 USD para generar saldo Steam Wallet.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <input id="alchemyAppIdInput" type="number" value="730" placeholder="AppID" style="width:95px; padding:6px 10px; font-size:0.8rem;">
+              <button id="btnRunAlchemyCycle" type="button" class="btn-purple sam-quick-btn" data-i18n="runAlchemyBtn">Forjar Booster de Alto Margen</button>
+            </div>
+          </div>
+
+          <!-- M3: Vanity URL Sniper -->
+          <div class="task-center-box status-blue">
+            <span class="eyebrow">🏷️ FRANCOTIRADOR DE URLS DE 3 LETRAS</span>
+            <p id="vanityStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="vanityDesc">Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnStartVanitySniper" type="button" class="btn-action-sm sam-quick-btn" data-i18n="startVanitySniperBtn">Iniciar Radar de URLs</button>
+              <button id="btnStopVanitySniper" type="button" class="btn-clear sam-quick-btn" data-i18n="stopVanitySniperBtn" hidden>Detener</button>
+            </div>
+          </div>
+
+          <!-- M4: Level Optimizer -->
+          <div class="task-center-box status-green">
+            <span class="eyebrow">📈 OPTIMIZADOR DE NIVEL 50/100 ($0.15/SET)</span>
+            <p id="levelOptimizerStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="levelOptimizerDesc">Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <input id="levelOptimizerAppIdInput" type="number" value="730" placeholder="AppID" style="width:95px; padding:6px 10px; font-size:0.8rem;">
+              <button id="btnCraftCheapestBadge" type="button" class="btn-main sam-quick-btn" data-i18n="craftCheapestBadgeBtn">Forjar Set Económico (+100 XP)</button>
+            </div>
+          </div>
+
+          <!-- M5: Long Artwork Patcher -->
+          <div class="task-center-box status-purple">
+            <span class="eyebrow">🖼️ PARCHEADOR DE VITRINAS INFINITAS (IHDR GLITCH)</span>
+            <p id="artworkPatchStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="artworkPatcherDesc">Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x10000px) a tu perfil.</p>
+            <input type="file" id="artworkFileInput" accept="image/png" style="display:none;">
+            <button id="btnSelectArtworkToPatch" type="button" class="btn-purple sam-quick-btn" style="margin-top:8px;" data-i18n="selectArtworkPatchBtn">Subir y Parchear PNG Infinito</button>
+          </div>
+        </div>
+      </details>
+      <details id="overwatch2003Panel" class="cards-panel pioneer-panel" aria-label="Overwatch 07 Oct 2003 Suite" open>
+        <summary class="cards-panel-heading">
+          <div>
+            <span class="eyebrow" data-i18n="overwatch2003Eyebrow">MOTORES 1, 3 Y 4 · CUENTA FUNDACIONAL 07 OCT 2003 (CERO F12)</span>
+            <h3><span data-i18n="overwatch2003PanelTitle">Suite Overwatch 2003: Vitrinas Server-Side, Reseña AppID 753 + Widgets CS2 y Capturas EMsg 5514</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+          </div>
+          <span class="cards-summary" data-i18n="overwatch2003SummaryBadge">Motores 1 · 3 · 4 activos</span>
+        </summary>
+        <div class="task-center-grid" style="margin-top:10px;">
+          <!-- Motor 3A: Server-Side Showcase Mutator -->
+          <div class="task-center-box status-blue">
+            <span class="eyebrow">🏛️ MOTOR 3A · VITRINAS OCULTAS SERVER-SIDE (SIN F12)</span>
+            <p id="overwatchShowcaseStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchShowcaseDesc">Inyecta AppIDs restringidos de Valve (753 Steam, 766 Workshop, 92 Codename: Gordon, 7 Steam Client) directo desde el servidor.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <select id="overwatchShowcaseAppSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="753">AppID 753 — Steam (Oficial)</option>
+                <option value="766">AppID 766 — Steam Workshop</option>
+                <option value="92">AppID 92 — Codename: Gordon (2004)</option>
+                <option value="7">AppID 7 — Steam Client Core</option>
+                <option value="480">AppID 480 — Spacewar SDK</option>
+              </select>
+              <select id="overwatchShowcaseTypeSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="2">Coleccionista de Juegos (Tipo 2)</option>
+                <option value="6">Juego Favorito (Tipo 6)</option>
+                <option value="17">Expositor de Logros (Tipo 17)</option>
+              </select>
+              <button id="btnInjectHiddenShowcase" type="button" class="btn-main sam-quick-btn" data-i18n="injectHiddenShowcaseBtn">Inyectar Slot en Vitrina</button>
+              <button id="btnFillCollectorRelics" type="button" class="btn-action-sm sam-quick-btn" data-i18n="fillCollectorRelicsBtn">Llenar Coleccionista (753/766/92/7)</button>
+            </div>
+          </div>
+
+          <!-- Motor 3B: AppID 753 Review + CS2 Widgets + Exploit #3 -->
+          <div class="task-center-box status-purple">
+            <span class="eyebrow">💎 MOTOR 3B · RESEÑA APPID 753 + WIDGETS CS2 (#730_2_) + EXPLOIT #3</span>
+            <p id="overwatchReviewStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchReviewDesc">Oculta tu inventario vacío, publica una reseña en Steam (753) con tabla [table] (07 Oct 2003), Exploit #3 (:/linkfilter/) y Widgets Oficiales de Skins CS2.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button id="btnPrepareApp753Review" type="button" class="btn-action-sm sam-quick-btn" data-i18n="prepareApp753Btn">1. Preparar AppID 753 + Ocultar Inventario</button>
+              <button id="btnPublishApp753Review" type="button" class="btn-purple sam-quick-btn" data-i18n="publishApp753ReviewBtn">2. Publicar Reseña 753 con Widgets CS2</button>
+              <button id="btnGenerateExploit3Bbcode" type="button" class="btn-action-sm sam-quick-btn" data-i18n="generateExploit3Btn">Copiar BBCode Exploit #3 + URIs</button>
+            </div>
+          </div>
+
+          <!-- Motor 4: UCM Screenshot EMsg 5514 + Gabe Newell Tag + 0x21 Patch -->
+          <div class="task-center-box status-green">
+            <span class="eyebrow">📸 MOTOR 4 · CAPTURAS BINARIAS EMSG 5514 (GABE NEWELL TAG) + BYTE 0x21</span>
+            <p id="overwatchScreenshotStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchScreenshotDesc">Envía CMsgClientUCMAddScreenshot (EMsg 5514) en Wire-Protobuf etiquetando a Gabe Newell con fecha del Día 1 de Capturas (24 Feb 2011) o de tu cuenta (07 Oct 2003).</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <select id="overwatchScreenshotDateSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="screenshots_day1_2011">24 Feb 2011 (Día 1 Capturas Steam)</option>
+                <option value="account_oct7_2003">07 Oct 2003 (Creación de tu Cuenta)</option>
+                <option value="current">Fecha Actual</option>
+              </select>
+              <button id="btnInjectUcmScreenshot" type="button" class="btn-main sam-quick-btn" data-i18n="injectUcmScreenshotBtn">Inyectar Captura EMsg 5514 + Gabe Newell</button>
+              <button id="btnPatchWorkshopHex21" type="button" class="btn-action-sm sam-quick-btn" data-i18n="patchWorkshopHex21Btn">Parchear Byte 0x21 (Workshop)</button>
+            </div>
+          </div>
+        </div>
+      </details>
       <div class="section-heading"><div><span class="eyebrow" data-i18n="makeItYoursEyebrow">MAKE IT YOURS</span><h2 data-i18n="gameControlsTitle">Game controls</h2></div></div>
       <div class="input-row">
         <div class="search-box-wrapper">
@@ -400,6 +621,39 @@
       <details class="quick-presets"><summary>Quick presets</summary><div class="presets-row" id="presetsContainer">
         <span style="font-size:0.8rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">Quick Presets:</span>
       </div></details>
+
+      <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
+        <section class="ach-impact-review"><h3>Panel, licenses &amp; Sale Discovery Queue</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button" data-i18n="exploreQueueBtn">Explore Discovery Queue (3x)</button><button class="btn-action-sm" id="claimDailyPointsBtn" type="button" data-i18n="claimDailyPointsBtn">Claim Daily Points</button><label style="font-size:0.82rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Requests Steam licenses for five supported free games, or explores 3 daily Steam Store Discovery Queues for event trading cards.</p></section>
+        <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
+        <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
+      <div class="tools-grid">
+        <div class="tool-box">
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Custom Status:</span>
+          <input type="text" id="customStatusInput" placeholder="e.g. AFK 24/7">
+          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-26="">Save</button>
+        </div>
+        <div class="tool-box">
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
+          <input type="text" id="webhookInput" placeholder="https://discord.com/api/webhooks/...">
+          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-27="">Save &amp; test</button>
+        </div>
+      </div>
+
+      <div class="tools-grid">
+        <div class="tool-box" style="justify-content:space-between;">
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted);">Sleep schedule:</span>
+          <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="sleepEnabled"> Active
+          </label>
+          <input type="number" id="sleepStart" placeholder="From (03)" style="width:85px;" min="0" max="23">
+          <input type="number" id="sleepEnd" placeholder="To (08)" style="width:85px;" min="0" max="23">
+          <input id="timezoneInput" placeholder="America/Montevideo" aria-label="Time zone"><button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-28="">Save</button>
+        </div>
+        <div class="tool-box" style="color:var(--text-muted); font-size:0.85rem;">
+          <span><strong>Steam chat:</strong> Only authorized SteamID64s can use !status, !pause and !resume. <button class="btn-action-sm" data-event-29="">Manage allowed IDs</button></span>
+        </div>
+      </div>
+      </details>
     </section>
 
     <section id="saasLandingSection" class="saas-landing" aria-label="SteamFarmer Promotional Showcase">
@@ -562,340 +816,6 @@
     </section>
 
     <section id="librarySection" class="library-section" aria-label="Game library"><div class="section-heading"><div><span id="libraryEyebrow" class="eyebrow" data-i18n="libraryEyebrowAuth">YOUR COLLECTION</span><h2 data-i18n="libraryTitle">Game library</h2></div><div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><span id="libraryModeNote" class="section-note">Open a game to verify its achievements</span><div class="view-selector" role="group" aria-label="Library view mode"><button id="btnViewGrid" type="button" class="btn-action-sm view-btn active" title="Wide grid view">⊞ Grid</button><button id="btnViewList" type="button" class="btn-action-sm view-btn" title="Compact list view">☰ Compact List</button></div></div></div><div id="demoBannerContainer"></div><div class="grid" id="gamesGrid"></div></section>
-
-    <section id="tasksPanelsSection" class="controls" aria-label="Active Automations and Underground Tools">
-      <details id="cardsPanel" class="cards-panel" aria-label="Automatic card farming" hidden>
-        <summary class="cards-panel-heading"><div><span class="eyebrow">AUTOMATIC CARD FARMING · ASF 2H RULE</span><h3>Card drops <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3></div><span id="cardsSummary" class="cards-summary"></span></summary>
-        <p id="cardsStatus" class="cards-panel-status" aria-live="polite"></p>
-        <div id="cardsList" class="cards-list"></div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center;">
-          <button id="loadInventoryCardsBtn" type="button" class="btn-action-sm" data-i18n="checkMarketableCardsBtn">Check Marketable Cards</button>
-          <button id="quickSellCardsBtn" type="button" class="btn-main" data-i18n="quickSellBtn">Quick-Sell Cards on Market</button>
-          <input id="marketIdentitySecretInput" type="password" placeholder="Optional: Steam Guard identity_secret (2FA auto-confirm)" style="flex:1; min-width:220px; padding:8px 12px; font-size:0.8rem;">
-        </div>
-        <p id="marketEarningsEstimate" class="cards-panel-status market-net-estimator-banner" data-i18n="marketEstimateDefault">Estimated net wallet payout: check inventory to calculate (-5% Valve fee &amp; -10% developer fee).</p>
-        <div id="marketCardsList" class="cards-list" style="margin-top:8px;"></div>
-        <details id="badgeCrafterSection" class="badge-crafter-panel">
-          <summary class="cards-panel-heading">
-            <div>
-              <span class="eyebrow">AUTO BADGE CRAFTER</span>
-              <h3>Craft Badges <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
-            </div>
-            <span id="craftableBadgesCount" class="cards-summary">0 ready</span>
-          </summary>
-          <div id="craftableBadgesList" class="craftable-list" style="display:flex; gap:6px; flex-wrap:wrap; width:100%; margin-top:8px;"></div>
-          <div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">
-            <input id="craftBadgeAppIdInput" type="number" placeholder="AppID" style="width:120px;">
-            <button id="craftBadgeBtn" type="button" class="btn-purple" data-i18n="craftBadgeBtn">Craft Badge (5/5 sets)</button>
-          </div>
-        </details>
-        <small id="cardsUpdated" class="cards-footnote"></small>
-        <small class="cards-footnote">Pending counts come from Steam badges (games &lt;2h farm in parallel; games &ge;2h farm 1 at a time for maximum drop rate). This automatic list does not replace your saved manual games.</small>
-      </details>
-      <details id="automationsPanel" class="cards-panel automations-panel" aria-label="Active Automations &amp; Tasks">
-        <summary class="cards-panel-heading">
-          <div>
-            <span class="eyebrow">TASK CENTER · LIVE ENGINE</span>
-            <h3>Active Automations &amp; Tasks <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
-          </div>
-          <span id="automationsSummary" class="cards-summary">Ready</span>
-        </summary>
-        <div class="task-center-grid">
-          <div id="taskCardFarming" class="task-center-box status-green">
-            <span class="eyebrow"><span class="status-dot green"></span> 1. CURRENT FARMING PHASE</span>
-            <div id="taskCenterFarming" class="task-center-body">Idle</div>
-          </div>
-          <div id="taskCardCards" class="task-center-box status-purple">
-            <span class="eyebrow"><span class="status-dot purple"></span> 2. CARDS &amp; BADGE CRAFTER</span>
-            <div id="taskCenterCards" class="task-center-body">Ready to scan card drops &amp; sets.</div>
-          </div>
-          <div id="taskCardTimed" class="task-center-box status-blue">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span class="eyebrow"><span class="status-dot blue"></span> 3. SCHEDULED ACHIEVEMENTS</span>
-              <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancel all active schedules</button>
-            </div>
-            <div id="taskCenterTimedList" class="task-center-body">No active timed schedules.</div>
-          </div>
-          <div id="taskCardDiscovery" class="task-center-box">
-            <span class="eyebrow">4. AUTO DISCOVERY QUEUE</span>
-            <div id="taskCenterDiscovery" class="task-center-body">Daily queue ready.</div>
-          </div>
-        </div>
-        <div id="clusterPanelBox" class="cluster-panel-box" style="margin-top:14px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-            <span class="eyebrow">MULTI-ACCOUNT IDLE CLUSTER · PARALLEL BOTS</span>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button id="clusterStartAllBtn" type="button" class="btn-action-sm sam-quick-btn">Start All Bots</button>
-              <button id="clusterPauseAllBtn" type="button" class="btn-action-sm sam-quick-btn">Pause All</button>
-              <button id="clusterCardsAllBtn" type="button" class="btn-purple sam-quick-btn">Farm Cards on All</button>
-            </div>
-          </div>
-          <div id="clusterStatusContainer" class="cluster-tabs-row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
-        </div>
-      </details>
-      <details id="pentagonElitePanel" class="cards-panel pioneer-panel" aria-label="Suite Pentágono Élite Valve" open>
-        <summary class="cards-panel-heading">
-          <div>
-            <span class="eyebrow" data-i18n="pentagonEyebrow">SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE</span>
-            <h3 data-i18n="pentagonPanelTitle">El Pentágono de Élite: URLs, Mercado, Alquimia, Nivel y Vitrinas <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
-          </div>
-          <span id="pentagonSummaryBadge" class="cards-summary">5 sistemas armados</span>
-        </summary>
-        <div class="task-center-grid" style="margin-top:10px;">
-
-          <!-- M1: Vanity URL Sniper -->
-          <div class="task-center-box status-blue">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span class="eyebrow">🏷️ FRANCOTIRADOR DE URLS DE 3 LETRAS</span>
-              <span id="vanityStatusBadge" style="padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:700; background:#334155; color:#cbd5e1;">DETENIDO</span>
-            </div>
-            <p class="task-center-body" style="margin:4px 0 6px 0;">Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.</p>
-            <div style="display:flex; gap:6px; margin-bottom:6px;">
-              <select id="vanityModeSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px;">
-                <option value="random">🎲 100% Aleatorio (Genera combinaciones de 3 caracteres libres)</option>
-                <option value="hybrid" selected>⚡ Modo Híbrido (Alterna Lista Legendaria + Random 3 Letras)</option>
-                <option value="watchlist">🎯 Solo Lista Fija de Tags</option>
-              </select>
-            </div>
-            <input type="text" id="vanityWatchlistInput" value="pro, neo, won, god, rip, axe, fps, dev, bot, gem, ace, max, vip, top, 777, 999, 007" placeholder="Tags separadas por comas (ej. pro, neo, won)" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-              <button id="btnStartVanity" type="button" class="btn-main sam-quick-btn">Iniciar Radar</button>
-              <button id="btnStopVanity" type="button" class="btn-clear sam-quick-btn" hidden>Detener Radar</button>
-              <button id="btnLoadDefaultTags" type="button" class="btn-action-sm sam-quick-btn">40 Tags Recomendadas</button>
-            </div>
-            <div id="vanityTerminalBox" style="background:#090d16; border:1px solid #1a2744; font-family:monospace; font-size:0.75rem; color:#00ffcc; height:100px; overflow-y:auto; padding:8px; border-radius:8px; display:flex; flex-direction:column-reverse;">
-              <div>[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]</div>
-            </div>
-          </div>
-
-          <!-- M2: Market Misprice Sniper -->
-          <div class="task-center-box status-green">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span class="eyebrow">🎯 FRANCOTIRADOR DE MERCADO (100MS)</span>
-              <span id="sniperStatusBadge" style="padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:700; background:#334155; color:#cbd5e1;">DETENIDO</span>
-            </div>
-            <p class="task-center-body" style="margin:4px 0 6px 0;">Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.</p>
-            <select id="sniperPresetSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
-              <optgroup label="📦 Cajas y Llaves de Alta Rotación">
-                <option value="730|Dreams & Nightmares Case|15">Dreams &amp; Nightmares Case (CS2) - Máx $0.15 USD</option>
-                <option value="730|Recoil Case|15">Recoil Case (CS2) - Máx $0.15 USD</option>
-                <option value="730|Fracture Case|15">Fracture Case (CS2) - Máx $0.15 USD</option>
-                <option value="440|Mann Co. Supply Crate Key|150">Mann Co. Key (TF2) - Máx $1.50 USD</option>
-              </optgroup>
-              <optgroup label="🔫 5 Armas Élite (CS2 Skins)">
-                <option value="730|AK-47 | Redline (Field-Tested)|1200">AK-47 | Redline (Field-Tested) - Máx $12.00 USD</option>
-                <option value="730|AWP | Atheris (Field-Tested)|200">AWP | Atheris (Field-Tested) - Máx $2.00 USD</option>
-                <option value="730|Desert Eagle | Light Rail (Field-Tested)|80">Desert Eagle | Light Rail (FT) - Máx $0.80 USD</option>
-                <option value="730|M4A4 | Spider Lily (Field-Tested)|150">M4A4 | Spider Lily (Field-Tested) - Máx $1.50 USD</option>
-                <option value="730|USP-S | Ticket to Hell (Field-Tested)|50">USP-S | Ticket to Hell (FT) - Máx $0.50 USD</option>
-              </optgroup>
-            </select>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-              <button id="btnStartSniper" type="button" class="btn-main sam-quick-btn">Activar Radar</button>
-              <button id="btnStopSniper" type="button" class="btn-clear sam-quick-btn" hidden>Detener</button>
-            </div>
-            <div id="sniperTerminalBox" style="background:#090d16; border:1px solid #1a2744; font-family:monospace; font-size:0.75rem; color:#a3e635; height:100px; overflow-y:auto; padding:8px; border-radius:8px; display:flex; flex-direction:column-reverse;">
-              <div>[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]</div>
-            </div>
-          </div>
-
-          <!-- M3: Alchemy Transmuter -->
-          <div class="task-center-box status-purple">
-            <span class="eyebrow">♻️ BUCLE DE ALQUIMIA (TRASH-TO-CASH)</span>
-            <p class="task-center-body" style="margin:4px 0 6px 0;">Forja Booster Packs de $2.50 a $5.00 USD con gemas baratas para multiplicar tu saldo Steam Wallet.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
-              <button id="btnLoadAlchemyCatalog" type="button" class="btn-action-sm sam-quick-btn">Consultar Juegos Rentables</button>
-            </div>
-            <select id="alchemyBoosterSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
-              <option value="400">Portal (Costo: 750 gemas · Valor: ~$1.80 USD)</option>
-              <option value="550">Left 4 Dead 2 (Costo: 750 gemas · Valor: ~$2.10 USD)</option>
-              <option value="220">Half-Life 2 (Costo: 750 gemas · Valor: ~$1.95 USD)</option>
-              <option value="440">Team Fortress 2 (Costo: 750 gemas · Valor: ~$1.50 USD)</option>
-            </select>
-            <button id="btnCraftBooster" type="button" class="btn-purple sam-quick-btn">Forjar Booster Pack Seleccionado</button>
-            <p id="alchemyStatusText" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;"></p>
-          </div>
-
-          <!-- M4: Level Optimizer -->
-          <div class="task-center-box status-green">
-            <span class="eyebrow">📈 OPTIMIZADOR DE NIVEL 50/100 ($0.15/SET)</span>
-            <p class="task-center-body" style="margin:4px 0 6px 0;">Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
-              <button id="btnLoadCheapSets" type="button" class="btn-action-sm sam-quick-btn">Ver Sets Más Baratos</button>
-            </div>
-            <select id="cheapSetsSelect" style="width:100%; padding:6px 10px; font-size:0.8rem; background:#0d1424; border:1px solid var(--card-border); color:#fff; border-radius:8px; margin-bottom:6px;">
-              <option value="227300">POSTAL (5 cromos · ~$0.18 USD · +100 XP)</option>
-              <option value="252150">Grimm (5 cromos · ~$0.19 USD · +100 XP)</option>
-              <option value="400">Portal (8 cromos · ~$0.24 USD · +100 XP)</option>
-              <option value="550">Left 4 Dead 2 (8 cromos · ~$0.25 USD · +100 XP)</option>
-            </select>
-            <button id="btnCraftCheapBadge" type="button" class="btn-main sam-quick-btn">Forjar Insignia (+100 XP)</button>
-            <p id="levelOptStatusText" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;"></p>
-          </div>
-
-          <!-- M5: Long Artwork Patcher -->
-          <div class="task-center-box status-purple">
-            <span class="eyebrow">🖼️ PARCHEADOR DE VITRINAS INFINITAS (IHDR GLITCH)</span>
-            <p class="task-center-body" style="margin:4px 0 6px 0;">Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x3840+ px) a tu perfil.</p>
-            <input type="file" id="artworkFileInput" accept="image/png" style="width:100%; font-size:0.8rem; margin-bottom:6px;">
-            <button id="btnPatchArtwork" type="button" class="btn-purple sam-quick-btn">Parchear y Descargar PNG Infinito</button>
-            <div style="margin-top:6px; font-size:0.75rem; color:var(--text-muted);">
-              Script consola F12 Steam Artwork:
-              <div style="display:flex; gap:4px; margin-top:4px;">
-                <input type="text" id="artworkConsoleCmd" value="$J('#image_width').val(1000); $J('#image_height').val(1);" readonly style="flex:1; padding:4px 8px; font-size:0.7rem; font-family:monospace; background:#090d16; border:1px solid #1a2744; color:#38bdf8; border-radius:4px;">
-                <button id="btnCopyArtworkCmd" type="button" class="btn-action-sm" style="padding:4px 8px; font-size:0.7rem;">Copiar</button>
-              </div>
-            </div>
-            <p id="artworkStatusText" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;"></p>
-            <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #1a2744; font-size:0.75rem;">
-              <span class="eyebrow" style="font-size:0.65rem;">🕶️ EXPLOITS SECRETOS DE PERFIL (BLACK-OPS):</span>
-              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
-                <button id="btnCopyInvisibleName" type="button" class="btn-action-sm" style="font-size:0.7rem;" title="Copia el carácter Unicode Braille U+2800 para tener nombre de Steam 100% invisible">👻 Copiar Nombre Invisible (U+2800)</button>
-                <button id="btnCopySpacewarAppId" type="button" class="btn-action-sm" style="font-size:0.7rem;" title="Copia AppID 480 (Spacewar SDK) para vitrinas de juego">🎮 AppID 480 (Spacewar)</button>
-                <button id="btnClaimHiddenLicenses" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;" title="Reclama licencias ocultas: Codename Gordon (92), Spacewar (480), Source SDK 2013 (243750), SteamVR (250820), HLDS (90), Source DS (210)">🎁 Reclamar 6 Licencias Ocultas/Retiradas</button>
-                <button id="btnRotation2003" type="button" class="btn-main sam-quick-btn" style="font-size:0.7rem;" title="Emula en bloque la rotación histórica de 2003 (CS 1.6, HL, TFC, Ricochet, Codename Gordon, Source) + Half-Life: Alyx">⚡ Emular Rotación 2003 + Alyx</button>
-                <button id="btnApplyPresence2003" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;" title="Transmite un lobby de 2003 jugadores con botón verde 'Unirse a la partida' en tu perfil + Modo Fantasma VR">👾 Activar Lobby 2003 Jugadores + Fantasma VR</button>
-              </div>
-
-              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; align-items:center;">
-                <span style="color:var(--text-muted); font-size:0.7rem; font-weight:700;">Juego Favorito Forzado:</span>
-                <select id="favGameSelect" style="padding:4px 8px; font-size:0.7rem; background:#090d16; border:1px solid #1a2744; color:#38bdf8; border-radius:4px;">
-                  <option value="753">AppID 753 · Steam (Comunidad)</option>
-                  <option value="92">AppID 92 · Codename Gordon (Retirado)</option>
-                  <option value="250820">AppID 250820 · SteamVR</option>
-                  <option value="7">AppID 7 · Steam Client (Core)</option>
-                  <option value="480">AppID 480 · Spacewar (Valve SDK)</option>
-                </select>
-                <button id="btnCopyFavGameScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">⭐ Copiar Script F12</button>
-              </div>
-
-              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; align-items:center;">
-                <span style="color:var(--text-muted); font-size:0.7rem; font-weight:700;">Vitrina Clonada (7 Slots Duped):</span>
-                <input type="number" id="dupedAppIdInput" value="546560" placeholder="AppID (ej. 546560)" style="width:110px; padding:4px 8px; font-size:0.7rem; background:#090d16; border:1px solid #1a2744; color:#38bdf8; border-radius:4px;">
-                <input type="text" id="dupedAchInput" value="Lambda" placeholder="Logro o Ítem (ej. Lambda)" style="width:140px; padding:4px 8px; font-size:0.7rem; background:#090d16; border:1px solid #1a2744; color:#38bdf8; border-radius:4px;">
-                <button id="btnCopyDupedShowcaseScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">🧬 Copiar Script F12</button>
-              </div>
-
-              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; align-items:center;">
-                <span style="color:var(--text-muted); font-size:0.7rem; font-weight:700;">Caja Combine Sin Título:</span>
-                <button id="btnCopyCombineBox" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;">📟 Copiar BBCode Overwatch (Título Invisible U+2800)</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- M6: Pilar 4 - CS2 Zero-Inventory Skin Spoofer -->
-          <div class="task-center-box status-purple" id="cs2ZeroInventoryBox">
-            <span class="eyebrow">👑 PILAR 4: SPOOFER DE SKINS CS2 (CERO INVENTARIO)</span>
-            <p class="task-center-body" style="margin:4px 0 6px 0;">Falsea las 7 skins más caras de la historia de CS2 ($2.5M USD) en tu perfil sin tener ningún ítem. Incluye candado de privacidad y enlaces 3D reales al Game Coordinator de Valve.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
-              <button id="btnLockCs2Privacy" type="button" class="btn-action-sm sam-quick-btn" style="font-size:0.75rem;" title="Pone el inventario en Privado manteniendo el perfil 100% Público para que nadie audite tus ítems">🔒 1. Bloquear Inventario Privado (Perfil Público)</button>
-              <button id="btnGenerateCs2Spoof" type="button" class="btn-purple sam-quick-btn" style="font-size:0.75rem;" title="Genera la vitrina visual SVG 636px y la tabla BBCode interactiva 3D">✨ 2. Generar Vitrina + Links 3D</button>
-              <button id="btnExportCs2Desktop" type="button" class="btn-main sam-quick-btn" style="font-size:0.75rem;" title="Exporta la vitrina fake a tu Escritorio">💾 3. Guardar Vitrina en Escritorio</button>
-            </div>
-            <div id="cs2SpoofResultArea" style="display:none; margin-top:8px;">
-              <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700;">Tabla BBCode con Botones de Inspección 3D (Pegar en tu perfil con título invisible):</span>
-              <textarea id="cs2InspectBbcodeText" readonly rows="5" style="width:100%; font-family:monospace; font-size:0.7rem; background:#090d16; border:1px solid #1a2744; color:#38bdf8; border-radius:4px; padding:6px; margin:4px 0;"></textarea>
-              <button id="btnCopyCs2Bbcode" type="button" class="btn-action-sm" style="font-size:0.7rem;">📋 Copiar BBCode</button>
-              <span id="cs2SpoofStatusMsg" style="font-size:0.75rem; color:#38bdf8; margin-left:8px;"></span>
-            </div>
-            <p id="cs2PrivacyStatusText" style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;"></p>
-          </div>
-
-          <!-- M7: 3 EXPLOITS PIONEROS REALES (REA PROTOCOL BYPASS) -->
-          <div class="task-center-box status-purple" id="pioneerExploitsBox" style="border: 1px solid #38bdf8;">
-            <span class="eyebrow" style="color:#38bdf8; font-weight:800;">⚡ 3 EXPLOITS PIONEROS REALES (REA PROTOCOL BYPASS)</span>
-            <p class="task-center-body" style="margin:4px 0 8px 0; font-size:0.75rem;">Operaciones de red reales en los endpoints y protocolos de Valve. Sin ilusiones locales ni código falso: 100% verificados y persistentes en Steam.</p>
-            
-            <!-- EXPLOIT 1: GHOST WORKSHOP ITEM APPID 767 -->
-            <div style="background:#090d16; border:1px solid #1a2744; border-radius:6px; padding:8px; margin-bottom:8px;">
-              <span style="font-size:0.72rem; color:#38bdf8; font-weight:700;">🛠️ EXPLOIT 1: GHOST WORKSHOP ITEM (APPID 767 · STEAM CLIENT)</span>
-              <p style="font-size:0.68rem; color:var(--text-muted); margin:2px 0 6px 0;">Publica un mod fantasma asignado al propio software de Steam y equipa la Vitrina de la Workshop (showcase_type: 9) en tu perfil.</p>
-              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                <input type="text" id="workshopTitleInput" value="Overwatch 2003 Kernel // Valve Steam Client" placeholder="Título del mod" style="flex:1; min-width:180px; padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#fff; border-radius:4px;">
-                <button id="btnPublishGhostWorkshop" type="button" class="btn-main sam-quick-btn" style="font-size:0.7rem;">🚀 Publicar en Workshop 767</button>
-                <button id="btnCopyWorkshopScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">📜 Copiar Script F12</button>
-              </div>
-              <div id="workshopStatusArea" style="display:none; font-size:0.7rem; color:#38bdf8; margin-top:4px;"></div>
-            </div>
-
-            <!-- EXPLOIT 2: RESEÑA OFICIAL 0.0 HORAS -->
-            <div style="background:#090d16; border:1px solid #1a2744; border-radius:6px; padding:8px; margin-bottom:8px;">
-              <span style="font-size:0.72rem; color:#ffd700; font-weight:700;">⭐ EXPLOIT 2: RESEÑA OFICIAL 0.0 HORAS REGISTRADAS (BYPASS DE TIENDA)</span>
-              <p style="font-size:0.68rem; color:var(--text-muted); margin:2px 0 6px 0;">Bypass del endpoint de reseñas de Steam Store con <code>playtime_at_review: 0</code> y activación automática de la Vitrina de Reseñas (showcase_type: 10).</p>
-              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                <select id="reviewAppIdSelect" style="padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#ffd700; border-radius:4px;">
-                  <option value="70">AppID 70 · Half-Life (2003 Classic)</option>
-                  <option value="10">AppID 10 · Counter-Strike 1.6</option>
-                  <option value="92">AppID 92 · Codename Gordon (Retirado)</option>
-                  <option value="480">AppID 480 · Spacewar (SDK)</option>
-                  <option value="546560">AppID 546560 · Half-Life: Alyx</option>
-                  <option value="730">AppID 730 · Counter-Strike 2</option>
-                </select>
-                <input type="text" id="reviewTextInput" value="C17 // OVERWATCH 2003 TELEMETRY VERIFIED. Obra maestra de Valve." style="flex:1; min-width:180px; padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#fff; border-radius:4px;">
-                <button id="btnSubmitZeroHourReview" type="button" class="btn-main sam-quick-btn" style="font-size:0.7rem;">⭐ Publicar 0.0h en Tienda</button>
-                <button id="btnCopyReviewScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">📜 Copiar Script F12</button>
-              </div>
-              <div id="reviewStatusArea" style="display:none; font-size:0.7rem; color:#ffd700; margin-top:4px;"></div>
-            </div>
-
-            <!-- EXPLOIT 4: CLAN RELIQUIA 2003 / GRUPO FAVORITO -->
-            <div style="background:#090d16; border:1px solid #1a2744; border-radius:6px; padding:8px;">
-              <span style="font-size:0.72rem; color:#a855f7; font-weight:700;">🏛️ EXPLOIT 4: CLAN RELIQUIA VALVE 2003 (GRUPO FAVORITO)</span>
-              <p style="font-size:0.68rem; color:var(--text-muted); margin:2px 0 6px 0;">Inyecta clanes históricos de Valve (como Clan 2003 Oficial, Día 1 CS 2007, CS 1.6 o tus clanes) como Grupo Principal y en la Vitrina de Grupo Favorito.</p>
-              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                <select id="relicGroupSelect" style="padding:4px 8px; font-size:0.7rem; background:#0e1526; border:1px solid #1a2744; color:#a855f7; border-radius:4px;">
-                  <option value="103582791429625600" selected>Clan 2003 · steamcommunity.com/groups/2003 (Oficial Abierto)</option>
-                  <option value="103582791429521808">Clan ID 400 · Counter-Strike (Día 1 CS 2007 Abierto)</option>
-                  <option value="103582791429523361">Clan ID 1953 · CS 1.6 Classic (Abierto)</option>
-                  <option value="103582791429530289">Clan ID 8881 · Half-Life Games (Reliquia 2007 Abierto)</option>
-                  <option value="103582791429526542">Clan ID 5134 · Half-Life Fans (Vintage 2007 Abierto)</option>
-                  <option value="103582791429565886">master CS1.6 · Tu clan en perfil (URL: ye)</option>
-                  <option value="103582791429521654">Multi Theft Auto · Tu clan en perfil (URL: mta)</option>
-                  <option value="103582791429521412">Clan ID 4 · Valve Corp (Privado - Solo staff Valve)</option>
-                </select>
-                <button id="btnSetRelicGroup" type="button" class="btn-purple sam-quick-btn" style="font-size:0.7rem;">🏛️ Fijar Grupo Favorito</button>
-                <button id="btnCopyRelicGroupScript" type="button" class="btn-action-sm" style="font-size:0.7rem;">📜 Copiar Script F12</button>
-              </div>
-              <div id="relicGroupStatusArea" style="display:none; font-size:0.7rem; color:#a855f7; margin-top:4px;"></div>
-            </div>
-
-          </div>
-
-        </div>
-      </details>
-      <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
-        <section class="ach-impact-review"><h3>Panel, licenses &amp; Sale Discovery Queue</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button" data-i18n="exploreQueueBtn">Explore Discovery Queue (3x)</button><button class="btn-action-sm" id="claimDailyPointsBtn" type="button" data-i18n="claimDailyPointsBtn">Claim Daily Points</button><label style="font-size:0.82rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Requests Steam licenses for five supported free games, or explores 3 daily Steam Store Discovery Queues for event trading cards.</p></section>
-        <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
-        <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
-      <div class="tools-grid">
-        <div class="tool-box">
-          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Custom Status:</span>
-          <input type="text" id="customStatusInput" placeholder="e.g. AFK 24/7">
-          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-26="">Save</button>
-        </div>
-        <div class="tool-box">
-          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted); white-space:nowrap;">Discord Webhook:</span>
-          <input type="text" id="webhookInput" placeholder="https://discord.com/api/webhooks/...">
-          <button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-27="">Save &amp; test</button>
-        </div>
-      </div>
-
-      <div class="tools-grid">
-        <div class="tool-box" style="justify-content:space-between;">
-          <span style="font-size:0.85rem; font-weight:700; color:var(--text-muted);">Sleep schedule:</span>
-          <label style="font-size:0.85rem; display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" id="sleepEnabled"> Active
-          </label>
-          <input type="number" id="sleepStart" placeholder="From (03)" style="width:85px;" min="0" max="23">
-          <input type="number" id="sleepEnd" placeholder="To (08)" style="width:85px;" min="0" max="23">
-          <input id="timezoneInput" placeholder="America/Montevideo" aria-label="Time zone"><button class="btn-main" style="padding:10px 18px; font-size:0.85rem;" data-event-28="">Save</button>
-        </div>
-        <div class="tool-box" style="color:var(--text-muted); font-size:0.85rem;">
-          <span><strong>Steam chat:</strong> Only authorized SteamID64s can use !status, !pause and !resume. <button class="btn-action-sm" data-event-29="">Manage allowed IDs</button></span>
-        </div>
-      </div>
-      </details>
-    </section>
     <footer class="pro-footer" aria-label="Site footer">
       <div class="pro-footer-col brand-col">
         <div class="pro-footer-brand-row">
@@ -925,10 +845,10 @@
     </footer>
   </div>
 
-  <script src="/achievement-rarity.js?v=58" defer></script>
-  <script src="/achievement-availability.js?v=58" defer></script>
-  <script src="/draft-settings.js?v=58" defer></script>
-  <script src="/achievement-live.js?v=58" defer></script>
-  <script src="/app.js?v=58" defer></script>
+  <script src="/achievement-rarity.js?v=59" defer></script>
+  <script src="/achievement-availability.js?v=59" defer></script>
+  <script src="/draft-settings.js?v=59" defer></script>
+  <script src="/achievement-live.js?v=59" defer></script>
+  <script src="/app.js?v=59" defer></script>
 </body>
 </html>

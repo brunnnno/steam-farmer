@@ -662,8 +662,9 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   // 1. Verify Guest Page Reorganization (No fake metrics, session controls hidden, library directly below 6 feature cards) & Pure i18n
   const saasLanding = w.document.getElementById("saasLandingSection");
   const libSection = w.document.getElementById("librarySection");
+  assert.ok(saasLanding && libSection);
   assert.equal(saasLanding.hidden, false);
-  const mainEls = Array.from(saasLanding.parentNode.children); assert.equal(mainEls[mainEls.indexOf(saasLanding) + 1], libSection);
+  const mainEls = saasLanding.parentNode.children; assert.equal(mainEls[mainEls.indexOf(saasLanding) + 1], libSection);
   assert.equal(w.document.getElementById("playBtn").hidden, true);
   assert.equal(w.document.getElementById("cardsBtn").hidden, true);
   assert.equal(w.document.getElementById("personaBtn").hidden, true);
@@ -1306,39 +1307,115 @@ test("Guest Demo / Showcase Mode, View Selector, Sound & Streamer Mode, Net Esti
   assert.equal(colBypassBtn.classList.contains("collision-bypass-active"), true);
 
   // Click Pioneer Feature buttons (GC, Steam Deck, Tournament Ghost)
-  if (w.document.getElementById("btnConnectGC")) {
-    w.document.getElementById("btnConnectGC").click();
-    w.document.getElementById("btnClaimCarePackage").click();
-    w.document.getElementById("btnSpoofSteamDeck").click();
-    w.document.getElementById("btnClaimSteamDeckRewards").click();
-    w.document.getElementById("tournamentBroadcastIdInput").value = "76561198011111111";
-    w.document.getElementById("btnWatchTournamentGhost").click();
-    await new Promise(r => setTimeout(r, 25));
+  w.document.getElementById("btnConnectGC").click();
+  w.document.getElementById("btnClaimCarePackage").click();
+  w.document.getElementById("btnSpoofSteamDeck").click();
+  w.document.getElementById("btnClaimSteamDeckRewards").click();
+  w.document.getElementById("tournamentBroadcastIdInput").value = "76561198011111111";
+  w.document.getElementById("btnWatchTournamentGhost").click();
+  await new Promise(r => setTimeout(r, 25));
 
-    assert.ok(v58Calls.some(c => c.url === "/api/gc/connect"));
-    assert.ok(v58Calls.some(c => c.url === "/api/gc/cs2/claim-package"));
-    assert.ok(v58Calls.some(c => c.url === "/api/steamdeck/spoof"));
-    assert.ok(v58Calls.some(c => c.url === "/api/steamdeck/claim-rewards"));
-    assert.ok(v58Calls.some(c => c.url === "/api/tournament/watch" && c.body?.broadcastSteamId === "76561198011111111"));
-    assert.equal(w.document.getElementById("btnStopTournamentGhost").hidden, false);
+  assert.ok(v58Calls.some(c => c.url === "/api/gc/connect"));
+  assert.ok(v58Calls.some(c => c.url === "/api/gc/cs2/claim-package"));
+  assert.ok(v58Calls.some(c => c.url === "/api/steamdeck/spoof"));
+  assert.ok(v58Calls.some(c => c.url === "/api/steamdeck/claim-rewards"));
+  assert.ok(v58Calls.some(c => c.url === "/api/tournament/watch" && c.body?.broadcastSteamId === "76561198011111111"));
+  assert.equal(w.document.getElementById("btnStopTournamentGhost").hidden, false);
 
-    w.document.getElementById("btnStopTournamentGhost").click();
-    await new Promise(r => setTimeout(r, 20));
-    assert.ok(v58Calls.some(c => c.url === "/api/tournament/stop"));
-  }
+  w.document.getElementById("btnStopTournamentGhost").click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v58Calls.some(c => c.url === "/api/tournament/stop"));
 
-  // CS2 Zero-Inventory Spoofer (Pilar 4)
-  if (w.document.getElementById("btnLockCs2Privacy")) {
-    w.document.getElementById("btnLockCs2Privacy").click();
-    w.document.getElementById("btnGenerateCs2Spoof").click();
-    w.document.getElementById("btnExportCs2Desktop").click();
-    if (w.document.getElementById("btnCopyCs2Bbcode")) {
-      w.document.getElementById("btnCopyCs2Bbcode").click();
+  // 17. Verify v59 Pentagon Elite Panel UI: Market Sniper, Alchemy Transmuter, Vanity URL Sniper, Level Optimizer & Long Artwork IHDR Patcher
+  assert.ok(w.document.getElementById("pentagonElitePanel"));
+  const v59Calls = [];
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    v59Calls.push({ url, body });
+    if (url === "/api/sniper/start") return { ok: true, status: 200, json: async () => ({ success: true, message: "Francotirador de Mercado activado." }) };
+    if (url === "/api/sniper/stop") return { ok: true, status: 200, json: async () => ({ success: true, message: "Francotirador de Mercado detenido." }) };
+    if (url === "/api/alchemy/craft-booster") return { ok: true, status: 200, json: async () => ({ success: true, message: "¡Booster Pack de alto valor forjado con éxito!" }) };
+    if (url === "/api/vanity/start") return { ok: true, status: 200, json: async () => ({ success: true, message: "Radar de URLs cortas de 3 letras activado." }) };
+    if (url === "/api/vanity/stop") return { ok: true, status: 200, json: async () => ({ success: true, message: "Radar de URLs cortas detenido." }) };
+    if (url === "/api/level/craft") return { ok: true, status: 200, json: async () => ({ success: true, xpGained: 100, message: "¡Insignia forjada con éxito! +100 XP agregados a tu cuenta de Steam." }) };
+    if (url === "/api/artwork/patch") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          originalHeight: 1,
+          patchedHeight: 3840,
+          patchedBase64: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          message: "PNG parcheado con éxito con el exploit IHDR de longitud infinita para Steam."
+        })
+      };
     }
-    await new Promise(r => setTimeout(r, 25));
-    assert.ok(v58Calls.some(c => c.url === "/api/overwatch/cs2-spoof/lock-inventory"));
-    assert.ok(v58Calls.some(c => c.url === "/api/overwatch/cs2-spoof/generate"));
-    assert.ok(v58Calls.some(c => c.url === "/api/overwatch/cs2-spoof/export-desktop"));
-  }
-});
+    return { ok: true, status: 200, json: async () => ({ accounts: [{ ...connectedAcc, tokenSource: "environment", tokenAccountMatches: true }], presets: [], timezone: "UTC" }) };
+  };
 
+  w.document.getElementById("btnStartMarketSniper").click();
+  w.document.getElementById("btnRunAlchemyCycle").click();
+  w.document.getElementById("btnStartVanitySniper").click();
+  w.document.getElementById("btnCraftCheapestBadge").click();
+  w.document.getElementById("btnSelectArtworkToPatch").click();
+  await new Promise(r => setTimeout(r, 25));
+
+  assert.ok(v59Calls.some(c => c.url === "/api/sniper/start"));
+  assert.ok(v59Calls.some(c => c.url === "/api/alchemy/craft-booster"));
+  assert.ok(v59Calls.some(c => c.url === "/api/vanity/start"));
+  assert.ok(v59Calls.some(c => c.url === "/api/level/craft"));
+  assert.ok(v59Calls.some(c => c.url === "/api/artwork/patch"));
+  assert.match(w.document.getElementById("artworkPatchStatusText").textContent, /3840px/);
+
+  w.document.getElementById("btnStopMarketSniper").click();
+  w.document.getElementById("btnStopVanitySniper").click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(v59Calls.some(c => c.url === "/api/sniper/stop"));
+  assert.ok(v59Calls.some(c => c.url === "/api/vanity/stop"));
+
+  // 18. Verify Overwatch 2003 Panel UI (Motores 1, 3 y 4: Server-Side Showcases, AppID 753 Review + CS2 Widgets, Exploit #3 & EMsg 5514 Screenshot Injector)
+  assert.ok(w.document.getElementById("overwatch2003Panel"));
+  const v60Calls = [];
+  w.fetch = async (url, opts) => {
+    const body = opts?.body ? JSON.parse(opts.body) : null;
+    v60Calls.push({ url, body });
+    if (url === "/api/overwatch2003/showcase-inject") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "¡Vitrina actualizada en el servidor! AppID 753 inyectado sin consola F12." }) };
+    }
+    if (url === "/api/overwatch2003/prepare-app753") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "AppID 753 (Steam) activado en farmeo y privacidad quirúrgica aplicada." }) };
+    }
+    if (url === "/api/overwatch2003/publish-review-widgets") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "¡Reseña sobre AppID 753 publicada con éxito con Widgets Oficiales de CS2!" }) };
+    }
+    if (url === "/api/overwatch2003/exploit3-links") {
+      return { ok: true, status: 200, json: async () => ({ success: true, bbcode: "[table]07 Oct 2003[/table]", message: "Bloque BBCode con Exploit #3 generado." }) };
+    }
+    if (url === "/api/overwatch2003/inject-screenshot") {
+      return { ok: true, status: 200, json: async () => ({ success: true, message: "Paquete binario CMsgClientUCMAddScreenshot (EMsg 5514) enviado con etiqueta a Gabe Newell." }) };
+    }
+    if (url === "/api/artwork/patch") {
+      return { ok: true, status: 200, json: async () => ({ success: true, workshopHex21Applied: true, message: "Parche binario 0x21 aplicado en el último byte." }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ accounts: [{ ...connectedAcc, tokenSource: "environment", tokenAccountMatches: true }], presets: [], timezone: "UTC" }) };
+  };
+
+  w.document.getElementById("btnInjectHiddenShowcase").click();
+  w.document.getElementById("btnFillCollectorRelics").click();
+  w.document.getElementById("btnPrepareApp753Review").click();
+  w.document.getElementById("btnPublishApp753Review").click();
+  w.document.getElementById("btnGenerateExploit3Bbcode").click();
+  w.document.getElementById("overwatchScreenshotDateSelect").value = "account_oct7_2003";
+  w.document.getElementById("btnInjectUcmScreenshot").click();
+  w.document.getElementById("btnPatchWorkshopHex21").click();
+  await new Promise(r => setTimeout(r, 25));
+
+  assert.ok(v60Calls.some(c => c.url === "/api/overwatch2003/showcase-inject" && c.body?.fillCollectorRelics === false));
+  assert.ok(v60Calls.some(c => c.url === "/api/overwatch2003/showcase-inject" && c.body?.fillCollectorRelics === true));
+  assert.ok(v60Calls.some(c => c.url === "/api/overwatch2003/prepare-app753"));
+  assert.ok(v60Calls.some(c => c.url === "/api/overwatch2003/publish-review-widgets"));
+  assert.ok(v60Calls.some(c => c.url === "/api/overwatch2003/exploit3-links"));
+  assert.ok(v60Calls.some(c => c.url === "/api/overwatch2003/inject-screenshot" && c.body?.datePreset === "account_oct7_2003"));
+  assert.ok(v60Calls.some(c => c.url === "/api/artwork/patch" && c.body?.mode === "workshop_hex21"));
+});

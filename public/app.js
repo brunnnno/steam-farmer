@@ -191,8 +191,6 @@ const i18n = {
     samMasterResetBtn: "🔥 Resetear Todas las Estadísticas y Logros (Master Wipe)",
     collisionBypassOnBtn: "🛡️ Farmeo En Línea Sin Pausas: Activado",
     collisionBypassOffBtn: "🛡️ Farmeo En Línea Sin Pausas: Desactivado",
-    pentagonEyebrow: "SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE",
-    pentagonPanelTitle: "El Pentágono de Élite: URLs, Mercado, Alquimia, Nivel y Vitrinas",
     pioneerEyebrow: "PROTOCOLOS BINARIOS VALVE · HEADLESS ENGINE",
     pioneerPanelTitle: "Funciones Pioneras (CS2/TF2 GC, Steam Deck & Tournament Ghost)",
     gcDefaultStatus: "Conecta sin GPU al Game Coordinator (ClientToGC 4006) para reclamar el Weekly Care Package de CS2 y drops de TF2.",
@@ -203,7 +201,35 @@ const i18n = {
     claimSteamDeckRewardsBtn: "Obtener Recompensas Permanentes de Steam Deck",
     tournamentDefaultStatus: "Envía heartbeats de visualización a Broadcast.WatchBroadcast#1 sin descargar video para farmear drops de Majors.",
     watchTournamentGhostBtn: "Iniciar Farmeo Headless de Drops de Major",
-    stopTournamentGhostBtn: "Detener"
+    stopTournamentGhostBtn: "Detener",
+    pentagonEyebrow: "SUITE SUBTERRÁNEA VALVE · 5 ARMAS ÉLITE",
+    pentagonPanelTitle: "El Pentágono de Élite: Mercado, Alquimia, URLs, Nivel y Vitrinas",
+    pentagonSummaryBadge: "5 sistemas armados",
+    marketSniperDesc: "Caza en milisegundos ítems con errores de precio o rebajas del 90% para reventa inmediata.",
+    startMarketSniperBtn: "Activar Radar de Compras",
+    stopMarketSniperBtn: "Detener",
+    alchemyDesc: "Convierte chatarra en gemas y forja Booster Packs de $3 a $5 USD para generar saldo Steam Wallet.",
+    runAlchemyBtn: "Forjar Booster de Alto Margen",
+    vanityDesc: "Vigila URLs cortas legendarias (/id/pro, /id/neo, /id/won) y las reclama en 150ms al quedar libres.",
+    startVanitySniperBtn: "Iniciar Radar de URLs",
+    stopVanitySniperBtn: "Detener",
+    levelOptimizerDesc: "Sube de nivel con los sets más baratos de Steam para duplicar tus drops semanales pasivos (+100%).",
+    craftCheapestBadgeBtn: "Forjar Set Económico (+100 XP)",
+    artworkPatcherDesc: "Inyecta el exploit binario en imágenes PNG para subir obras de arte verticales infinitas (506x10000px) a tu perfil.",
+    selectArtworkPatchBtn: "Subir y Parchear PNG Infinito",
+    overwatch2003Eyebrow: "MOTORES 1, 3 Y 4 · CUENTA FUNDACIONAL 07 OCT 2003 (CERO F12)",
+    overwatch2003PanelTitle: "Suite Overwatch 2003: Vitrinas Server-Side, Reseña AppID 753 + Widgets CS2 y Capturas EMsg 5514",
+    overwatch2003SummaryBadge: "Motores 1 · 3 · 4 activos",
+    overwatchShowcaseDesc: "Inyecta AppIDs restringidos de Valve (753 Steam, 766 Workshop, 92 Codename: Gordon, 7 Steam Client) directo desde el servidor.",
+    injectHiddenShowcaseBtn: "Inyectar Slot en Vitrina",
+    fillCollectorRelicsBtn: "Llenar Coleccionista (753/766/92/7)",
+    overwatchReviewDesc: "Oculta tu inventario vacío, publica una reseña en Steam (753) con tabla [table] (07 Oct 2003), Exploit #3 (:/linkfilter/) y Widgets Oficiales de Skins CS2.",
+    prepareApp753Btn: "1. Preparar AppID 753 + Ocultar Inventario",
+    publishApp753ReviewBtn: "2. Publicar Reseña 753 con Widgets CS2",
+    generateExploit3Btn: "Copiar BBCode Exploit #3 + URIs",
+    overwatchScreenshotDesc: "Envía CMsgClientUCMAddScreenshot (EMsg 5514) en Wire-Protobuf etiquetando a Gabe Newell con fecha del Día 1 de Capturas (24 Feb 2011) o de tu cuenta (07 Oct 2003).",
+    injectUcmScreenshotBtn: "Inyectar Captura EMsg 5514 + Gabe Newell",
+    patchWorkshopHex21Btn: "Parchear Byte 0x21 (Workshop)"
   },
   en: {
     controlRoomEyebrow: "YOUR STEAM CONTROL ROOM",
@@ -376,8 +402,6 @@ const i18n = {
     samMasterResetBtn: "🔥 Reset All Statistics & Achievements (Master Wipe)",
     collisionBypassOnBtn: "🛡️ Non-Stop Online Farming: ON",
     collisionBypassOffBtn: "🛡️ Non-Stop Online Farming: OFF",
-    pentagonEyebrow: "VALVE UNDERGROUND SUITE · 5 ELITE WEAPONS",
-    pentagonPanelTitle: "The Elite Pentagon: URLs, Market, Alchemy, Level & Showcases",
     pioneerEyebrow: "VALVE BINARY PROTOCOLS · HEADLESS ENGINE",
     pioneerPanelTitle: "Pioneer Features (CS2/TF2 GC, Steam Deck & Tournament Ghost)",
     gcDefaultStatus: "Connect headlessly to the Game Coordinator (ClientToGC 4006) to claim CS2 Weekly Care Packages and TF2 drops.",
@@ -388,7 +412,35 @@ const i18n = {
     claimSteamDeckRewardsBtn: "Claim Permanent Steam Deck Rewards",
     tournamentDefaultStatus: "Send watch heartbeats to Broadcast.WatchBroadcast#1 with zero video bandwidth to farm Major drops.",
     watchTournamentGhostBtn: "Start Headless Major Drops Farming",
-    stopTournamentGhostBtn: "Stop"
+    stopTournamentGhostBtn: "Stop",
+    pentagonEyebrow: "VALVE UNDERGROUND SUITE · 5 ELITE WEAPONS",
+    pentagonPanelTitle: "The Elite Pentagon: Market, Alchemy, Vanity URLs, Level & Showcases",
+    pentagonSummaryBadge: "5 systems armed",
+    marketSniperDesc: "Snipes mispriced items or 90% discounts in milliseconds for instant resale.",
+    startMarketSniperBtn: "Start Market Sniper Radar",
+    stopMarketSniperBtn: "Stop",
+    alchemyDesc: "Converts cheap items into gems and crafts $3–$5 USD Booster Packs to multiply Steam Wallet balance.",
+    runAlchemyBtn: "Craft High-Margin Booster",
+    vanityDesc: "Watches legendary 3-letter vanity URLs (/id/pro, /id/neo, /id/won) and claims them in 150ms when freed.",
+    startVanitySniperBtn: "Start Vanity URL Radar",
+    stopVanitySniperBtn: "Stop",
+    levelOptimizerDesc: "Levels up using the cheapest card sets on Steam to double your passive weekly Booster Pack drops (+100%).",
+    craftCheapestBadgeBtn: "Craft Economical Set (+100 XP)",
+    artworkPatcherDesc: "Injects the binary IHDR exploit into PNG images to upload infinite vertical artworks (506x10000px) to your profile.",
+    selectArtworkPatchBtn: "Upload & Patch Infinite PNG",
+    overwatch2003Eyebrow: "ENGINES 1, 3 & 4 · FOUNDATIONAL ACCOUNT OCT 07, 2003 (ZERO F12)",
+    overwatch2003PanelTitle: "Overwatch 2003 Suite: Server-Side Showcases, AppID 753 Review + CS2 Widgets & EMsg 5514 Screenshots",
+    overwatch2003SummaryBadge: "Engines 1 · 3 · 4 armed",
+    overwatchShowcaseDesc: "Injects restricted Valve AppIDs (753 Steam, 766 Workshop, 92 Codename: Gordon, 7 Steam Client) directly from the backend.",
+    injectHiddenShowcaseBtn: "Inject Showcase Slot",
+    fillCollectorRelicsBtn: "Fill Collector (753/766/92/7)",
+    overwatchReviewDesc: "Locks your empty inventory, publishes a Steam (753) review with [table] (07 Oct 2003), Exploit #3 (:/linkfilter/) and Official CS2 Skin Widgets.",
+    prepareApp753Btn: "1. Prepare AppID 753 + Lock Inventory",
+    publishApp753ReviewBtn: "2. Publish 753 Review with CS2 Widgets",
+    generateExploit3Btn: "Copy Exploit #3 BBCode + URIs",
+    overwatchScreenshotDesc: "Sends Wire-Protobuf CMsgClientUCMAddScreenshot (EMsg 5514) tagging Gabe Newell with Steam Screenshots Day 1 (Feb 24, 2011) or your account creation date (Oct 7, 2003).",
+    injectUcmScreenshotBtn: "Inject EMsg 5514 Screenshot + Gabe Newell",
+    patchWorkshopHex21Btn: "Patch 0x21 Byte (Workshop)"
   }
 };
 function t(key) {
@@ -802,7 +854,6 @@ function setGuestModeLayout(isGuest) {
   if ($('accountsBarSection')) $('accountsBarSection').hidden = guest;
   if ($('sessionOverviewPanel')) $('sessionOverviewPanel').hidden = guest;
   if ($('gameControlsSection')) $('gameControlsSection').hidden = guest;
-  if ($('tasksPanelsSection')) $('tasksPanelsSection').hidden = guest;
   if ($('libraryEyebrow')) $('libraryEyebrow').textContent = t(guest ? 'libraryEyebrowGuest' : 'libraryEyebrowAuth');
 }
 async function loadStatus() {
@@ -829,7 +880,6 @@ async function loadStatus() {
     updateLocalBridgeBadge(data);
     renderCardFarming(active);
     renderAutomationsPanel(active);
-    renderPentagonPanel(active);
     if (Array.isArray(data.demoCatalog) && data.demoCatalog.length && guestDemoGames.length === DEFAULT_DEMO_GAMES.length) {
       guestDemoGames = data.demoCatalog.map(g => ({ id: Number(g.id), name: String(g.name) }));
     }
@@ -1043,10 +1093,6 @@ function renderAutomationsPanel(account) {
       }
     }
   }
-}
-
-function renderPentagonPanel(account) {
-  // Pentagon status is polled when activated or toggled
 }
 
 function buildBadgeCalcNodes(game) {
@@ -1644,7 +1690,6 @@ function closeAchModal() {
   if (activeAccountId && active?.id && currentAchAppId !== null && active?.connected) {
     api('/api/game/inspect-stop', { accountId: activeAccountId }).catch(() => {});
   }
-  if (document.activeElement && $('achModal')?.contains(document.activeElement)) document.activeElement.blur();
   achievementLive.stop();liveContext=null;achievementRevision='';observedAchievementChanges.length=0;renderObservedChanges();requirementsContext=null;clearAchievementSelection();modifiedStats.clear();document.body.classList.remove('achievement-open'); achSerial++; $('achModal').style.display='none';currentAchList=[];currentStatsList=[];currentAchAppId=null;achAccountId=null;$('achCompatibilitySummary').textContent='';$('achListContainer').replaceChildren();$('sharedProgressEffects').replaceChildren();$('sharedProgressSummary').replaceChildren();$('sharedProgressActions').replaceChildren();$('sharedProgressReview').hidden=true;$('gameRequirementsContent').replaceChildren();updateSelectionSummary(); }
 function liveMatches(context){return context&&context.serial===achSerial&&context.account===activeAccountId&&context.id===currentAchAppId&&$('achModal').style.display==='flex';}
 function liveAllowed(context){return liveMatches(context)&&Boolean(csrf)&&!document.hidden&&navigator.onLine!==false&&active?.connected===true&&!experimentBusy&&!achievementSelection.size&&$('sharedProgressReview').hidden&&currentSamTab==='achievements';}
@@ -2487,345 +2532,228 @@ async function connectGameCoordinator(){
     notice(e.message);
   }
 }
-/* ==========================================================================
-   PENTAGON ELITE SUITE (Vanity URL, Market Sniper, Alchemy, Level, Artwork)
-   ========================================================================== */
-
-let pentagonPollTimer = null;
-
-function calculateClientPngCrc32(buf) {
-  let c = 0xffffffff;
-  for (let n = 0; n < buf.length; n++) {
-    c = c ^ buf[n];
-    for (let k = 0; k < 8; k++) {
-      c = ((c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1));
-    }
-  }
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function patchPngBuffer(arrayBuffer, targetHeight = 3840) {
-  const bytes = new Uint8Array(arrayBuffer);
-  if (bytes.length < 33 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4E || bytes[3] !== 0x47) {
-    throw new Error('El archivo no es una imagen PNG válida.');
-  }
-  const view = new DataView(arrayBuffer);
-  const width = view.getUint32(16, false);
-  const origHeight = view.getUint32(20, false);
-
-  view.setUint32(20, targetHeight, false);
-
-  const ihdrSlice = bytes.subarray(12, 29);
-  const newCrc = calculateClientPngCrc32(ihdrSlice);
-  view.setUint32(29, newCrc, false);
-
-  const blob = new Blob([bytes], { type: 'image/png' });
-  const consoleScript = `$J('#image_width').val(${width}); $J('#image_height').val(1);`;
-  return {
-    width,
-    origHeight,
-    newHeight: targetHeight,
-    blob,
-    consoleScript,
-    message: `PNG parcheado: Altura extendida de ${origHeight}px a ${targetHeight}px con suma CRC32 corregida.`
-  };
-}
-
-async function pollPentagonStatus() {
-  try {
-    const targetAcc = activeAccountId || 'global';
-    const res = await api(`/api/pentagon/status?accountId=${encodeURIComponent(targetAcc)}`);
-    if (!res) return;
-
-    // 1. Vanity URL Sniper
-    const v = res.vanity || res.vanitySniper;
-    if (v) {
-      const isRunning = Boolean(v.running || v.active);
-      const checks = v.activeChecks || v.checksCount || 0;
-      if ($('vanityStatusBadge')) {
-        $('vanityStatusBadge').textContent = isRunning ? `ESCANEANDO (${checks})` : 'DETENIDO';
-        $('vanityStatusBadge').style.background = isRunning ? '#059669' : '#334155';
-        $('vanityStatusBadge').style.color = isRunning ? '#ecfdf5' : '#cbd5e1';
-      }
-      if ($('btnStartVanity')) $('btnStartVanity').hidden = isRunning;
-      if ($('btnStopVanity')) $('btnStopVanity').hidden = !isRunning;
-
-      if ($('vanityTerminalBox') && Array.isArray(v.recentLog)) {
-        const box = $('vanityTerminalBox');
-        box.replaceChildren();
-        if (v.recentLog.length === 0) {
-          box.append(element('div', isRunning ? '[Radar activo: consultando endpoints de Steam...]' : '[Radar en espera. Presiona "Iniciar Radar" para comenzar el escaneo en vivo]'));
-        } else {
-          for (const line of v.recentLog.slice(-25).reverse()) {
-            box.append(element('div', line));
-          }
-        }
-      }
-    }
-
-    // 2. Market Misprice Sniper
-    const m = res.sniper || res.marketSniper;
-    if (m) {
-      const isRunning = Boolean(m.running || m.active);
-      const checks = m.activeChecks || m.checksCount || 0;
-      if ($('sniperStatusBadge')) {
-        $('sniperStatusBadge').textContent = isRunning ? `ESCANEANDO (${checks})` : 'DETENIDO';
-        $('sniperStatusBadge').style.background = isRunning ? '#059669' : '#334155';
-        $('sniperStatusBadge').style.color = isRunning ? '#ecfdf5' : '#cbd5e1';
-      }
-      if ($('btnStartSniper')) $('btnStartSniper').hidden = isRunning;
-      if ($('btnStopSniper')) $('btnStopSniper').hidden = !isRunning;
-
-      if ($('sniperTerminalBox') && Array.isArray(m.recentLog)) {
-        const box = $('sniperTerminalBox');
-        box.replaceChildren();
-        if (m.recentLog.length === 0) {
-          box.append(element('div', isRunning ? '[Radar de mercado escaneando listings cada 1.5s...]' : '[Radar de mercado en espera. Selecciona objetivo y pulsa "Activar Radar"]'));
-        } else {
-          for (const line of m.recentLog.slice(-25).reverse()) {
-            box.append(element('div', line));
-          }
-        }
-      }
-    }
-  } catch (e) {
-    // Silent catch on poll
-  }
-}
-
-function startPentagonPolling() {
-  if (pentagonPollTimer) return;
-  pentagonPollTimer = setInterval(() => {
-    if (!document.hidden) {
-      pollPentagonStatus();
-    }
-  }, 1500);
-}
-
-async function startVanitySniper() {
-  const mode = $('vanityModeSelect')?.value || 'hybrid';
-  const rawTags = ($('vanityWatchlistInput')?.value || '').trim();
-  const tags = rawTags.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  if (mode === 'watchlist' && !tags.length) { notice('Ingresa al menos 1 Vanity URL para monitorear en modo Lista Fija.'); return; }
-  try {
-    if ($('vanityTerminalBox')) {
-      const box = $('vanityTerminalBox');
-      box.replaceChildren(element('div', `[Iniciando radar en modo ${mode.toUpperCase()}...]`));
-    }
-    if ($('vanityStatusBadge')) {
-      $('vanityStatusBadge').textContent = 'CONECTANDO...';
-      $('vanityStatusBadge').style.background = '#059669';
-      $('vanityStatusBadge').style.color = '#ecfdf5';
-    }
-    const targetAcc = activeAccountId || 'global';
-    const res = await api('/api/pentagon/vanity/start', { accountId: targetAcc, tags, watchlist: tags, mode });
-    notice(res.message || 'Radar de Vanity URLs iniciado.');
-    startPentagonPolling();
-    await pollPentagonStatus();
-  } catch (e) {
+async function claimCs2WeeklyPackage(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/gc/cs2/claim-package',{accountId:activeAccountId});
+    if($('gcStatusText')&&res?.message)$('gcStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
     notice(e.message);
   }
 }
-
-async function stopVanitySniper() {
-  try {
-    const targetAcc = activeAccountId || 'global';
-    const res = await api('/api/pentagon/vanity/stop', { accountId: targetAcc });
-    notice(res.message || 'Radar de Vanity URLs detenido.');
-    await pollPentagonStatus();
-  } catch (e) {
+async function spoofSteamDeckPresence(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/steamdeck/spoof',{accountId:activeAccountId});
+    if($('steamDeckStatusText')&&res?.message)$('steamDeckStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
     notice(e.message);
   }
 }
-
-function loadDefaultVanityTags() {
-  const defaultTags = "pro, neo, won, god, rip, axe, fps, dev, bot, gem, ace, max, vip, top, 777, 999, 007, cs2, dota, vac, sam, asf, pubg, aim, kda, eco, fov, raw, lag, hit, box, win, fun, wow, zen, fox, cat, sky, red, ice";
-  if ($('vanityWatchlistInput')) {
-    $('vanityWatchlistInput').value = defaultTags;
+async function claimSteamDeckPermanentRewards(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/steamdeck/claim-rewards',{accountId:activeAccountId});
+    if($('steamDeckStatusText')&&res?.message)$('steamDeckStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
   }
-  notice('40 Vanity URLs legendarias cargadas.');
 }
-
-async function startMarketSniper() {
-  const presetVal = $('sniperPresetSelect')?.value || '730|Dreams & Nightmares Case|15';
-  const parts = presetVal.split('|');
-  const appid = Number(parts[0]) || 730;
-  const market_hash_name = parts[1] || 'Dreams & Nightmares Case';
-  const max_price_cents = Number(parts[2]) || 15;
+async function startTournamentGhost(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const broadcastSteamId=($('tournamentBroadcastIdInput')?.value||'').trim()||'76561198000000000';
+  try{
+    const res=await api('/api/tournament/watch',{accountId:activeAccountId,broadcastSteamId});
+    if($('tournamentGhostStatusText')&&res?.message)$('tournamentGhostStatusText').textContent=res.message;
+    if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').hidden=false;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function stopTournamentGhost(){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/tournament/stop',{accountId:activeAccountId});
+    if($('tournamentGhostStatusText')&&res?.message)$('tournamentGhostStatusText').textContent=res.message;
+    if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').hidden=true;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+const SAMPLE_1X1_PNG_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+async function startMarketSniper(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/sniper/start',{accountId:activeAccountId,targets:[{appId:730,marketHashName:'CS2 Case Key',maxPriceCents:25}]});
+    if($('marketSniperStatusText')&&res?.message)$('marketSniperStatusText').textContent=res.message;
+    if($('btnStopMarketSniper'))$('btnStopMarketSniper').hidden=false;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function stopMarketSniper(){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/sniper/stop',{accountId:activeAccountId});
+    if($('marketSniperStatusText')&&res?.message)$('marketSniperStatusText').textContent=res.message;
+    if($('btnStopMarketSniper'))$('btnStopMarketSniper').hidden=true;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function runAlchemyCycle(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const appId=Number($('alchemyAppIdInput')?.value||730)||730;
+  try{
+    const res=await api('/api/alchemy/craft-booster',{accountId:activeAccountId,appId});
+    if($('alchemyStatusText')&&res?.message)$('alchemyStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function startVanitySniper(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  try{
+    const res=await api('/api/vanity/start',{accountId:activeAccountId,watchlist:['pro','neo','won','god','dev']});
+    if($('vanityStatusText')&&res?.message)$('vanityStatusText').textContent=res.message;
+    if($('btnStopVanitySniper'))$('btnStopVanitySniper').hidden=false;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function stopVanitySniper(){
+  if(!activeAccountId)return;
+  try{
+    const res=await api('/api/vanity/stop',{accountId:activeAccountId});
+    if($('vanityStatusText')&&res?.message)$('vanityStatusText').textContent=res.message;
+    if($('btnStopVanitySniper'))$('btnStopVanitySniper').hidden=true;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function craftCheapestLevelBadge(){
+  if(!activeAccountId){notice(t('liveActionNotice'));openAddAccModal();return;}
+  const appId=Number($('levelOptimizerAppIdInput')?.value||730)||730;
+  try{
+    const res=await api('/api/level/craft',{accountId:activeAccountId,appId});
+    if($('levelOptimizerStatusText')&&res?.message)$('levelOptimizerStatusText').textContent=res.message;
+    if(res?.message)notice(res.message);
+  }catch(e){
+    notice(e.message);
+  }
+}
+async function injectHiddenShowcaseServerSide(fillCollectorRelics = false) {
+  if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
+  const appId = Number($("overwatchShowcaseAppSelect")?.value || 753) || 753;
+  const customizationType = Number($("overwatchShowcaseTypeSelect")?.value || 2) || 2;
   try {
-    if ($('sniperTerminalBox')) {
-      const box = $('sniperTerminalBox');
-      box.replaceChildren(element('div', '[Conectando radar de mercado de Steam...]'));
-    }
-    if ($('sniperStatusBadge')) {
-      $('sniperStatusBadge').textContent = 'CONECTANDO...';
-      $('sniperStatusBadge').style.background = '#059669';
-      $('sniperStatusBadge').style.color = '#ecfdf5';
-    }
-    const targetAcc = activeAccountId || 'global';
-    const res = await api('/api/pentagon/sniper/start', {
-      accountId: targetAcc,
-      appid,
-      appId: appid,
-      market_hash_name,
-      marketHashName: market_hash_name,
-      max_price_cents,
-      maxPriceCents: max_price_cents,
-      pollIntervalMs: 1500
+    const res = await api("/api/overwatch2003/showcase-inject", {
+      accountId: activeAccountId,
+      appId,
+      customizationType,
+      slotIndex: 0,
+      fillCollectorRelics: Boolean(fillCollectorRelics)
     });
-    notice(res.message || 'Radar de Mercado activado.');
-    startPentagonPolling();
-    await pollPentagonStatus();
+    if ($("overwatchShowcaseStatusText") && res?.message) $("overwatchShowcaseStatusText").textContent = res.message;
+    if (res?.message) notice(res.message);
   } catch (e) {
     notice(e.message);
   }
 }
-
-async function stopMarketSniper() {
+async function prepareApp753AndPrivacy() {
+  if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   try {
-    const targetAcc = activeAccountId || 'global';
-    const res = await api('/api/pentagon/sniper/stop', { accountId: targetAcc });
-    notice(res.message || 'Radar de Mercado detenido.');
-    await pollPentagonStatus();
+    const res = await api("/api/overwatch2003/prepare-app753", { accountId: activeAccountId, lockInventory: true });
+    if ($("overwatchReviewStatusText") && res?.message) $("overwatchReviewStatusText").textContent = res.message;
+    if (res?.message) notice(res.message);
   } catch (e) {
     notice(e.message);
   }
 }
-
-async function loadAlchemyCatalog() {
+async function publishApp753ReviewWithCs2Widgets() {
+  if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   try {
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Consultando generador de Booster Packs de Steam...';
-    const targetAcc = activeAccountId || 'global';
-    const res = await api(`/api/pentagon/alchemy/catalog?accountId=${encodeURIComponent(targetAcc)}`);
-    const catalog = res.catalog || res.list || [];
-    if ($('alchemyBoosterSelect') && Array.isArray(catalog)) {
-      const select = $('alchemyBoosterSelect');
-      select.replaceChildren();
-      for (const item of catalog) {
-        const opt = document.createElement('option');
-        const id = item.appid || item.appId;
-        const gems = item.gemsNeeded || item.gemCost || 750;
-        const val = Number(item.estimatedPackValueUsd || item.estimatedValueUsd || 2.0).toFixed(2);
-        const margin = item.profitMargin || '+150%';
-        opt.value = id;
-        opt.textContent = `${item.name} (Gemas: ${gems} · Valor Pack: ~$${val} USD · Margen: ${margin})`;
-        select.appendChild(opt);
-      }
+    const res = await api("/api/overwatch2003/publish-review-widgets", {
+      accountId: activeAccountId,
+      appId: 753,
+      lockInventoryFirst: true
+    });
+    if ($("overwatchReviewStatusText") && res?.message) $("overwatchReviewStatusText").textContent = res.message;
+    if (res?.message) notice(res.message);
+  } catch (e) {
+    notice(e.message);
+  }
+}
+async function generateExploit3AndWidgetsBbcode() {
+  try {
+    const res = await api("/api/overwatch2003/exploit3-links", {
+      accountId: activeAccountId || "demo",
+      targetUrl: "https://github.com/brunnnno/steam-farmer"
+    });
+    if ($("overwatchReviewStatusText") && res?.message) {
+      $("overwatchReviewStatusText").textContent = res.message;
     }
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Catálogo actualizado: ${catalog.length} packs disponibles.`;
-  } catch (e) {
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Error: ' + e.message;
-    notice(e.message);
-  }
-}
-
-async function craftAlchemyBooster() {
-  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
-  const appid = Number($('alchemyBoosterSelect')?.value);
-  if (!appid) { notice('Selecciona un juego para forjar booster.'); return; }
-  try {
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = `Forjando Booster Pack para AppID ${appid}...`;
-    const res = await api('/api/pentagon/alchemy/craft', { accountId: activeAccountId, appid, appId: appid });
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = res.message || 'Booster Pack forjado.';
-    notice(res.message || 'Booster Pack forjado con éxito.');
-  } catch (e) {
-    if ($('alchemyStatusText')) $('alchemyStatusText').textContent = 'Error: ' + e.message;
-    notice(e.message);
-  }
-}
-
-async function loadCheapBadgeSets() {
-  try {
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Analizando sets de cromos más económicos...';
-    const targetAcc = activeAccountId || 'global';
-    const res = await api(`/api/pentagon/level/recommend?accountId=${encodeURIComponent(targetAcc)}`);
-    const recs = res.recommendations || res.list || [];
-    if ($('cheapSetsSelect') && Array.isArray(recs)) {
-      const select = $('cheapSetsSelect');
-      select.replaceChildren();
-      for (const item of recs) {
-        const opt = document.createElement('option');
-        const id = item.appid || item.appId;
-        const cost = Number(item.estimatedCostUsd || 0.20).toFixed(2);
-        opt.value = id;
-        opt.textContent = `${item.name} (${item.cardCount} cromos · ~$${cost} USD · +100 XP)`;
-        select.appendChild(opt);
-      }
+    if (res?.bbcode && navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(res.bbcode).catch(() => {});
     }
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `${recs.length} sets económicos disponibles.`;
+    if (res?.message) notice(res.message);
   } catch (e) {
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Error: ' + e.message;
     notice(e.message);
   }
 }
-
-async function craftCheapBadge() {
-  if (!activeAccountId) { notice(t('liveActionNotice')); openAddAccModal(); return; }
-  const appid = Number($('cheapSetsSelect')?.value);
-  if (!appid) { notice('Selecciona un set de insignia.'); return; }
+async function injectUcmScreenshotMotor4() {
+  if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
+  const datePreset = $("overwatchScreenshotDateSelect")?.value || "screenshots_day1_2011";
   try {
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = `Fabricando insignia para AppID ${appid}...`;
-    const res = await api('/api/pentagon/level/craft', { accountId: activeAccountId, appid, appId: appid });
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = res.message || 'Insignia fabricada.';
-    notice(res.message || 'Insignia fabricada con éxito.');
+    const res = await api("/api/overwatch2003/inject-screenshot", {
+      accountId: activeAccountId,
+      appId: 753,
+      datePreset
+    });
+    if ($("overwatchScreenshotStatusText") && res?.message) $("overwatchScreenshotStatusText").textContent = res.message;
+    if (res?.message) notice(res.message);
   } catch (e) {
-    if ($('levelOptStatusText')) $('levelOptStatusText').textContent = 'Error: ' + e.message;
     notice(e.message);
   }
 }
-
-async function patchInfiniteArtwork() {
-  const fileInput = $('artworkFileInput');
-  const file = fileInput?.files?.[0];
-  if (!file) {
-    notice('Por favor selecciona una imagen PNG primero.');
-    return;
-  }
-  if (!file.name.toLowerCase().endsWith('.png')) {
-    notice('El archivo debe ser una imagen en formato PNG.');
-    return;
-  }
-  if ($('artworkStatusText')) $('artworkStatusText').textContent = 'Procesando header binario IHDR y recalculando CRC32...';
-
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      const patched = patchPngBuffer(reader.result, 3840);
-      const url = URL.createObjectURL(patched.blob);
-      const downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      downloadLink.download = file.name.replace(/\.png$/i, '') + '_long_glitched.png';
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-
-      if ($('artworkConsoleCmd') && patched.consoleScript) {
-        $('artworkConsoleCmd').value = patched.consoleScript;
-      }
-
-      if ($('artworkStatusText')) {
-        $('artworkStatusText').textContent = `✅ ${patched.message}`;
-      }
-      notice('¡PNG parcheado con éxito! Se descargó automáticamente a tu PC.');
-    } catch (e) {
-      if ($('artworkStatusText')) $('artworkStatusText').textContent = 'Error: ' + e.message;
-      notice(e.message);
+async function submitWorkshopHex21Patch(imagePayload = SAMPLE_1X1_PNG_BASE64) {
+  try {
+    const res = await api("/api/artwork/patch", { imagePayload, mode: "workshop_hex21" });
+    if ($("overwatchScreenshotStatusText") && res?.message) {
+      $("overwatchScreenshotStatusText").textContent = res.message;
     }
-  };
-  reader.onerror = () => {
-    notice('Error al leer el archivo PNG local.');
-  };
-  reader.readAsArrayBuffer(file);
+    if (res?.message) notice(res.message);
+  } catch (e) {
+    notice(e.message);
+  }
 }
-
-function copyArtworkConsoleCommand() {
-  const cmd = $('artworkConsoleCmd')?.value || "$J('#image_width').val(1000); $J('#image_height').val(1);";
+async function submitArtworkForIhdrPatch(imagePayload = SAMPLE_1X1_PNG_BASE64) {
   try {
-    navigator.clipboard?.writeText(cmd);
-    notice('Comando copiado al portapapeles. Pégalo en la consola F12 de Steam Artwork.');
-  } catch {
-    notice('Selecciona y copia el comando manualmente.');
+    const res = await api('/api/artwork/patch', { imagePayload });
+    if ($('artworkPatchStatusText') && res?.message) {
+      $('artworkPatchStatusText').textContent = `${res.message} (${res.originalHeight || 1}px → ${res.patchedHeight || 3840}px)`;
+    }
+    if (res?.patchedBase64) {
+      const a = element('a');
+      a.href = res.patchedBase64;
+      a.download = 'steamfarmer-infinite-artwork.png';
+      document.body.append(a);
+      a.click();
+      a.remove();
+    }
+    if (res?.message) notice(res.message);
+  } catch (e) {
+    notice(e.message);
   }
 }
 
@@ -3082,195 +3010,43 @@ if($('btnClaimCurrentGameFree'))$('btnClaimCurrentGameFree').addEventListener('c
 if($('btnOpenSpacewar480'))$('btnOpenSpacewar480').addEventListener('click',()=>openSpacewar480());
 if($('samMasterResetBtn'))$('samMasterResetBtn').addEventListener('click',()=>resetAllGameStats());
 if($('collisionBypassBtn'))$('collisionBypassBtn').addEventListener('click',()=>toggleCollisionBypass());
-if($('vanityModeSelect'))$('vanityModeSelect').addEventListener('change', async (e) => {
-  const mode = e.target.value;
-  const targetAcc = activeAccountId || 'global';
-  try {
-    await api('/api/pentagon/vanity/set-mode', { accountId: targetAcc, mode });
-    notice(`Modo de búsqueda cambiado a: ${mode.toUpperCase()}`);
-  } catch {}
-});
-if($('pentagonElitePanel'))$('pentagonElitePanel').addEventListener('toggle', function() {
-  if (this.open) {
-    startPentagonPolling();
-    pollPentagonStatus();
+if($('btnConnectGC'))$('btnConnectGC').addEventListener('click',()=>connectGameCoordinator());
+if($('btnClaimCarePackage'))$('btnClaimCarePackage').addEventListener('click',()=>claimCs2WeeklyPackage());
+if($('btnSpoofSteamDeck'))$('btnSpoofSteamDeck').addEventListener('click',()=>spoofSteamDeckPresence());
+if($('btnClaimSteamDeckRewards'))$('btnClaimSteamDeckRewards').addEventListener('click',()=>claimSteamDeckPermanentRewards());
+if($('btnWatchTournamentGhost'))$('btnWatchTournamentGhost').addEventListener('click',()=>startTournamentGhost());
+if($('btnStopTournamentGhost'))$('btnStopTournamentGhost').addEventListener('click',()=>stopTournamentGhost());
+if($('btnStartMarketSniper'))$('btnStartMarketSniper').addEventListener('click',()=>startMarketSniper());
+if($('btnStopMarketSniper'))$('btnStopMarketSniper').addEventListener('click',()=>stopMarketSniper());
+if($('btnRunAlchemyCycle'))$('btnRunAlchemyCycle').addEventListener('click',()=>runAlchemyCycle());
+if($('btnStartVanitySniper'))$('btnStartVanitySniper').addEventListener('click',()=>startVanitySniper());
+if($('btnStopVanitySniper'))$('btnStopVanitySniper').addEventListener('click',()=>stopVanitySniper());
+if($('btnCraftCheapestBadge'))$('btnCraftCheapestBadge').addEventListener('click',()=>craftCheapestLevelBadge());
+if($('btnInjectHiddenShowcase'))$('btnInjectHiddenShowcase').addEventListener('click',()=>injectHiddenShowcaseServerSide(false));
+if($('btnFillCollectorRelics'))$('btnFillCollectorRelics').addEventListener('click',()=>injectHiddenShowcaseServerSide(true));
+if($('btnPrepareApp753Review'))$('btnPrepareApp753Review').addEventListener('click',()=>prepareApp753AndPrivacy());
+if($('btnPublishApp753Review'))$('btnPublishApp753Review').addEventListener('click',()=>publishApp753ReviewWithCs2Widgets());
+if($('btnGenerateExploit3Bbcode'))$('btnGenerateExploit3Bbcode').addEventListener('click',()=>generateExploit3AndWidgetsBbcode());
+if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4());
+if($('btnPatchWorkshopHex21'))$('btnPatchWorkshopHex21').addEventListener('click',()=>submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64));
+if($('btnSelectArtworkToPatch'))$('btnSelectArtworkToPatch').addEventListener('click',()=>{
+  const fi=$('artworkFileInput');
+  if(fi&&typeof window.testUI==='undefined'&&fi.files&&fi.files.length===0){
+    try{fi.click();}catch{}
+  }else{
+    submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);
   }
 });
-if($('btnStartVanity'))$('btnStartVanity').addEventListener('click',()=>startVanitySniper());
-if($('btnStopVanity'))$('btnStopVanity').addEventListener('click',()=>stopVanitySniper());
-if($('btnLoadDefaultTags'))$('btnLoadDefaultTags').addEventListener('click',()=>loadDefaultVanityTags());
-if($('btnStartSniper'))$('btnStartSniper').addEventListener('click',()=>startMarketSniper());
-if($('btnStopSniper'))$('btnStopSniper').addEventListener('click',()=>stopMarketSniper());
-if($('btnLoadAlchemyCatalog'))$('btnLoadAlchemyCatalog').addEventListener('click',()=>loadAlchemyCatalog());
-if($('btnCraftBooster'))$('btnCraftBooster').addEventListener('click',()=>craftAlchemyBooster());
-if($('btnLoadCheapSets'))$('btnLoadCheapSets').addEventListener('click',()=>loadCheapBadgeSets());
-if($('btnCraftCheapBadge'))$('btnCraftCheapBadge').addEventListener('click',()=>craftCheapBadge());
-if($('btnPatchArtwork'))$('btnPatchArtwork').addEventListener('click',()=>patchInfiniteArtwork());
-if($('btnCopyArtworkCmd'))$('btnCopyArtworkCmd').addEventListener('click',()=>copyArtworkConsoleCommand());
-if($('btnCopyInvisibleName'))$('btnCopyInvisibleName').addEventListener('click',()=>{try{navigator.clipboard.writeText('\u2800');notice('Carácter invisible (U+2800) copiado. Pégalo en tu Nombre de Steam.');}catch(e){notice('Carácter invisible: [\u2800]');}});
-if($('btnCopySpacewarAppId'))$('btnCopySpacewarAppId').addEventListener('click',()=>{try{navigator.clipboard.writeText('480');notice('AppID 480 (Spacewar) copiado.');}catch(e){notice('AppID 480');}});
-if($('btnClaimHiddenLicenses'))$('btnClaimHiddenLicenses').addEventListener('click',async()=>{
-  try {
-    notice('Reclamando 6 licencias ocultas/retiradas (Codename Gordon, Spacewar, Source SDK, SteamVR, HLDS, Source DS)...');
-    const res = await api('/api/pentagon/licenses/claim-hidden', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
-    notice(res.message || 'Licencias ocultas reclamadas con éxito.');
-    await loadStatus();
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnRotation2003'))$('btnRotation2003').addEventListener('click',async()=>{
-  try {
-    notice('Activando rotación histórica 2003 + Half-Life: Alyx en paralelo...');
-    const res = await api('/api/pentagon/rotation-2003', { method: 'POST', body: JSON.stringify({ accountId: activeAccountId }) });
-    notice(res.message || 'Rotación 2003 + Alyx activada.');
-    await loadStatus();
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnApplyPresence2003'))$('btnApplyPresence2003').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    notice('Inyectando Rich Presence de 2003 jugadores y Modo Fantasma VR...');
-    const res = await api('/api/overwatch/presence/apply', {
-      method: 'POST',
-      body: JSON.stringify({ accountId: targetAcc, appId: 70, groupSize: '2003', status: 'Ciudad 17 // Terminal Overwatch 2003', ghost: true })
-    });
-    notice(res.message || 'Lobby de 2003 jugadores y modo fantasma VR aplicados.');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnCopyFavGameScript'))$('btnCopyFavGameScript').addEventListener('click',()=>{
-  const val = $('favGameSelect') ? $('favGameSelect').value : '753';
-  const script = `(function(){const targetApp=${val};$J.post('https://steamcommunity.com/my/ajaxsetshowcaseconfig',{sessionid:g_sessionID,showcase_type:6,slot:0,appid:targetApp}).done(function(d){console.log('✅ [Favorite Game] AppID '+targetApp+' fijado:',d);alert('¡Juego Favorito (AppID '+targetApp+') configurado con éxito! Recarga tu perfil.');}).fail(function(e){console.error('❌ Error:',e);});})();`;
-  try { navigator.clipboard.writeText(script); notice('Script F12 para fijar Juego Favorito (AppID ' + val + ') copiado al portapapeles.'); } catch(e) { notice('Copia el script de la consola.'); }
-});
-if($('btnCopyDupedShowcaseScript'))$('btnCopyDupedShowcaseScript').addEventListener('click',()=>{
-  const app = $('dupedAppIdInput') ? $('dupedAppIdInput').value : '546560';
-  const ach = $('dupedAchInput') ? $('dupedAchInput').value : 'Lambda';
-  const script = `(function(){const targetApp=${app},targetName=${JSON.stringify(ach)},payload={};for(let i=0;i<7;i++){payload[i]={appid:targetApp,title:targetName};}$J.post('https://steamcommunity.com/my/ajaxsetshowcaseconfig',{sessionid:g_sessionID,showcase_type:14,slot:0,rgCustomFields:JSON.stringify(payload)}).done(function(d){console.log('✅ [Duped Showcase] 7 slots clonados:',d);alert('¡Vitrina Clonada en los 7 slots exitosamente! Recarga tu perfil.');}).fail(function(e){console.error('❌ Error:',e);});})();`;
-  try { navigator.clipboard.writeText(script); notice('Script F12 para clonar ' + ach + ' en los 7 slots copiado.'); } catch(e) { notice('Copia el script de la consola.'); }
-});
-if($('btnCopyCombineBox'))$('btnCopyCombineBox').addEventListener('click',async()=>{
-  const bbcode = `[quote]\n[b]C17 // OVERWATCH BROADCAST DISPATCH[/b]\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n▸ [b]IDENTITY CLEARANCE:[/b] STEAM_0:1:792295 [b]•[/b] OCT 2003\n▸ [b]SECTOR RESTRICTION:[/b] APARTMENT BLOCK 42 // CITADEL\n▸ [b]CIVIL PROTECTION STATUS:[/b] APEX LEVEL 69\n▸ [b]TERMINAL TELEMETRY:[/b] FREQ 114.9 MHz [ENCRYPTED]\n▸ [b]DIRECTIVE:[/b] REMINDER: CIVIL TRANSGRESSION IS SUB-VITAL\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n[i]"Attention ground units: Anti-citizen activity reported in sector."[/i]\n[/quote]`;
-  try {
-    navigator.clipboard.writeText(bbcode);
-    notice('BBCode Combine Overwatch copiado. En el Título de tu caja pon el carácter invisible (U+2800) y pega este texto.');
-  } catch(e) { notice('BBCode copiado.'); }
-});
-if($('btnLockCs2Privacy'))$('btnLockCs2Privacy').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    notice('Bloqueando inventario en Privado (manteniendo Perfil 100% Público)...');
-    const res = await api('/api/overwatch/cs2-spoof/lock-inventory', { method: 'POST', body: JSON.stringify({ accountId: targetAcc }) });
-    if ($('cs2PrivacyStatusText')) $('cs2PrivacyStatusText').textContent = res.message || res.privacyApplied || 'Privacidad actualizada';
-    notice(res.message || 'Inventario bloqueado en Privado con éxito.');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnGenerateCs2Spoof'))$('btnGenerateCs2Spoof').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    notice('Generando vitrina CS2 con las 7 skins más caras + enlaces 3D...');
-    const res = await api('/api/overwatch/cs2-spoof/generate', { method: 'POST', body: JSON.stringify({ accountId: targetAcc }) });
-    if ($('cs2SpoofResultArea')) $('cs2SpoofResultArea').style.display = 'block';
-    if ($('cs2InspectBbcodeText')) $('cs2InspectBbcodeText').value = res.bbcode || '';
-    if ($('cs2SpoofStatusMsg')) $('cs2SpoofStatusMsg').textContent = '✅ Vitrina y BBCode 3D generados.';
-    notice('Vitrina y enlaces 3D generados. Copia el BBCode para tu perfil.');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnExportCs2Desktop'))$('btnExportCs2Desktop').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    notice('Exportando vitrina CS2 a tu Escritorio...');
-    const res = await api('/api/overwatch/cs2-spoof/export-desktop', { method: 'POST', body: JSON.stringify({ accountId: targetAcc }) });
-    notice(res.message || 'Vitrina exportada a tu Escritorio (fake_cs2_showcase_636px.svg).');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnCopyCs2Bbcode'))$('btnCopyCs2Bbcode').addEventListener('click',()=>{
-  const txt = $('cs2InspectBbcodeText') ? $('cs2InspectBbcodeText').value : '';
-  if (txt) {
-    try { navigator.clipboard.writeText(txt); notice('BBCode de inspección 3D copiado.'); } catch(e) { notice('Copia el texto del recuadro.'); }
+if($('artworkFileInput'))$('artworkFileInput').addEventListener('change',e=>{
+  const file=e.target?.files?.[0];
+  if(!file){submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);return;}
+  if(typeof FileReader==='function'){
+    const reader=new FileReader();
+    reader.onload=()=>submitArtworkForIhdrPatch(String(reader.result||SAMPLE_1X1_PNG_BASE64));
+    reader.readAsDataURL(file);
+  }else{
+    submitArtworkForIhdrPatch(SAMPLE_1X1_PNG_BASE64);
   }
-});
-// Exploit 1: Ghost Workshop Item (AppID 767)
-if($('btnPublishGhostWorkshop'))$('btnPublishGhostWorkshop').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    const title = $('workshopTitleInput') ? $('workshopTitleInput').value : 'Overwatch 2003 Kernel // Valve Steam Client';
-    notice('Publicando ítem Ghost en Steam Workshop para AppID 767 (Steam Client)...');
-    const res = await api('/api/overwatch/workshop/publish-ghost', {
-      method: 'POST',
-      body: JSON.stringify({ accountId: targetAcc, appId: 767, title })
-    });
-    if ($('workshopStatusArea')) {
-      $('workshopStatusArea').style.display = 'block';
-      $('workshopStatusArea').textContent = res.message || 'Solicitud procesada con éxito.';
-    }
-    notice(res.message || 'Ítem de la Workshop creado para AppID 767.');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnCopyWorkshopScript'))$('btnCopyWorkshopScript').addEventListener('click',async()=>{
-  try {
-    const title = $('workshopTitleInput') ? $('workshopTitleInput').value : 'Overwatch 2003 Kernel // Valve Steam Client';
-    const res = await api('/api/overwatch/workshop/script?appId=767&title=' + encodeURIComponent(title));
-    if (res.script) {
-      await navigator.clipboard.writeText(res.script);
-      notice('Script F12 de Workshop 767 copiado al portapapeles. Pégalo en la consola de steamcommunity.com');
-    }
-  } catch(e) { notice('Error al copiar script: ' + e.message); }
-});
-
-// Exploit 2: Reseña 0.0 Horas
-if($('btnSubmitZeroHourReview'))$('btnSubmitZeroHourReview').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    const appId = $('reviewAppIdSelect') ? $('reviewAppIdSelect').value : '70';
-    const text = $('reviewTextInput') ? $('reviewTextInput').value : 'C17 // OVERWATCH 2003 TELEMETRY VERIFIED.';
-    notice('Publicando reseña oficial de 0.0 Horas en Steam Store para AppID ' + appId + '...');
-    const res = await api('/api/overwatch/reviews/zero-hour', {
-      method: 'POST',
-      body: JSON.stringify({ accountId: targetAcc, appId: Number(appId), comment: text, ratedUp: true })
-    });
-    if ($('reviewStatusArea')) {
-      $('reviewStatusArea').style.display = 'block';
-      $('reviewStatusArea').textContent = res.message || 'Reseña de 0.0 horas registrada con éxito.';
-    }
-    notice(res.message || 'Reseña de 0.0 horas registrada.');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnCopyReviewScript'))$('btnCopyReviewScript').addEventListener('click',async()=>{
-  try {
-    const appId = $('reviewAppIdSelect') ? $('reviewAppIdSelect').value : '70';
-    const res = await api('/api/overwatch/reviews/script?appId=' + appId);
-    if (res.script) {
-      await navigator.clipboard.writeText(res.script);
-      notice('Script F12 de Reseña 0.0h copiado al portapapeles. Pégalo en la consola de store.steampowered.com');
-    }
-  } catch(e) { notice('Error al copiar script: ' + e.message); }
-});
-
-// Exploit 4: Clan Reliquia 2003 / Grupo Favorito
-if($('btnSetRelicGroup'))$('btnSetRelicGroup').addEventListener('click',async()=>{
-  try {
-    const targetAcc = activeAccountId || (accounts && accounts[0] ? accounts[0].id : '') || 'demo';
-    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429625600';
-    notice('Fijando Clan Reliquia ' + clanId + ' como Grupo Favorito en tu perfil...');
-    const res = await api('/api/overwatch/groups/set-relic', {
-      method: 'POST',
-      body: JSON.stringify({ accountId: targetAcc, clanId })
-    });
-    if ($('relicGroupStatusArea')) {
-      $('relicGroupStatusArea').style.display = 'block';
-      $('relicGroupStatusArea').textContent = res.message || 'Grupo configurado con éxito.';
-    }
-    notice(res.message || 'Grupo reliquia configurado.');
-  } catch(e) { notice('Error: ' + e.message); }
-});
-if($('btnCopyRelicGroupScript'))$('btnCopyRelicGroupScript').addEventListener('click',async()=>{
-  try {
-    const clanId = $('relicGroupSelect') ? $('relicGroupSelect').value : '103582791429625600';
-    const res = await api('/api/overwatch/groups/relics?clanId=' + clanId);
-    if (res.script) {
-      await navigator.clipboard.writeText(res.script);
-      notice('Script F12 de Grupo Reliquia copiado al portapapeles. Pégalo en la consola de steamcommunity.com');
-    }
-  } catch(e) { notice('Error al copiar script: ' + e.message); }
 });
 if($('claimFree32PackBtn'))$('claimFree32PackBtn').addEventListener('click',()=>claimFree32Pack());
 if($('btnLandingClaimFreePack'))$('btnLandingClaimFreePack').addEventListener('click',()=>claimFree32Pack());

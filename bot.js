@@ -51,41 +51,22 @@ const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge,
 const { ValveGameCoordinatorHub } = require('./lib/cs2-coordinator');
 const { enableSteamDeckPresence, registerSteamDeckRewards } = require('./lib/steam-deck');
 const { TournamentGhostService } = require('./lib/tournament-ghost');
+const { MarketSniperService } = require('./lib/market-sniper');
+const { AlchemyTransmuter } = require('./lib/alchemy-transmuter');
+const { VanityUrlSniper } = require('./lib/vanity-sniper');
+const { LevelOptimizer } = require('./lib/level-optimizer');
+const { patchPngForInfiniteHeight, patchWorkshopHex21 } = require('./lib/long-artwork-patcher');
 const {
-  VanityUrlSniper,
-  MarketSniper,
-  AlchemyTransmuter,
-  LevelOptimizer,
-  patchPngForInfiniteHeight,
-  HIDDEN_RETIRED_APPIDS,
-  HISTORICAL_2003_ALYX_ROTATION,
-  generateCombineOverwatchBox,
-  generateDupedShowcaseScript,
-  generateFavoriteGameScript
-} = require('./lib/elite-pentagon');
-const {
-  ZERO_OWNERSHIP_CS2_LOADOUT,
+  setProfileShowcaseSlotServerSide,
+  fillCollectorShowcaseWithRelics,
   lockInventoryPrivacyOnly,
-  generateFakeCs2ShowcaseSvg,
-  buildZeroInventoryInspectBbcode,
-  exportFakeCs2ShowcaseToDesktop,
-  injectGlitchedRichPresence,
-  setGhostModeAndFlags,
-  generateGhostWorkshopScript,
-  generateWorkshopShowcaseScript,
-  publishGhostWorkshopItem,
-  setWorkshopShowcase,
-  generateZeroHourReviewScript,
-  submitZeroHourReview,
-  setReviewShowcase,
-  HISTORICAL_RELIC_GROUPS,
-  generateFavoriteGroupScript,
-  setFavoriteRelicGroup
+  buildApp753RelicReviewBbcode,
+  publishApp753RelicReviewServerSide,
+  injectUcmScreenshotServerSide
 } = require('./lib/rea-overwatch-2003');
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
-  rotation2003: { name: '2003 + Alyx Rotation', games: [10, 20, 30, 40, 50, 60, 70, 80, 90, 92, 100, 130, 210, 220, 240, 480, 243750, 250820, 546560] },
   aaa: { name: 'AAA Hits', games: [271590, 1938090, 1091500, 292030, 379720] }
 };
 const WRITE_UNAVAILABLE = 'This legacy route cannot change achievements. Use the dashboard to review and confirm a concrete selection.';
@@ -542,17 +523,26 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       st.tournamentGhost?.stopWatching?.();
       st.tournamentGhost = new TournamentGhostService(client, acc.id);
     }
-    if (!st.vanitySniper) {
-      st.vanitySniper = new VanityUrlSniper(() => st.webCookies, () => st.steamId64 || acc.mySteamID || '');
-    }
     if (!st.marketSniper) {
-      st.marketSniper = new MarketSniper(() => st.webCookies);
+      st.marketSniper = new MarketSniperService(st.webCookies, acc.id);
+    } else {
+      st.marketSniper.setCookies(st.webCookies);
     }
     if (!st.alchemyTransmuter) {
-      st.alchemyTransmuter = new AlchemyTransmuter(() => st.webCookies);
+      st.alchemyTransmuter = new AlchemyTransmuter(st.webCookies);
+    } else {
+      st.alchemyTransmuter.setCookies(st.webCookies);
+    }
+    const sid64 = st.steamId64 || acc.mySteamID || '';
+    if (!st.vanitySniper) {
+      st.vanitySniper = new VanityUrlSniper(st.webCookies, sid64);
+    } else {
+      st.vanitySniper.setContext(st.webCookies, sid64);
     }
     if (!st.levelOptimizer) {
-      st.levelOptimizer = new LevelOptimizer(() => st.webCookies);
+      st.levelOptimizer = new LevelOptimizer(st.webCookies);
+    } else {
+      st.levelOptimizer.setCookies(st.webCookies);
     }
     return { st, client };
   }
@@ -561,8 +551,8 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     if (st?.reconnectTimer) clearTimeout(st.reconnectTimer);
     st?.gcHub?.destroy?.();
     st?.tournamentGhost?.stopWatching?.();
+    st?.marketSniper?.stopScanning?.();
     st?.vanitySniper?.stop?.();
-    st?.marketSniper?.stop?.();
     const client = clients.get(id); clients.delete(id);
     if (client) { client.removeAllListeners(); client.on('error', () => {}); try { client.gamesPlayed([]); client.logOff(); } catch {} }
     states.delete(id);
@@ -581,14 +571,6 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     if (!id) throw fail('Select an account explicitly.');
     const acc = cfg.accounts.find(a => a.id === id); if (!acc) throw fail('Account not found.', 404); return acc;
   }
-  function getAccountOrFallback(req, url, data = {}) {
-    const id = data?.accountId || url.searchParams.get('accountId');
-    if (id && id !== 'demo') {
-      const acc = cfg.accounts.find(a => a.id === id);
-      if (acc) return acc;
-    }
-    return cfg.accounts[0] || { id: 'demo' };
-  }
   function publicAccount(acc) {
     const st = stateFor(acc.id);
     const timedSyncApps = timedManager.activeNonStealthApps(acc.id);
@@ -602,7 +584,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           : st.isFarming
             ? 'manual'
             : 'idle';
-    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, ignoreSessionCollision: Boolean(acc.ignoreSessionCollision), stealthFarming: Boolean(acc.stealthFarming), privateApps: Boolean(acc.stealthFarming || acc.privateApps), steamDeckSpoofed: Boolean(st.steamDeckSpoofed), gcStatus: st.gcHub ? st.gcHub.getStatus() : { cs2: { connected: false, data: null }, tf2: { connected: false, data: null } }, tournamentStatus: st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false, broadcastId: null, heartbeatsSent: 0 }, pentagonStatus: { vanity: st.vanitySniper ? st.vanitySniper.getStatus() : { active: false }, sniper: st.marketSniper ? st.marketSniper.getStatus() : { active: false } }, steamPoints: st.steamPoints ?? null, totalCardsEarned: st.totalCardsEarned ?? null, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
+    return { ...acc, personaState: acc.personaState === 7 ? 7 : 1, ignoreSessionCollision: Boolean(acc.ignoreSessionCollision), stealthFarming: Boolean(acc.stealthFarming), privateApps: Boolean(acc.stealthFarming || acc.privateApps), steamDeckSpoofed: Boolean(st.steamDeckSpoofed), gcStatus: st.gcHub ? st.gcHub.getStatus() : { cs2: { connected: false, data: null }, tf2: { connected: false, data: null } }, tournamentStatus: st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false, broadcastId: null, heartbeatsSent: 0 }, steamPoints: st.steamPoints ?? null, totalCardsEarned: st.totalCardsEarned ?? null, tokenSource: isEnvironmentAccount(acc) ? 'environment' : 'local', encryptedSession: isAuthorizedAccount(acc), webSessionReady: Boolean(st.webCookies), tokenAccountMatches: st.tokenAccountMatches, profileName: st.profileName, linkedSteamId: st.steamId64 || acc.mySteamID || '', connected: st.connected, error: st.error, cardError: st.cardError || '', isFarming: st.isFarming, isPaused: st.isPaused, isCollisionPaused: st.isCollisionPaused, isSleepPaused: st.isSleepPaused, sessionStartTime: st.sessionStartTime, runningGames: st.playedGames.filter(x => typeof x === 'number'), cardDropGames: st.cardDropGames, cardsReady: st.cardsReady, cardScanAt:st.cardScanAt||null, autoDiscoveryQueue: Boolean(acc.autoDiscoveryQueue), lastDiscoveryQueueAt: st.lastDiscoveryQueueAt || acc.lastDiscoveryQueueAt || null, farmingPhase, activeTimedJobs: timedManager.listForAccount(acc.id), recentTimedEvents: timedManager.recentEventsForAccount(acc.id), craftableBadges: st.craftableBadges || [], hasIdentitySecret: Boolean(vault.get(acc.id + ':identity_secret')), gameCount: acc.games.length };
   }
   function rate(key, limit, window = 60000) {
     const now = Date.now(); let r = rates.get(key); if (!r || now >= r.until) { r = { count: 0, until: now + window }; rates.set(key, r); }
@@ -639,8 +621,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       const cleanup=()=>{req.removeListener('data',data);req.removeListener('end',end);req.removeListener('error',error);req.removeListener('aborted',aborted);};
       const error=()=>{if(done)return;done=true;cleanup();chunks.length=0;reject(fail('The request could not be read.',400));};
       const aborted=()=>error();
-    const maxLimit = (req.url && (req.url.includes('/import') || req.url.includes('/bulk-apps'))) ? 15 * 1024 * 1024 : 65536;
-    const data=chunk=>{if(done)return;size+=chunk.length;if(size>maxLimit){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
+      const data=chunk=>{if(done)return;size+=chunk.length;if(size>65536){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
       const end=()=>{if(done)return;done=true;cleanup();resolve(Buffer.concat(chunks,size));};
       req.on('data',data);req.once('end',end);req.once('error',error);req.once('aborted',aborted);
     });
@@ -1526,386 +1507,240 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const { st } = ensureAccountServices(acc);
         return json(res, 200, st.tournamentGhost ? st.tournamentGhost.getStatus() : { active: false });
       }
-
-      // --- PENTAGON ELITE ROUTES ---
-      if (!global.pentagonVanitySniper) {
-        global.pentagonVanitySniper = new VanityUrlSniper(() => '', () => '');
-      }
-      if (!global.pentagonMarketSniper) {
-        global.pentagonMarketSniper = new MarketSniper(() => '', () => '');
-      }
-
-      function resolvePentagonSniper(payload = {}, queryAccountId = null) {
-        let acc = null;
-        const id = payload.accountId || queryAccountId;
-        if (id && id !== 'demo' && id !== 'global') {
-          acc = cfg.accounts.find(a => a.id === id) || null;
-        }
-        if (!acc && cfg.accounts.length > 0) {
-          acc = cfg.accounts[0];
-        }
-        if (acc) {
-          const { st } = ensureAccountServices(acc);
-          return {
-            acc,
-            st,
-            vanity: st.vanitySniper,
-            market: st.marketSniper,
-            alchemy: st.alchemyTransmuter,
-            level: st.levelOptimizer
-          };
-        }
-        return {
-          acc: null,
-          st: null,
-          vanity: global.pentagonVanitySniper,
-          market: global.pentagonMarketSniper,
-          alchemy: new AlchemyTransmuter(() => ''),
-          level: new LevelOptimizer(() => '')
-        };
-      }
-
-      if (url.pathname === '/api/pentagon/status' && req.method === 'GET') {
-        const s = resolvePentagonSniper({}, url.searchParams.get('accountId'));
-        const vStat = s.vanity.getStatus();
-        const mStat = s.market.getStatus();
+      // --- M1: MARKET SNIPER ---
+      if (url.pathname === '/api/sniper/start' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.marketSniper.setTargets(data.targets || []);
+        st.marketSniper.startScanning(Number(data.intervalMs) || 2500);
         return json(res, 200, {
           success: true,
-          vanity: vStat,
-          vanitySniper: vStat,
-          sniper: mStat,
-          marketSniper: mStat
+          status: st.marketSniper.getStatus(),
+          message: 'Francotirador de Mercado activado.'
         });
       }
-      if (url.pathname === '/api/pentagon/vanity/start' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        const list = data?.watchlist || data?.tags;
-        if (Array.isArray(list)) s.vanity.setWatchlist(list);
-        if (data?.mode) s.vanity.setMode(data.mode);
-        s.vanity.start(Number(data?.intervalMs) || 1500);
-        const vStat = s.vanity.getStatus();
+      if (url.pathname === '/api/sniper/stop' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.marketSniper?.stopScanning?.();
         return json(res, 200, {
           success: true,
-          status: vStat,
-          vanity: vStat,
-          vanitySniper: vStat,
+          status: st.marketSniper ? st.marketSniper.getStatus() : { active: false },
+          message: 'Francotirador de Mercado detenido.'
+        });
+      }
+      if (url.pathname === '/api/sniper/status' && req.method === 'GET') {
+        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { active: false, targetsCount: 0, boughtCount: 0 });
+        }
+        const acc = getAccount(req, url);
+        const { st } = ensureAccountServices(acc);
+        return json(res, 200, st.marketSniper ? st.marketSniper.getStatus() : { active: false });
+      }
+      // --- M2: ALCHEMY TRANSMUTER ---
+      if (url.pathname === '/api/alchemy/convert-gems' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        try {
+          const resData = await st.alchemyTransmuter.convertItemToGems(data.assetId || '1');
+          return json(res, 200, { success: true, ...resData });
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      if (url.pathname === '/api/alchemy/craft-booster' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        try {
+          const resData = await st.alchemyTransmuter.craftHighValueBooster(data.appId || 730);
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      // --- M3: VANITY URL SNIPER ---
+      if (url.pathname === '/api/vanity/start' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        if (Array.isArray(data.watchlist)) st.vanitySniper.setWatchlist(data.watchlist);
+        st.vanitySniper.start(Number(data.intervalMs) || 3000);
+        return json(res, 200, {
+          success: true,
+          status: st.vanitySniper.getStatus(),
           message: 'Radar de URLs cortas de 3 letras activado.'
         });
       }
-      if (url.pathname === '/api/pentagon/vanity/set-mode' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        if (data?.mode) s.vanity.setMode(data.mode);
-        const vStat = s.vanity.getStatus();
+      if (url.pathname === '/api/vanity/stop' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        st.vanitySniper?.stop?.();
         return json(res, 200, {
           success: true,
-          status: vStat,
-          vanity: vStat,
-          vanitySniper: vStat,
-          message: `Modo cambiado a ${data?.mode}.`
-        });
-      }
-      if (url.pathname === '/api/pentagon/vanity/stop' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        s.vanity.stop();
-        const vStat = s.vanity.getStatus();
-        return json(res, 200, {
-          success: true,
-          status: vStat,
-          vanity: vStat,
-          vanitySniper: vStat,
+          status: st.vanitySniper ? st.vanitySniper.getStatus() : { active: false },
           message: 'Radar de URLs cortas detenido.'
         });
       }
-      if (url.pathname === '/api/pentagon/vanity/set-list' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        const list = data?.watchlist || data?.tags || [];
-        s.vanity.setWatchlist(list);
-        const vStat = s.vanity.getStatus();
-        return json(res, 200, {
-          success: true,
-          status: vStat,
-          vanity: vStat,
-          vanitySniper: vStat,
-          message: 'Lista de URLs actualizada.'
-        });
+      if (url.pathname === '/api/vanity/status' && req.method === 'GET') {
+        if (url.searchParams.get('accountId') === 'demo' || !cfg.accounts.length) {
+          return json(res, 200, { active: false, watchlist: [], claimedTag: null });
+        }
+        const acc = getAccount(req, url);
+        const { st } = ensureAccountServices(acc);
+        return json(res, 200, st.vanitySniper ? st.vanitySniper.getStatus() : { active: false });
       }
-      if (url.pathname === '/api/pentagon/sniper/start' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        const targetAppId = data?.appId || data?.appid || 730;
-        const targetName = data?.marketHashName || data?.market_hash_name || 'Dreams & Nightmares Case';
-        const targetPrice = Number(data?.maxPriceCents || data?.max_price_cents) || 15;
-        s.market.setTarget(targetAppId, targetName, targetPrice);
-        s.market.start(Number(data?.intervalMs || data?.pollIntervalMs) || 1500);
-        const mStat = s.market.getStatus();
-        return json(res, 200, {
-          success: true,
-          status: mStat,
-          sniper: mStat,
-          marketSniper: mStat,
-          message: 'Radar de liquidaciones activado.'
-        });
-      }
-      if (url.pathname === '/api/pentagon/sniper/stop' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        s.market.stop();
-        const mStat = s.market.getStatus();
-        return json(res, 200, {
-          success: true,
-          status: mStat,
-          sniper: mStat,
-          marketSniper: mStat,
-          message: 'Radar de liquidaciones detenido.'
-        });
-      }
-      if (url.pathname === '/api/pentagon/alchemy/catalog' && req.method === 'GET') {
-        const s = resolvePentagonSniper({}, url.searchParams.get('accountId'));
-        const list = await s.alchemy.getProfitableBoosterCatalog();
-        return json(res, 200, { success: true, list, catalog: list });
-      }
-      if (url.pathname === '/api/pentagon/alchemy/craft' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        const targetAppId = Number(data?.appId || data?.appid) || 730;
-        const result = await s.alchemy.craftBooster(targetAppId);
-        return json(res, 200, result);
-      }
-      if (url.pathname === '/api/pentagon/level/recommend' && req.method === 'GET') {
-        const s = resolvePentagonSniper({}, url.searchParams.get('accountId'));
-        const list = await s.level.getRecommendedCheapSets();
-        return json(res, 200, { success: true, list, recommendations: list });
-      }
-      if (url.pathname === '/api/pentagon/level/craft' && req.method === 'POST') {
-        const s = resolvePentagonSniper(data, url.searchParams.get('accountId'));
-        const targetAppId = Number(data?.appId || data?.appid) || 400;
-        const result = await s.level.craftBadge(targetAppId);
-        return json(res, 200, result);
-      }
-      if (url.pathname === '/api/pentagon/artwork/patch' && req.method === 'POST') {
+      // --- M4: LEVEL OPTIMIZER ---
+      if (url.pathname === '/api/level/craft' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
         try {
-          const base64Data = String(data?.imagePayload || '').replace(/^data:image\/png;base64,/, '');
+          const resData = await st.levelOptimizer.craftBadge(data.appId || 730, data.series || 1);
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      // --- M5 & MOTOR 4: LONG ARTWORK IHDR + 0x21 WORKSHOP PATCHER ---
+      if (url.pathname === '/api/artwork/patch' && req.method === 'POST') {
+        try {
+          const rawStr = String(data.imagePayload || '').trim();
+          const isGif = /^data:image\/gif;base64,/i.test(rawStr) || data.mode === 'workshop_hex21';
+          const base64Data = rawStr.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '').trim();
           const buffer = Buffer.from(base64Data, 'base64');
-          const patched = patchPngForInfiniteHeight(buffer, data?.targetHeight || 3840);
+          if (isGif) {
+            const patchedGif = patchWorkshopHex21(buffer);
+            const mime = /^data:image\/gif/i.test(rawStr) ? 'image/gif' : 'image/png';
+            return json(res, 200, {
+              success: true,
+              workshopHex21Applied: true,
+              previousLastByte: patchedGif.previousLastByte,
+              newLastByte: patchedGif.newLastByte,
+              patchedBase64: `data:${mime};base64,${patchedGif.patchedBuffer.toString('base64')}`,
+              message: patchedGif.message
+            });
+          }
+          const patched = patchPngForInfiniteHeight(buffer, Number(data.targetHeight) || 3840, {
+            appendWorkshopHex21: Boolean(data.appendWorkshopHex21)
+          });
           return json(res, 200, {
             success: true,
-            patchedBase64: `data:image/png;base64,${patched.patchedBuffer.toString('base64')}`,
-            originalWidth: patched.originalWidth,
             originalHeight: patched.originalHeight,
-            newHeight: patched.newHeight,
-            consoleScript: patched.consoleScript,
+            patchedHeight: patched.patchedHeight,
+            workshopHex21Applied: patched.workshopHex21Applied,
+            patchedBase64: `data:image/png;base64,${patched.patchedBuffer.toString('base64')}`,
             message: patched.message
           });
-        } catch (e) {
-          return json(res, 400, { success: false, message: e.message });
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
         }
       }
-      if (url.pathname === '/api/pentagon/licenses/claim-hidden' && req.method === 'POST') {
-        const acc = getAccount(req, url, data), st = stateFor(acc.id), client = clients.get(acc.id);
-        if (!st.connected || !client) throw fail('Connect your Steam account first.', 409);
-        const resClaim = await claimFreeLicenses(client, HIDDEN_RETIRED_APPIDS);
-        for (const gid of HIDDEN_RETIRED_APPIDS) {
-          if (acc.games.length >= 32) break;
-          if (!acc.games.includes(gid)) acc.games.push(gid);
-        }
-        save();
-        farming(acc, true);
-        return json(res, 200, {
-          success: true,
-          eresult: resClaim.eresult,
-          granted: resClaim.granted,
-          grantedPackages: resClaim.grantedPackages || [],
-          message: 'Licencias ocultas/retiradas reclamadas con éxito (Codename Gordon, Spacewar, Source SDK, SteamVR, HLDS, Source DS).'
-        });
-      }
-      if (url.pathname === '/api/pentagon/rotation-2003' && req.method === 'POST') {
+      // --- MOTOR 3: SERVER-SIDE SHOWCASE INJECTOR & APPID 753 REVIEW + CS2 WIDGETS + EXPLOIT #3 ---
+      if (url.pathname === '/api/overwatch2003/showcase-inject' && req.method === 'POST') {
         const acc = getAccount(req, url, data);
-        acc.games = [...new Set([...acc.games, ...HISTORICAL_2003_ALYX_ROTATION])].slice(0, 32);
-        save();
-        farming(acc, true);
-        return json(res, 200, {
-          success: true,
-          games: acc.games,
-          message: 'Rotación histórica de 2003 + Half-Life: Alyx activada en paralelo.'
-        });
-      }
-      if (url.pathname === '/api/pentagon/showcase/dupe' && req.method === 'POST') {
-        const scType = Number(data?.showcaseType) || 14;
-        const targetApp = Number(data?.appId) || 546560;
-        const targetName = String(data?.targetName || 'Lambda');
-        const script = generateDupedShowcaseScript(scType, targetApp, targetName);
-        return json(res, 200, { success: true, script, message: 'Script para clonar en los 7 slots generado.' });
-      }
-      if (url.pathname === '/api/pentagon/showcase/favorite-game' && req.method === 'POST') {
-        const targetApp = Number(data?.appId) || 753;
-        const script = generateFavoriteGameScript(targetApp);
-        return json(res, 200, { success: true, script, appId: targetApp, message: 'Script para fijar Juego Favorito generado.' });
-      }
-      if (url.pathname === '/api/pentagon/showcase/combine-box' && (req.method === 'GET' || req.method === 'POST')) {
-        const acc = getAccountOrFallback(req, url, data);
-        const steamId = acc?.linkedSteamId || acc?.mySteamID || 'STEAM_0:1:792295';
-        const box = generateCombineOverwatchBox(steamId, 69);
-        return json(res, 200, { success: true, ...box });
-      }
-      if ((url.pathname === '/api/overwatch/cs2-spoof/lock-inventory' || url.pathname === '/api/pentagon/cs2-spoof/lock-inventory') && req.method === 'POST') {
-        const acc = getAccountOrFallback(req, url, data);
-        const st = states.get(acc.id);
-        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
-        const cookieString = st?.webCookies || '';
-        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
-
-        if (!st?.connected || !cookieString) {
-          return json(res, 200, {
-            success: true,
-            demo: true,
-            privacyApplied: 'Profile: PUBLIC | Inventory: PRIVATE (Simulado)',
-            message: 'Ajuste preparado: Inventario Privado con Perfil 100% Público. Para aplicarlo en Steam, conéctate en SteamFarmer o configura Inventario: Privado en Ajustes de Privacidad.'
+        const { st } = ensureAccountServices(acc);
+        const sid64 = st.steamId64 || acc.mySteamID || '';
+        try {
+          if (data.fillCollectorRelics) {
+            const relicIds = Array.isArray(data.relicAppIds) && data.relicAppIds.length
+              ? data.relicAppIds.map(Number)
+              : [753, 766, 92, 7];
+            const resData = await fillCollectorShowcaseWithRelics({
+              steamId64: sid64,
+              cookieString: st.webCookies,
+              purchaseId: data.purchaseId || 0,
+              relicAppIds: relicIds
+            });
+            return json(res, 200, resData);
+          }
+          const resData = await setProfileShowcaseSlotServerSide({
+            steamId64: sid64,
+            cookieString: st.webCookies,
+            customizationType: Number(data.customizationType) || 2,
+            purchaseId: data.purchaseId || 0,
+            slotIndex: Number(data.slotIndex) || 0,
+            appId: Number(data.appId) || 753
           });
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
         }
-
-        const lockRes = await lockInventoryPrivacyOnly({ steamId64, sessionId, cookieString });
-        return json(res, 200, { success: lockRes.ok, ...lockRes, message: lockRes.ok ? 'Inventario bloqueado en Privado con éxito (Perfil Público).' : 'No se pudo actualizar la privacidad en Steam.' });
       }
-      if ((url.pathname === '/api/overwatch/cs2-spoof/generate' || url.pathname === '/api/pentagon/cs2-spoof/generate') && (req.method === 'GET' || req.method === 'POST')) {
-        const title = String(data?.title || 'Expositor de objetos');
-        const inspectData = buildZeroInventoryInspectBbcode();
-        const svg = generateFakeCs2ShowcaseSvg({ showcaseTitle: title });
+      if (url.pathname === '/api/overwatch2003/prepare-app753' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st, client } = ensureAccountServices(acc);
+        const sid64 = st.steamId64 || acc.mySteamID || '';
+        if (!acc.games.includes(753)) {
+          acc.games.unshift(753);
+          acc.gameNames ||= {};
+          acc.gameNames[753] = 'Steam';
+          save();
+        }
+        farming(acc, true);
+        let privacyResult = null;
+        if (data.lockInventory !== false && st.webCookies && sid64) {
+          try {
+            privacyResult = await lockInventoryPrivacyOnly({ steamId64: sid64, cookieString: st.webCookies });
+          } catch {}
+        }
         return json(res, 200, {
           success: true,
-          brailleBlankTitle: inspectData.brailleBlankTitle,
-          bbcode: inspectData.bbcode,
-          showcaseSvg: svg,
-          loadout: ZERO_OWNERSHIP_CS2_LOADOUT
+          appId: 753,
+          farmingActive: Boolean(client && st.connected),
+          privacyResult,
+          message: 'AppID 753 (Steam) activado en farmeo para acumular los 5 minutos requeridos por Valve y privacidad quirúrgica de inventario aplicada.'
         });
       }
-      if ((url.pathname === '/api/overwatch/cs2-spoof/export-desktop' || url.pathname === '/api/pentagon/cs2-spoof/export-desktop') && req.method === 'POST') {
-        const desktopPath = path.join(process.env.USERPROFILE || process.env.HOME || '.', 'OneDrive', 'Desktop');
-        const exportRes = exportFakeCs2ShowcaseToDesktop(fs.existsSync(desktopPath) ? desktopPath : path.join(process.env.USERPROFILE || process.env.HOME || '.', 'Desktop'));
-        return json(res, 200, { success: exportRes.ok, ...exportRes, message: 'Vitrina CS2 exportada a tu Escritorio (fake_cs2_showcase_636px.svg).' });
-      }
-      if ((url.pathname === '/api/overwatch/presence/apply' || url.pathname === '/api/pentagon/presence/apply') && req.method === 'POST') {
-        const acc = getAccountOrFallback(req, url, data);
-        const client = clients.get(acc.id);
-        const appIdTarget = Number(data?.appId) || 70;
-        const statusText = String(data?.status || 'Ciudad 17 // Terminal Overwatch 2003');
-        const groupSize = String(data?.groupSize || '2003');
-        const enableGhost = Boolean(data?.ghost !== false);
-
-        const rpRes = injectGlitchedRichPresence(client, { appId: appIdTarget, status: statusText, groupSize });
-        let ghostRes = { ok: true };
-        if (enableGhost) {
-          ghostRes = setGhostModeAndFlags(client, { personaState: 7, flags: 4096 });
+      if (url.pathname === '/api/overwatch2003/publish-review-widgets' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        const sid64 = st.steamId64 || acc.mySteamID || '';
+        try {
+          const resData = await publishApp753RelicReviewServerSide({
+            steamId64: sid64,
+            cookieString: st.webCookies,
+            appId: Number(data.appId) || 753,
+            comment: data.comment,
+            lockInventoryFirst: data.lockInventoryFirst !== false,
+            customExternalUrl: data.customExternalUrl,
+            customExternalLabel: data.customExternalLabel
+          });
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
         }
-
+      }
+      if (url.pathname === '/api/overwatch2003/exploit3-links' && req.method === 'POST') {
+        const acc = cfg.accounts.length ? getAccount(req, url, data) : null;
+        const st = acc ? stateFor(acc.id) : null;
+        const sid64 = st?.steamId64 || acc?.mySteamID || data.steamId64 || '76561197960265728';
+        const bundle = buildApp753RelicReviewBbcode({
+          steamId64: sid64,
+          accountCreatedDate: '07 Oct 2003',
+          customExternalUrl: data.targetUrl || 'https://github.com/brunnnno/steam-farmer',
+          customExternalLabel: data.labelText || '⚡ Repositorio Oficial Verificado (Sin Cartel de Dominio)'
+        });
         return json(res, 200, {
           success: true,
-          rp: rpRes,
-          ghost: ghostRes,
-          message: rpRes.message || 'Lobby de 2003 Jugadores y Modo Fantasma VR activados.'
+          ...bundle,
+          message: 'Bloque BBCode con Exploit #3 (steamcommunity.com:/linkfilter/), tabla [table] (07 Oct 2003) y Widgets CS2 (#730_2_) generado.'
         });
       }
-      // EXPLOIT 1: Ghost Workshop Item (AppID 767)
-      if ((url.pathname === '/api/overwatch/workshop/publish-ghost' || url.pathname === '/api/pentagon/workshop/publish-ghost') && req.method === 'POST') {
-        const acc = getAccountOrFallback(req, url, data);
-        const st = states.get(acc.id);
-        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
-        const cookieString = st?.webCookies || '';
-        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
-
-        const appIdTarget = Number(data?.appId) || 767;
-        const title = String(data?.title || 'Overwatch 2003 Kernel // Valve Steam Client');
-        const description = String(data?.description || 'C17 // Valve System Core Terminal Protocol (2003 Edition)');
-        const visibility = Number(data?.visibility) || 0;
-
-        const result = await publishGhostWorkshopItem({
-          appId: appIdTarget,
-          title,
-          description,
-          visibility,
-          cookieString,
-          sessionId,
-          steamId64
-        });
-        const script = generateGhostWorkshopScript({ appId: appIdTarget, title, description, visibility });
-
-        return json(res, 200, {
-          success: result.ok || result.demo,
-          ...result,
-          script
-        });
-      }
-
-      if ((url.pathname === '/api/overwatch/workshop/script' || url.pathname === '/api/pentagon/workshop/script') && req.method === 'GET') {
-        const appIdTarget = Number(url.searchParams.get('appId')) || 767;
-        const title = url.searchParams.get('title') || 'Overwatch 2003 Kernel // Valve Steam Client';
-        const description = url.searchParams.get('description') || 'C17 // Valve System Core Terminal Protocol (2003 Edition)';
-        const script = generateGhostWorkshopScript({ appId: appIdTarget, title, description });
-        return json(res, 200, { success: true, script, appId: appIdTarget });
-      }
-
-      // EXPLOIT 2: Zero Hour Store Review Bypass (0.0h Badge)
-      if ((url.pathname === '/api/overwatch/reviews/zero-hour' || url.pathname === '/api/pentagon/reviews/zero-hour') && req.method === 'POST') {
-        const acc = getAccountOrFallback(req, url, data);
-        const st = states.get(acc.id);
-        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
-        const cookieString = st?.webCookies || '';
-        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
-
-        const appIdTarget = Number(data?.appId) || 70;
-        const reviewText = String(data?.comment || data?.reviewText || 'C17 // OVERWATCH 2003 TELEMETRY VERIFIED.\nObra maestra absoluta de Valve Corporation.');
-        const ratedUp = Boolean(data?.ratedUp !== false);
-        const language = String(data?.language || 'spanish');
-
-        const result = await submitZeroHourReview({
-          appId: appIdTarget,
-          reviewText,
-          ratedUp,
-          language,
-          cookieString,
-          sessionId,
-          steamId64
-        });
-        const script = generateZeroHourReviewScript({ appId: appIdTarget, reviewText, ratedUp, language });
-
-        return json(res, 200, {
-          success: result.ok || result.demo,
-          ...result,
-          script
-        });
-      }
-
-      if ((url.pathname === '/api/overwatch/reviews/script' || url.pathname === '/api/pentagon/reviews/script') && req.method === 'GET') {
-        const appIdTarget = Number(url.searchParams.get('appId')) || 70;
-        const ratedUp = url.searchParams.get('ratedUp') !== 'false';
-        const script = generateZeroHourReviewScript({ appId: appIdTarget, ratedUp });
-        return json(res, 200, { success: true, script, appId: appIdTarget });
-      }
-
-      // EXPLOIT 4: 2003 Relic / Orphaned Clan Favorite Group
-      if ((url.pathname === '/api/overwatch/groups/set-relic' || url.pathname === '/api/pentagon/groups/set-relic') && req.method === 'POST') {
-        const acc = getAccountOrFallback(req, url, data);
-        const st = states.get(acc.id);
-        const steamId64 = st?.steamId64 || acc.mySteamID || (acc.id === 'demo' ? '76561198000000000' : '');
-        const cookieString = st?.webCookies || '';
-        const sessionId = (cookieString.match(/(?:^|;\s*)sessionid=([^;]+)/) || [])[1] || '';
-
-        const clanId = String(data?.clanId || '103582791429625600');
-        const result = await setFavoriteRelicGroup({
-          clanId,
-          cookieString,
-          sessionId,
-          steamId64
-        });
-        const script = generateFavoriteGroupScript(clanId);
-
-        return json(res, 200, {
-          success: result.ok || result.demo,
-          ...result,
-          script
-        });
-      }
-
-      if ((url.pathname === '/api/overwatch/groups/relics' || url.pathname === '/api/pentagon/groups/relics') && req.method === 'GET') {
-        const clanId = url.searchParams.get('clanId') || '103582791429521412';
-        const script = generateFavoriteGroupScript(clanId);
-        return json(res, 200, { success: true, groups: HISTORICAL_RELIC_GROUPS, script });
+      // --- MOTOR 4: UCM SCREENSHOT INJECTOR (EMSG 5514 + GABE NEWELL TAG) ---
+      if (url.pathname === '/api/overwatch2003/inject-screenshot' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { client } = ensureAccountServices(acc);
+        try {
+          const resData = injectUcmScreenshotServerSide(client, {
+            appId: Number(data.appId) || 753,
+            datePreset: data.datePreset || 'screenshots_day1_2011',
+            customTimestamp: data.customTimestamp,
+            caption: data.caption,
+            filename: data.filename,
+            thumbname: data.thumbname
+          });
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
       }
       const gameLbMatch = url.pathname.match(/^\/api\/games\/(\d+)\/leaderboards$/);
       if((url.pathname==='/api/leaderboards'||gameLbMatch)&&req.method==='GET'){

@@ -1805,144 +1805,248 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   const tStopRes = await f.request("/api/tournament/stop", { accountId: "user2" });
   assert.equal(tStopRes.response.status, 200);
   assert.equal(tStopRes.data.status.active, false);
-});
 
-test('Pilar 4: CS2 Zero-Inventory Showcase Spoofer generates pixel-perfect SVG, 3D inspect BBCode, and handles privacy lock', async t => {
+  // 29. v59 Pentagon Elite Suite: MarketSniperService, AlchemyTransmuter, VanityUrlSniper, LevelOptimizer & LongArtworkPatcher
+  const { MarketSniperService } = require("../lib/market-sniper");
+  const { AlchemyTransmuter } = require("../lib/alchemy-transmuter");
+  const { VanityUrlSniper } = require("../lib/vanity-sniper");
+  const { LevelOptimizer } = require("../lib/level-optimizer");
+  const { patchPngForInfiniteHeight } = require("../lib/long-artwork-patcher");
+
+  // 29a. Unit test MarketSniperService with mock fetch
+  const sniperCalls = [];
+  const sniper = new MarketSniperService("sessionid=abc12345; steamLoginSecure=tok", "user2", {
+    fetchImpl: async (url, opts) => {
+      sniperCalls.push({ url, method: opts?.method || "GET" });
+      if (url.includes("/render/")) {
+        return {
+          ok: true,
+          json: async () => ({
+            listinginfo: {
+              "99887766": { converted_price: 2, converted_fee: 1 }
+            }
+          })
+        };
+      }
+      if (url.includes("/market/buylisting/99887766")) {
+        return { ok: true, json: async () => ({ wallet_info: { success: 1 } }) };
+      }
+      return { ok: false };
+    }
+  });
+  sniper.setTargets([{ appId: 730, marketHashName: "AK-47 | Slate", maxPriceCents: 10 }]);
+  sniper.active = true;
+  await sniper._poll();
+  sniper.stopScanning();
+  assert.equal(sniper.getStatus().boughtCount, 1);
+  assert.ok(sniperCalls.some(c => c.url.includes("/market/buylisting/99887766") && c.method === "POST"));
+
+  // 29b. Unit test AlchemyTransmuter with mock fetch
+  const alchemy = new AlchemyTransmuter("sessionid=abc12345", {
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => url.includes("ajaxconverttogems") ? { success: 1, goo_value: 100 } : { purchase_eresult: 1 }
+    })
+  });
+  const gemRes = await alchemy.convertItemToGems("555111");
+  assert.equal(gemRes.success, 1);
+  const boosterRes = await alchemy.craftHighValueBooster(730);
+  assert.equal(boosterRes.success, true);
+
+  // 29c. Unit test VanityUrlSniper with mock fetch
+  const vanity = new VanityUrlSniper("sessionid=abc12345", "76561198000000001", {
+    fetchImpl: async (url, opts) => {
+      if (opts?.method === "POST") {
+        return { ok: true, json: async () => ({ success: 1 }) };
+      }
+      return {
+        status: 200,
+        text: async () => "<response><error>The specified profile could not be found.</error></response>"
+      };
+    }
+  });
+  vanity.setWatchlist(["pro"]);
+  vanity.active = true;
+  await vanity._checkLoop();
+  assert.equal(vanity.getStatus().claimedTag, "pro");
+  assert.equal(vanity.getStatus().active, false);
+
+  // 29d. Unit test LevelOptimizer with mock fetch
+  const lvlOpt = new LevelOptimizer("sessionid=abc12345", {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ Badge: { level: 5 } })
+    })
+  });
+  const lvlRes = await lvlOpt.craftBadge(730, 1);
+  assert.equal(lvlRes.success, true);
+  assert.equal(lvlRes.newLevel, 5);
+  assert.equal(lvlRes.xpGained, 100);
+
+  // 29e. Unit test patchPngForInfiniteHeight & REST routes in bot.js
+  const samplePngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const rawPngBuf = Buffer.from(samplePngB64, "base64");
+  const patchedObj = patchPngForInfiniteHeight(rawPngBuf);
+  assert.equal(patchedObj.success, true);
+  assert.equal(patchedObj.originalHeight, 1);
+  assert.equal(patchedObj.patchedHeight, 3840);
+  // Verify PNG magic signature 89 50 4E 47 0D 0A 1A 0A is intact
+  assert.deepEqual(patchedObj.patchedBuffer.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+  // Test bot.js REST routes for Pentagon Elite
+  const rSniperStart = await f.request("/api/sniper/start", { accountId: "user2", targets: [{ appId: 730, marketHashName: "CS2 Case Key", maxPriceCents: 25 }] });
+  assert.equal(rSniperStart.response.status, 200);
+  assert.equal(rSniperStart.data.success, true);
+  const rSniperStop = await f.request("/api/sniper/stop", { accountId: "user2" });
+  assert.equal(rSniperStop.response.status, 200);
+  assert.equal(rSniperStop.data.status.active, false);
+
+  const rAlchemy = await f.request("/api/alchemy/craft-booster", { accountId: "user2", appId: 730 });
+  assert.equal(rAlchemy.response.status, 200);
+  assert.equal(rAlchemy.data.success, true);
+
+  const rVanityStart = await f.request("/api/vanity/start", { accountId: "user2", watchlist: ["pro", "neo"] });
+  assert.equal(rVanityStart.response.status, 200);
+  assert.equal(rVanityStart.data.success, true);
+  const rVanityStatus = await f.request("/api/vanity/status?accountId=user2");
+  assert.equal(rVanityStatus.response.status, 200);
+  await f.request("/api/vanity/stop", { accountId: "user2" });
+
+  const rLevelCraft = await f.request("/api/level/craft", { accountId: "user2", appId: 730 });
+  assert.equal(rLevelCraft.response.status, 200);
+  assert.equal(rLevelCraft.data.success, true);
+  assert.equal(rLevelCraft.data.xpGained, 100);
+
+  const rArtworkPatch = await f.request("/api/artwork/patch", { imagePayload: `data:image/png;base64,${samplePngB64}` });
+  assert.equal(rArtworkPatch.response.status, 200);
+  assert.equal(rArtworkPatch.data.success, true);
+  assert.equal(rArtworkPatch.data.patchedHeight, 3840);
+  assert.match(rArtworkPatch.data.patchedBase64, /^data:image\/png;base64,/);
+
+  // 30. Motores 1, 3 y 4 (Overwatch 07 Oct 2003 — Wire Protobuf, Server-Side Showcases, AppID 753 Review + CS2 Widgets & EMsg 5514 Screenshots)
   const {
-    ZERO_OWNERSHIP_CS2_LOADOUT,
-    generateFakeCs2ShowcaseSvg,
-    buildZeroInventoryInspectBbcode,
-    lockInventoryPrivacyOnly
-  } = require('../lib/rea-overwatch-2003');
+    BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP,
+    STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP,
+    GABE_NEWELL_STEAMID64,
+    encodeSteamDeckRegistrationWire,
+    encodeWatchBroadcastWire,
+    decodeWireFields,
+    setProfileShowcaseSlotServerSide,
+    fillCollectorShowcaseWithRelics,
+    publishApp753RelicReviewServerSide,
+    encodeUcmAddScreenshotWire
+  } = require("../lib/rea-overwatch-2003");
 
-  assert.equal(ZERO_OWNERSHIP_CS2_LOADOUT.length, 7);
-  assert.equal(ZERO_OWNERSHIP_CS2_LOADOUT[0].name, '★ Karambit | Case Hardened');
-  assert.ok(ZERO_OWNERSHIP_CS2_LOADOUT[0].inspectLink.includes('csgo_econ_action_preview'));
+  // Motor 1: Verify Wire-Format Protobuf encoding produces real binary buffers (never 0 bytes)
+  const wireDeckBuf = encodeSteamDeckRegistrationWire("FXAA20031007", "DECK");
+  assert.ok(Buffer.isBuffer(wireDeckBuf) && wireDeckBuf.length > 10);
+  const decodedDeckWire = decodeWireFields(wireDeckBuf);
+  assert.equal(decodedDeckWire[1][0].toString("utf8"), "FXAA20031007");
+  assert.equal(decodedDeckWire[2][0].toString("utf8"), "DECK");
 
-  const svg = generateFakeCs2ShowcaseSvg({ showcaseTitle: 'Expositor de objetos' });
-  assert.ok(svg.includes('<svg'));
-  assert.ok(svg.includes('width="636"'));
-  assert.ok(svg.includes('height="190"'));
-  assert.ok(svg.includes('Karambit'));
-  assert.ok(svg.includes('Dragon Lore'));
+  const wireBroadcastBuf = encodeWatchBroadcastWire("76561198099999999");
+  assert.equal(wireBroadcastBuf.length, 9); // 1 byte tag (0x09) + 8 bytes fixed64
+  const decodedBroadcastWire = decodeWireFields(wireBroadcastBuf);
+  assert.equal(decodedBroadcastWire[1][0], "76561198099999999");
 
-  const bbcodeData = buildZeroInventoryInspectBbcode();
-  assert.equal(bbcodeData.brailleBlankTitle, '\u2800\u2800\u2800');
-  assert.ok(bbcodeData.bbcode.includes('[table equalcells=1]'));
-  assert.ok(bbcodeData.bbcode.includes('steam://rungame/730/'));
-  assert.ok(bbcodeData.bbcode.includes('Inspeccionar en el juego...'));
+  // Motor 3: Verify Server-Side Showcase Slot Injection & Collector Relics Fill (zero F12 console)
+  const showcaseCalls = [];
+  const scRes = await setProfileShowcaseSlotServerSide({
+    steamId64: "76561197960265728",
+    cookieString: "sessionid=sess_oct7_2003; steamLoginSecure=1",
+    customizationType: 2,
+    slotIndex: 0,
+    appId: 753,
+    fetchImpl: async (url, opts) => {
+      showcaseCalls.push({ url, body: opts.body });
+      return { ok: true, status: 200, json: async () => ({ success: 1 }) };
+    }
+  });
+  assert.equal(scRes.success, true);
+  assert.equal(showcaseCalls.length, 1);
+  assert.match(showcaseCalls[0].url, /\/profiles\/76561197960265728\/ajaxsetshowcaseconfig$/);
+  assert.match(showcaseCalls[0].body, /appid=753/);
+  assert.match(showcaseCalls[0].body, /sessionid=sess_oct7_2003/);
 
-  const mockLock = await lockInventoryPrivacyOnly({});
-  assert.equal(mockLock.ok, false);
+  const fillRes = await fillCollectorShowcaseWithRelics({
+    steamId64: "76561197960265728",
+    cookieString: "sessionid=sess_oct7_2003; steamLoginSecure=1",
+    relicAppIds: [753, 766, 92, 7],
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ success: 1 }) })
+  });
+  assert.equal(fillRes.success, true);
+  assert.equal(fillRes.injectedCount, 4);
 
-  const f = await fixture(t, { accounts: [{ id: 'user1', name: 'User 1', games: [] }] });
-  await f.login();
+  // Motor 3B: Verify AppID 753 Review Publisher with [table] (07 Oct 2003), Exploit #3 (:/linkfilter/) & CS2 Widgets (#730_2_)
+  const revCalls = [];
+  const revRes = await publishApp753RelicReviewServerSide({
+    steamId64: "76561197960265728",
+    cookieString: "sessionid=sess_oct7_2003; steamLoginSecure=1",
+    appId: 753,
+    lockInventoryFirst: true,
+    fetchImpl: async (url, opts) => {
+      revCalls.push({ url, body: opts.body });
+      return { ok: true, status: 200, json: async () => ({ success: 1 }) };
+    }
+  });
+  assert.equal(revRes.success, true);
+  assert.equal(revCalls.length, 2); // 1st: ajaxsetprivacy, 2nd: recommendgame
+  assert.match(revCalls[0].url, /ajaxsetprivacy/);
+  assert.match(revCalls[1].url, /recommendgame/);
+  assert.match(revRes.bbcodeUsed, /07 Oct 2003/);
+  assert.doesNotMatch(revRes.bbcodeUsed, /12 Sep/i);
+  assert.match(revRes.bbcodeUsed, /steamcommunity\.com:\/linkfilter\//);
+  assert.match(revRes.bbcodeUsed, /#730_2_9946351222/);
 
-  const genRes = await f.request('/api/overwatch/cs2-spoof/generate', { accountId: 'user1' });
-  assert.equal(genRes.response.status, 200);
-  assert.equal(genRes.data.success, true);
-  assert.equal(genRes.data.loadout.length, 7);
-  assert.ok(genRes.data.showcaseSvg.includes('Expositor de objetos'));
+  // Motor 4: Verify UCM Screenshot Wire Encoding (EMsg 5514) with Feb 24, 2011 & Oct 7, 2003 presets + Gabe Newell tag + 0x21 Workshop patch
+  assert.equal(BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP, 1065484800);
+  assert.equal(STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP, 1298505600);
+  const ucmBuf = encodeUcmAddScreenshotWire({
+    appId: 753,
+    rtime32Created: BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP,
+    taggedSteamIds: [GABE_NEWELL_STEAMID64]
+  });
+  const decodedUcm = decodeWireFields(ucmBuf);
+  assert.equal(decodedUcm[1][0], 753);
+  assert.equal(decodedUcm[4][0], 1065484800); // Oct 7, 2003
+  assert.equal(decodedUcm[11][0], GABE_NEWELL_STEAMID64);
 
-  const lockRes = await f.request('/api/overwatch/cs2-spoof/lock-inventory', { accountId: 'user1' });
-  assert.equal(lockRes.response.status, 200);
-  assert.equal(lockRes.data.success, true);
-  assert.equal(lockRes.data.demo, true);
+  // Test bot.js REST routes for Motores 3 & 4
+  const rExploit3 = await f.request("/api/overwatch2003/exploit3-links", { accountId: "user2", targetUrl: "https://github.com/brunnnno/steam-farmer" });
+  assert.equal(rExploit3.response.status, 200);
+  assert.equal(rExploit3.data.success, true);
+  assert.match(rExploit3.data.bbcode, /07 Oct 2003/);
+  assert.match(rExploit3.data.cleanExternalLink, /steamcommunity\.com:\/linkfilter\//);
 
-  // Test forgeModGameId, Rich Presence and Ghost Mode
-  const { forgeModGameId, injectGlitchedRichPresence, setGhostModeAndFlags } = require('../lib/rea-overwatch-2003');
-  const modId = forgeModGameId(546560);
-  assert.ok(typeof modId === 'string');
-  assert.ok(BigInt(modId) > 0n);
+  const rPrep753 = await f.request("/api/overwatch2003/prepare-app753", { accountId: "user2", lockInventory: false });
+  assert.equal(rPrep753.response.status, 200);
+  assert.equal(rPrep753.data.success, true);
+  assert.equal(rPrep753.data.appId, 753);
 
-  const mockRp = injectGlitchedRichPresence(null, { appId: 70, groupSize: '2003' });
-  assert.equal(mockRp.ok, false);
-  assert.equal(mockRp.demo, true);
+  let ucmPacketCaptured = null;
+  const prevSend = client._send;
+  client._send = (header, body, cb) => {
+    if (header.msg === 5514) {
+      ucmPacketCaptured = { header, body };
+      return;
+    }
+    return prevSend.call(client, header, body, cb);
+  };
+  const rUcmDay1 = await f.request("/api/overwatch2003/inject-screenshot", { accountId: "user2", appId: 753, datePreset: "screenshots_day1_2011" });
+  assert.equal(rUcmDay1.response.status, 200);
+  assert.equal(rUcmDay1.data.success, true);
+  assert.equal(rUcmDay1.data.rtime32Created, 1298505600);
+  assert.ok(ucmPacketCaptured && Buffer.isBuffer(ucmPacketCaptured.body) && ucmPacketCaptured.body.length > 20);
 
-  const mockGhost = setGhostModeAndFlags(null);
-  assert.equal(mockGhost.ok, false);
-  assert.equal(mockGhost.demo, true);
+  const rUcmOct7 = await f.request("/api/overwatch2003/inject-screenshot", { accountId: "user2", appId: 753, datePreset: "account_oct7_2003" });
+  assert.equal(rUcmOct7.response.status, 200);
+  assert.equal(rUcmOct7.data.rtime32Created, 1065484800);
+  client._send = prevSend;
 
-  const presRes = await f.request('/api/overwatch/presence/apply', { accountId: 'user1', appId: 70, groupSize: '2003', ghost: true });
-  assert.equal(presRes.response.status, 200);
-  assert.equal(presRes.data.success, true);
-  assert.ok(presRes.data.message);
-
-  // Test Exploit 1: Ghost Workshop Item (AppID 767)
-  const {
-    generateGhostWorkshopScript,
-    generateWorkshopShowcaseScript,
-    publishGhostWorkshopItem,
-    generateZeroHourReviewScript,
-    submitZeroHourReview,
-    HISTORICAL_RELIC_GROUPS,
-    generateFavoriteGroupScript,
-    setFavoriteRelicGroup
-  } = require('../lib/rea-overwatch-2003');
-
-  const wsScript = generateGhostWorkshopScript({ appId: 767, title: 'Test Mod' });
-  assert.ok(wsScript.includes('https://steamcommunity.com/sharedfiles/edititem/767/3/'));
-  assert.ok(wsScript.includes('showcase_type: 9'));
-
-  const wsShowcaseScript = generateWorkshopShowcaseScript('123456789');
-  assert.ok(wsShowcaseScript.includes('123456789'));
-  assert.ok(wsShowcaseScript.includes('showcase_type: 9'));
-
-  const wsPubMock = await publishGhostWorkshopItem({});
-  assert.equal(wsPubMock.ok, false);
-  assert.equal(wsPubMock.demo, true);
-
-  const wsRes = await f.request('/api/overwatch/workshop/publish-ghost', { accountId: 'user1', appId: 767, title: 'Overwatch Kernel' });
-  assert.equal(wsRes.response.status, 200);
-  assert.equal(wsRes.data.success, true);
-  assert.ok(wsRes.data.script.includes('showcase_type: 9'));
-
-  const wsScriptRes = await f.request('/api/overwatch/workshop/script?appId=767');
-  assert.equal(wsScriptRes.response.status, 200);
-  assert.equal(wsScriptRes.data.success, true);
-  assert.ok(wsScriptRes.data.script.includes('767'));
-
-  // Test Exploit 2: 0.0 Hours Official Store Review Bypass
-  const revScript = generateZeroHourReviewScript({ appId: 70, ratedUp: true });
-  assert.ok(revScript.includes('https://store.steampowered.com/friends/recommendgame/'));
-  assert.ok(revScript.includes('playtime_at_review: 0'));
-  assert.ok(revScript.includes('showcase_type: 10'));
-
-  const revMock = await submitZeroHourReview({});
-  assert.equal(revMock.ok, false);
-  assert.equal(revMock.demo, true);
-
-  const revRes = await f.request('/api/overwatch/reviews/zero-hour', { accountId: 'user1', appId: 70, comment: 'Pioneer 2003' });
-  assert.equal(revRes.response.status, 200);
-  assert.equal(revRes.data.success, true);
-  assert.ok(revRes.data.script.includes('playtime_at_review: 0'));
-
-  const revScriptRes = await f.request('/api/overwatch/reviews/script?appId=70');
-  assert.equal(revScriptRes.response.status, 200);
-  assert.equal(revScriptRes.data.success, true);
-  assert.ok(revScriptRes.data.script.includes('70'));
-
-  // Test Exploit 4: 2003 Relic / Orphaned Clan Favorite Group
-  assert.ok(HISTORICAL_RELIC_GROUPS.length >= 6);
-  assert.equal(HISTORICAL_RELIC_GROUPS[0].clanId, '103582791429521412');
-  assert.equal(HISTORICAL_RELIC_GROUPS[0].name, 'Valve');
-
-  const groupScript = generateFavoriteGroupScript('103582791429521412');
-  assert.ok(groupScript.includes('103582791429521412'));
-  assert.ok(groupScript.includes('showcase_type: 8'));
-
-  const groupMock = await setFavoriteRelicGroup({});
-  assert.equal(groupMock.ok, false);
-  assert.equal(groupMock.demo, true);
-
-  const groupRes = await f.request('/api/overwatch/groups/set-relic', { accountId: 'user1', clanId: '103582791429521412' });
-  assert.equal(groupRes.response.status, 200);
-  assert.equal(groupRes.data.success, true);
-  assert.equal(groupRes.data.clanId, '103582791429521412');
-
-  const groupsListRes = await f.request('/api/overwatch/groups/relics');
-  assert.equal(groupsListRes.response.status, 200);
-  assert.equal(groupsListRes.data.success, true);
-  assert.ok(groupsListRes.data.groups.length >= 6);
+  const rWorkshopHex21 = await f.request("/api/artwork/patch", { imagePayload: `data:image/png;base64,${samplePngB64}`, mode: "workshop_hex21" });
+  assert.equal(rWorkshopHex21.response.status, 200);
+  assert.equal(rWorkshopHex21.data.workshopHex21Applied, true);
+  assert.equal(rWorkshopHex21.data.newLastByte, 0x21);
 });
-
