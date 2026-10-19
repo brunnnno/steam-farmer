@@ -2679,27 +2679,30 @@ async function farmExclusiveRelics(mode = "all") {
   }
 }
 
-async function injectHiddenShowcaseServerSide(fillCollectorRelics = false, slotsCount = 4) {
+async function injectHiddenShowcaseServerSide(fillCollectorRelics = false, slotsCount = 4, eventsMode = false) {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   const customTyped = Number(($("overwatchCustomAppIdInput")?.value || "").trim());
   const appId = (Number.isInteger(customTyped) && customTyped > 0)
     ? customTyped
-    : (Number($("overwatchShowcaseAppSelect")?.value || 753) || 753);
+    : (Number($("overwatchShowcaseAppSelect")?.value || 202352) || 202352);
   const customizationType = Number($("overwatchShowcaseTypeSelect")?.value || 6) || 6;
   const targetInstance = $("overwatchShowcaseInstanceSelect")?.value || "second";
   const slotIndex = Number($("overwatchShowcaseSlotSelect")?.value || 0) || 0;
-  const relicAppIds = Number(slotsCount) === 12
-    ? [753, 766, 92, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 220, 10]
-    : [753, 766, 92, 1675200];
+  const relicAppIds = eventsMode
+    ? [202352, 245070, 765, 202351, 248210, 593110, 258280, 1675180, 223910, 267420, 303700, 368020]
+    : (Number(slotsCount) === 12
+      ? [753, 766, 92, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 220, 10]
+      : [753, 766, 92, 1675200]);
   try {
     const res = await api("/api/overwatch2003/showcase-inject", {
       accountId: activeAccountId,
       appId,
       customizationType,
-      targetInstance,
+      targetInstance: eventsMode ? "both" : targetInstance,
       slotIndex,
       slotsCount: Number(slotsCount) || 4,
       fillCollectorRelics: Boolean(fillCollectorRelics),
+      alsoInjectFavorite: Boolean(eventsMode),
       relicAppIds
     });
     if ($("overwatchShowcaseStatusText") && res?.message) $("overwatchShowcaseStatusText").textContent = res.message;
@@ -2868,7 +2871,7 @@ async function runPioneerExploitMotor5() {
     badgeId = 0;
   }
 
-  if (exploitType !== "animated_gif_screenshot" && !activeAccountId) {
+  if (!["animated_gif_screenshot", "create_impossible_guide_202352", "wishlist_impossible_valve_apps"].includes(exploitType) && !activeAccountId) {
     notice(t("liveActionNotice"));
     openAddAccModal();
     return;
@@ -2886,11 +2889,17 @@ async function runPioneerExploitMotor5() {
     if ($("pioneerExploitStatusText") && res?.message) {
       $("pioneerExploitStatusText").textContent = res.message;
     }
-    if ((exploitType === "activate_trading_card_beta_202352" || exploitType === "unlock_all_historical_events" || exploitType === "ghost_custom_game") && typeof refresh === "function") {
+    if ((exploitType === "activate_trading_card_beta_202352" || exploitType === "unlock_all_historical_events" || exploitType === "fill_showcases_all_events" || exploitType === "ghost_custom_game") && typeof refresh === "function") {
       try { await refresh(); } catch {}
     }
     if (res?.marketUrl && !res?.crafted && typeof window.open === "function") {
       try { window.open(res.marketUrl, "_blank"); } catch {}
+    }
+    if (res?.reviewsUrl && res?.publishedApps?.length && typeof window.open === "function") {
+      try { window.open(res.reviewsUrl, "_blank"); } catch {}
+    }
+    if (res?.replayUrl2022 && typeof window.open === "function") {
+      try { window.open(res.replayUrl2022, "_blank"); } catch {}
     }
     if (res?.consoleSnippet) {
       const vdfOut = $("overwatchScreenshotVdfOutput");
@@ -3297,7 +3306,8 @@ if($('btnFarmSingleRelic'))$('btnFarmSingleRelic').addEventListener('click',()=>
 if($('btnFarmAllRelics'))$('btnFarmAllRelics').addEventListener('click',()=>farmExclusiveRelics('all'));
 if($('btnInjectHiddenShowcase'))$('btnInjectHiddenShowcase').addEventListener('click',()=>injectHiddenShowcaseServerSide(false, 4));
 if($('btnFillCollectorRelics'))$('btnFillCollectorRelics').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 4));
-if($('btnFillCollector12Slots'))$('btnFillCollector12Slots').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 12));
+if($('btnFillCollector12Slots'))$('btnFillCollector12Slots').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 12, false));
+if($('btnFillCollectorEvents12'))$('btnFillCollectorEvents12').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 12, true));
 if($('btnGenerateCs2VisualShowcase'))$('btnGenerateCs2VisualShowcase').addEventListener('click',()=>generateCs2VisualShowcasePreview(false));
 if($('btnDownloadCs2VisualPng'))$('btnDownloadCs2VisualPng').addEventListener('click',()=>generateCs2VisualShowcasePreview(true));
 if($('overwatchFeaturedSkinSelect'))$('overwatchFeaturedSkinSelect').addEventListener('change',()=>generateCs2VisualShowcasePreview(false));

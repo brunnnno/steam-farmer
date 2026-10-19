@@ -4017,7 +4017,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       if (url.pathname === '/api/overwatch2003/farm-relics' && req.method === 'POST') {
         const acc = getAccount(req, url, data);
         const { st, client } = ensureAccountServices(acc);
-        const allRelicIds = [753, 7, 92, 766, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 480, 8, 760, 767, 761];
+        const allRelicIds = [202352, 245070, 765, 202351, 248210, 593110, 258280, 1675180, 223910, 267420, 303700, 368020, 753, 7, 92, 766, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 480, 8];
         const targetIds = data.mode === 'single' && Number(data.appId) > 0
           ? [Number(data.appId)]
           : (Array.isArray(data.appIds) && data.appIds.length ? data.appIds.map(Number).filter(n => n > 0) : allRelicIds);
@@ -4075,6 +4075,22 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
               targetInstance: data.targetInstance || 'second',
               relicAppIds: relicIds
             });
+            if (data.alsoInjectFavorite) {
+              const favApp = Number(data.appId) || relicIds[0] || 202352;
+              try {
+                await setProfileShowcaseSlotServerSide({
+                  steamId64: sid64,
+                  cookieString: st.webCookies,
+                  customizationType: 6,
+                  purchaseId: data.purchaseId || 0,
+                  targetInstance: data.targetInstance || 'both',
+                  slotIndex: 0,
+                  appId: favApp
+                });
+                resData.favoriteAppIdInjected = favApp;
+                resData.message = `🌟 ¡TODOS LOS EVENTOS DESTACADOS! Se inyectaron los ${relicIds.length} Eventos Históricos (${relicIds.join(', ')}) en tu Coleccionista de Juegos y el AppID ${favApp} (${RELIC_OFFICIAL_NAMES[favApp] || 'Evento'}) en tu Vitrina de Juego Favorito, además de dejarlos farmeando horas en vivo.`;
+              } catch {}
+            }
             return json(res, 200, resData);
           }
           const targetAppId = Number(data.appId) || 753;
@@ -4214,7 +4230,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       // --- MOTOR 5: PIONEER EXPLOITS LAB + ANCIENT & BETA BADGES UNLOCKER ---
       if (url.pathname === '/api/overwatch2003/pioneer-exploit' && req.method === 'POST') {
         try {
-          const isAnimatedOnly = data.exploitType === 'animated_gif_screenshot';
+          const isAnimatedOnly = ['animated_gif_screenshot', 'create_impossible_guide_202352', 'wishlist_impossible_valve_apps'].includes(data.exploitType);
           const acc = (isAnimatedOnly && (data.accountId === 'demo' || !cfg.accounts.length))
             ? null
             : getAccount(req, url, data);
@@ -4224,9 +4240,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           const sid64 = st?.steamId64 || acc?.mySteamID || client?.steamID?.toString?.() || '';
           const cookieStr = st?.webCookies || '';
 
-          if ((data.exploitType === 'activate_trading_card_beta_202352' || data.exploitType === 'unlock_all_historical_events') && acc) {
-            const eventList = data.exploitType === 'unlock_all_historical_events'
-              ? [202352, 245070, 765, 202351, 223910, 261310, 321770, 405270, 551410, 807210, 248210, 753, 7, 92, 766]
+          if ((data.exploitType === 'activate_trading_card_beta_202352' || data.exploitType === 'unlock_all_historical_events' || data.exploitType === 'fill_showcases_all_events') && acc) {
+            const eventList = (data.exploitType === 'unlock_all_historical_events' || data.exploitType === 'fill_showcases_all_events')
+              ? [202352, 245070, 765, 202351, 248210, 593110, 258280, 1675180, 223910, 267420, 303700, 368020, 753, 7, 92, 766]
               : [202352, 202351, 765, 753, 7];
             acc.gameNames ||= {};
             for (const bid of eventList) {
@@ -4267,7 +4283,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             }
             save();
             farming(acc, true);
-          } else if ((data.exploitType === 'activate_trading_card_beta_202352' || data.exploitType === 'unlock_all_historical_events') && acc) {
+          } else if ((data.exploitType === 'activate_trading_card_beta_202352' || data.exploitType === 'unlock_all_historical_events' || data.exploitType === 'fill_showcases_all_events') && acc) {
             farming(acc, true);
           }
 
