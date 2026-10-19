@@ -2828,7 +2828,12 @@ async function runPioneerExploitMotor5() {
   let saleAppId = 245070;
   let borderColor = 0;
 
-  if (sel === "craft_summer_getaway_2013") {
+  const saleMatch = sel.match(/^craft_sale_(\d+)(_foil)?$/);
+  if (saleMatch) {
+    exploitType = "craft_ancient_sale_badge";
+    saleAppId = Number(rawInput) || Number(saleMatch[1]) || 245070;
+    borderColor = saleMatch[2] ? 1 : 0;
+  } else if (sel === "craft_summer_getaway_2013") {
     exploitType = "craft_ancient_sale_badge";
     saleAppId = Number(rawInput) || 245070;
     borderColor = 0;
@@ -2881,7 +2886,7 @@ async function runPioneerExploitMotor5() {
     if ($("pioneerExploitStatusText") && res?.message) {
       $("pioneerExploitStatusText").textContent = res.message;
     }
-    if (exploitType === "activate_trading_card_beta_202352" && typeof refresh === "function") {
+    if ((exploitType === "activate_trading_card_beta_202352" || exploitType === "unlock_all_historical_events" || exploitType === "ghost_custom_game") && typeof refresh === "function") {
       try { await refresh(); } catch {}
     }
     if (res?.marketUrl && !res?.crafted && typeof window.open === "function") {

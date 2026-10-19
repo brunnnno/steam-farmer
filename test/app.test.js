@@ -2045,6 +2045,20 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.equal(rUcmOct7.data.rtime32Created, 1065484800);
   client._send = prevSend;
 
+  // Motor 5: Verify /api/overwatch2003/pioneer-exploit routes (activate_trading_card_beta_202352, ghost_custom_game, animated_gif_screenshot)
+  const rBeta202352 = await f.request("/api/overwatch2003/pioneer-exploit", { accountId: "user2", exploitType: "activate_trading_card_beta_202352" });
+  assert.equal(rBeta202352.response.status, 200);
+  assert.equal(rBeta202352.data.success, true);
+  assert.equal(rBeta202352.data.betaAppId, 202352);
+
+  const rGhostHl3 = await f.request("/api/overwatch2003/pioneer-exploit", { accountId: "user2", exploitType: "ghost_custom_game", customText: "Half-Life 3 (Closed Alpha)" });
+  assert.equal(rGhostHl3.response.status, 200);
+  assert.equal(rGhostHl3.data.success, true);
+
+  const rAnimGif = await f.request("/api/overwatch2003/pioneer-exploit", { accountId: "user2", exploitType: "animated_gif_screenshot", targetAppId: 202352 });
+  assert.equal(rAnimGif.response.status, 200);
+  assert.equal(rAnimGif.data.success, true);
+
   const rWorkshopHex21 = await f.request("/api/artwork/patch", { imagePayload: `data:image/png;base64,${samplePngB64}`, mode: "workshop_hex21" });
   assert.equal(rWorkshopHex21.response.status, 200);
   assert.equal(rWorkshopHex21.data.workshopHex21Applied, true);

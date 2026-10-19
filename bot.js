@@ -130,19 +130,42 @@ const RELIC_OFFICIAL_NAMES = {
   753: 'Steam',
   760: 'Steam Screenshots',
   761: 'Steam Cloud / Video',
+  765: 'Steam Greenlight (2012)',
   766: 'Steam Workshop',
   767: 'Steam Artwork',
-  250820: 'SteamVR',
-  353370: 'Steam Link',
-  353380: 'Steam Controller',
-  765: 'Steam Greenlight (2012)',
   202351: 'Steam Community Beta Access (2012)',
   202352: 'Steam Trading Card Beta Access (2013)',
+  218800: 'Steam Software Beta Access (2012)',
+  221410: 'Steam for Linux Beta (2012)',
   223910: 'Saxxy Awards 2012',
   245070: 'Steam Summer Getaway Sale 2013',
   248210: 'Steam Family Sharing Beta (2013)',
+  250820: 'SteamVR',
+  261310: '3rd Annual Saxxy Awards 2013',
+  267420: 'Steam Holiday Sale 2013 (Snow Globe)',
+  303700: 'Steam Summer Adventure 2014',
+  321770: '4th Annual Saxxy Awards 2014',
+  335590: 'Steam Holiday Sale 2014',
+  353370: 'Steam Link',
+  353380: 'Steam Controller',
+  368020: 'Monster Summer Sale 2015',
+  405270: '5th Annual Saxxy Awards 2015',
+  425280: 'Steam Holiday Sale 2015',
+  480730: 'Steam Summer Picnic Sale 2016',
+  551410: '6th Annual Saxxy Awards 2016',
+  566020: 'The Steam Awards 2016',
+  639900: 'Steam Summer Sale 2017 (Stickers)',
+  762800: 'The Steam Awards 2017',
+  807210: '7th Annual Saxxy Awards 2017',
+  876740: 'Intergalactic Summer Sale 2018 (Salien)',
+  991980: 'The Steam Winter Sale 2018',
   1059530: 'Valve Index VR Kit',
-  1675200: 'Steam Deck'
+  1195670: 'The Steam Awards 2019',
+  1343890: 'Steam Summer Road Trip 2020',
+  1465680: 'The Steam Awards 2020',
+  1658760: 'Steam Summer Sale 2021 (Forge Your Fate)',
+  1675200: 'Steam Deck',
+  2021850: 'Steam 3000 Summer Sale 2022 (Clorthax)'
 };
 
 // Catálogo expandido con las 16 reliquias, hardware y subsistemas más exclusivos de Valve
@@ -1887,7 +1910,8 @@ function injectUcmScreenshotServerSide(client, options = {}) {
       }
     });
 
-    const publishedUrl = screenshotId && screenshotId !== '0'
+    const isValidScreenshotId = screenshotId && /^\d{5,11}$/.test(String(screenshotId)) && screenshotId !== '0';
+    const publishedUrl = isValidScreenshotId
       ? `https://steamcommunity.com/sharedfiles/filedetails/?id=${screenshotId}`
       : null;
 
@@ -1950,6 +1974,92 @@ async function executePioneerExploitServerSide(client, {
   activeGames = [753, 7, 202352, 730, 10],
   fetchImpl = fetch
 } = {}) {
+  // ARMA #0: Mega-Ráfaga de TODOS los Eventos Históricos de Steam (2012-2025: Beta Cromos, Greenlight, Saxxy, Replays, Ofertas 2013-2022 y Comunidad)
+  if (exploitType === 'unlock_all_historical_events') {
+    const eventSub0AppIds = [202352, 202351, 765, 218800, 221410, 248210, 223910, 261310, 321770, 405270, 551410, 807210, 753, 7, 92, 766];
+    if (client && typeof client.requestFreeLicense === 'function') {
+      try { client.requestFreeLicense(eventSub0AppIds); } catch {}
+    }
+    if (client && typeof client._send === 'function') {
+      const gamesToPlay = [...new Set([...eventSub0AppIds, ...activeGames])].slice(0, 30);
+      if (Schema && Schema.CMsgClientGamesPlayed) {
+        const buf = Buffer.from(
+          Schema.CMsgClientGamesPlayed.encode({
+            games_played: gamesToPlay.map(id => ({ game_id: String(Number(id) || 202352) })),
+            client_os_type: 16
+          }).finish()
+        );
+        client._send({ msg: EMsg.ClientGamesPlayed || 542, proto: {} }, buf);
+      } else if (typeof client.gamesPlayed === 'function') {
+        client.gamesPlayed(gamesToPlay);
+      }
+    }
+
+    const targetSteamId = String(steamId64 || client?.steamID?.getSteamID64?.() || '').trim();
+    const sessionId = extractSessionIdFromCookies(cookieString);
+    const replayYearsUnlocked = [];
+
+    // 1) Desbloquear todos los Steam Replay (2022, 2023, 2024, 2025)
+    for (const yr of [2022, 2023, 2024, 2025]) {
+      try {
+        const url = targetSteamId
+          ? `https://store.steampowered.com/yearinreview/${targetSteamId}/${yr}`
+          : `https://store.steampowered.com/replay/${yr}`;
+        const r = await safeSteamFetch(url, { method: 'GET', headers: { Cookie: cookieString || '' } }, fetchImpl);
+        if (r && r.ok) replayYearsUnlocked.push(yr);
+      } catch {}
+    }
+
+    // 2) Intentar forjado ajaxcraftbadge en todas las grandes Ofertas Históricas (2013-2022) por si hay sets listos en inventario
+    const allHistoricSaleAppIds = [245070, 267420, 303700, 335590, 368020, 425280, 480730, 566020, 639900, 762800, 876740, 991980, 1195670, 1343890, 1465680, 1658760, 2021850];
+    const craftedSales = [];
+    if (sessionId && targetSteamId) {
+      for (const sApp of allHistoricSaleAppIds) {
+        try {
+          const body = new URLSearchParams({ appid: String(sApp), series: '1', border_color: '0', sessionid: sessionId });
+          const r = await safeSteamFetch(
+            `https://steamcommunity.com/profiles/${targetSteamId}/ajaxcraftbadge`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                Cookie: cookieString,
+                Origin: 'https://steamcommunity.com',
+                Referer: `https://steamcommunity.com/profiles/${targetSteamId}/gamecards/${sApp}/`,
+                'X-Requested-With': 'XMLHttpRequest'
+              },
+              body: body.toString()
+            },
+            fetchImpl
+          );
+          const d = await r.json().catch(() => ({}));
+          if (r.ok && (d.success === 1 || d.success === true)) craftedSales.push(sApp);
+        } catch {}
+      }
+      // 3) Inyectar AppID 202352 (Steam Trading Card Beta Access 2013) y 245070 (Summer Getaway 2013) en vitrinas
+      try {
+        await setProfileShowcaseSlotServerSide({
+          steamId64: targetSteamId,
+          cookieString,
+          customizationType: 6,
+          targetInstance: 'both',
+          slotIndex: 0,
+          appId: 202352,
+          fetchImpl
+        });
+      } catch {}
+    }
+
+    return {
+      success: true,
+      exploitType,
+      activatedEventAppIds: eventSub0AppIds,
+      replayYearsUnlocked,
+      craftedSales,
+      message: `🌟 ¡MEGA-RÁFAGA HISTÓRICA COMPLETADA! Se activaron y pusieron a farmear horas las 16 reliquias de eventos (202352 Beta de Cromos 2013, 765 Greenlight 2012, 202351 Community Beta 2012, Saxxy Awards 2012-2017), se dispararon los 4 Steam Replay (${replayYearsUnlocked.join(', ') || '2022-2025'}), se inyectó 202352 en tu Vitrina y se probaron las 17 Ofertas Históricas (2013-2022).`
+    };
+  }
+
   // ARMA #1: Forzador Server-Side de Insignias de Ofertas Antiguas (ajaxcraftbadge Direct Bypass — Summer Getaway 2013 [245070], Holiday 2013 [267420], etc.)
   if (exploitType === 'craft_ancient_sale_badge') {
     const sessionId = extractSessionIdFromCookies(cookieString);
@@ -1959,12 +2069,21 @@ async function executePioneerExploitServerSide(client, {
     const saleNames = {
       245070: 'Steam Summer Getaway Sale 2013 (Julio 2013 — ¡Cromos aún comprables en el Mercado!)',
       267420: 'Steam Holiday Sale 2013 (Snow Globe)',
-      303700: 'Steam Summer Adventure 2014',
-      335590: 'Steam Holiday Sale 2014',
-      368020: 'Monster Summer Sale 2015',
+      303700: 'Steam Summer Adventure 2014 (Red/Blue/Pink/Green/Purple Team)',
+      335590: 'Steam Holiday Sale 2014 (Auction Event)',
+      368020: 'Monster Summer Sale 2015 (Monster Game)',
       425280: 'Steam Holiday Sale 2015 (North Pole Noir)',
       480730: 'Steam Summer Picnic Sale 2016',
-      566020: 'The Steam Awards 2016'
+      566020: 'The Steam Awards 2016',
+      639900: 'Steam Summer Sale 2017 (Sticker Event)',
+      762800: 'The Steam Awards 2017',
+      876740: 'Intergalactic Summer Sale 2018 (Salien Game)',
+      991980: 'The Steam Winter Sale 2018 (Knick-Knack)',
+      1195670: 'The Steam Awards 2019',
+      1343890: 'Steam Summer Road Trip 2020',
+      1465680: 'The Steam Awards 2020',
+      1658760: 'Steam Summer Sale 2021 (Forge Your Fate)',
+      2021850: 'Steam 3000 Summer Sale 2022 (Clorthax Paradox Party)'
     };
     const saleLabel = saleNames[targetSale] || `Oferta Histórica AppID ${targetSale}`;
     const marketUrl = `https://steamcommunity.com/market/search?appid=753&category_753_Game%5B%5D=tag_app_${targetSale}`;
@@ -2577,7 +2696,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       games = [st.inspectingAppId, ...baseGames.filter(x => x !== st.inspectingAppId)].slice(0, 32);
     }
     if (!st.connected || st.isPaused || collisionActive || st.isSleepPaused) games = [];
-    const list = [...games]; if (games.length && acc.customStatus && list.length < 32) list.push(acc.customStatus);
+    const list = (st.ghostGameFirst && acc.customStatus) ? [acc.customStatus, ...games.slice(0, 31)] : [...games]; if (!st.ghostGameFirst && games.length && acc.customStatus && list.length < 32) list.push(acc.customStatus);
     if (!force && JSON.stringify(list) === JSON.stringify(st.playedGames)) return;
     try {
       client.gamesPlayed(list); st.playedGames = list;
@@ -4094,24 +4213,37 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       }
       // --- MOTOR 5: PIONEER EXPLOITS LAB + ANCIENT & BETA BADGES UNLOCKER ---
       if (url.pathname === '/api/overwatch2003/pioneer-exploit' && req.method === 'POST') {
-        const isAnimatedOnly = data.exploitType === 'animated_gif_screenshot';
-        const acc = isAnimatedOnly && (data.accountId === 'demo' || !cfg.accounts.length)
-          ? null
-          : getAccount(req, url, data);
-        const svc = acc ? ensureAccountServices(acc) : null;
-        const client = svc ? svc.client : null;
-        const st = acc ? stateFor(acc.id) : null;
-        const sid64 = st?.steamId64 || acc?.mySteamID || client?.steamID?.getSteamID64?.() || '';
-        const cookieStr = getCookieHeaderForAccount(acc, st);
         try {
-          if (data.exploitType === 'activate_trading_card_beta_202352' && acc) {
-            for (const bid of [202352, 202351, 765, 753, 7]) {
-              if (!acc.games.includes(bid)) acc.games.unshift(bid);
+          const isAnimatedOnly = data.exploitType === 'animated_gif_screenshot';
+          const acc = (isAnimatedOnly && (data.accountId === 'demo' || !cfg.accounts.length))
+            ? null
+            : getAccount(req, url, data);
+          const svc = acc ? ensureAccountServices(acc) : null;
+          const client = svc ? svc.client : null;
+          const st = svc ? svc.st : (acc ? stateFor(acc.id) : null);
+          const sid64 = st?.steamId64 || acc?.mySteamID || client?.steamID?.toString?.() || '';
+          const cookieStr = st?.webCookies || '';
+
+          if ((data.exploitType === 'activate_trading_card_beta_202352' || data.exploitType === 'unlock_all_historical_events') && acc) {
+            const eventList = data.exploitType === 'unlock_all_historical_events'
+              ? [202352, 245070, 765, 202351, 223910, 261310, 321770, 405270, 551410, 807210, 248210, 753, 7, 92, 766]
+              : [202352, 202351, 765, 753, 7];
+            acc.gameNames ||= {};
+            for (const bid of eventList) {
               if (RELIC_OFFICIAL_NAMES[bid]) acc.gameNames[bid] = RELIC_OFFICIAL_NAMES[bid];
             }
-            if (st) st.manualPaused = false;
+            acc.games = [...new Set([...eventList, ...(acc.games || [])])].slice(0, 32);
+            acc.cardFarming = false;
+            acc.paused = false;
+            acc.ignoreSessionCollision = true;
+            if (st) {
+              st.isPaused = false;
+              st.isCollisionPaused = false;
+            }
+            if (client?.playingState) client.playingState.blocked = false;
             save();
           }
+
           const resData = await executePioneerExploitServerSide(client, {
             exploitType: String(data.exploitType || 'ghost_custom_game'),
             customText: String(data.customText || ''),
@@ -4123,6 +4255,22 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             cookieString: cookieStr,
             activeGames: Array.isArray(acc?.games) && acc.games.length ? acc.games : [202352, 753, 7, 730, 10]
           });
+
+          if (data.exploitType === 'ghost_custom_game' && acc && resData?.titleApplied) {
+            acc.customStatus = resData.titleApplied;
+            acc.paused = false;
+            acc.ignoreSessionCollision = true;
+            if (st) {
+              st.ghostGameFirst = true;
+              st.isPaused = false;
+              st.isCollisionPaused = false;
+            }
+            save();
+            farming(acc, true);
+          } else if ((data.exploitType === 'activate_trading_card_beta_202352' || data.exploitType === 'unlock_all_historical_events') && acc) {
+            farming(acc, true);
+          }
+
           return json(res, 200, resData);
         } catch (err) {
           return json(res, 400, { success: false, error: err.message });
