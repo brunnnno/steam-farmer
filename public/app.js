@@ -2819,13 +2819,31 @@ function resolveSelectedScreenshotAppId() {
 let lastGeneratedInstallerBat = "";
 
 async function runPioneerExploitMotor5() {
-  const sel = $("pioneerExploitSelect")?.value || "ghost_hl3";
+  const sel = $("pioneerExploitSelect")?.value || "activate_trading_card_beta_202352";
   const rawInput = ($("pioneerExploitCustomInput")?.value || "").trim();
   const appId = resolveSelectedScreenshotAppId();
   let exploitType = sel;
   let customText = rawInput;
   let badgeId = 1;
-  if (sel === "ghost_hl3") {
+  let saleAppId = 245070;
+  let borderColor = 0;
+
+  if (sel === "craft_summer_getaway_2013") {
+    exploitType = "craft_ancient_sale_badge";
+    saleAppId = Number(rawInput) || 245070;
+    borderColor = 0;
+  } else if (sel === "craft_summer_getaway_2013_foil") {
+    exploitType = "craft_ancient_sale_badge";
+    saleAppId = Number(rawInput) || 245070;
+    borderColor = 1;
+  } else if (sel === "craft_holiday_2013") {
+    exploitType = "craft_ancient_sale_badge";
+    saleAppId = Number(rawInput) || 267420;
+    borderColor = 0;
+  } else if (sel === "badge_hardware_beta_15") {
+    exploitType = "force_favorite_badge";
+    badgeId = 15;
+  } else if (sel === "ghost_hl3") {
     exploitType = "ghost_custom_game";
     customText = rawInput || "Half-Life 3 (Closed Alpha — Source 2 Build 9842)";
   } else if (sel === "ghost_cs15") {
@@ -2844,6 +2862,7 @@ async function runPioneerExploitMotor5() {
     exploitType = "force_favorite_badge";
     badgeId = 0;
   }
+
   if (exploitType !== "animated_gif_screenshot" && !activeAccountId) {
     notice(t("liveActionNotice"));
     openAddAccModal();
@@ -2855,10 +2874,18 @@ async function runPioneerExploitMotor5() {
       exploitType,
       customText,
       badgeId,
-      targetAppId: appId
+      targetAppId: appId,
+      saleAppId,
+      borderColor
     });
     if ($("pioneerExploitStatusText") && res?.message) {
       $("pioneerExploitStatusText").textContent = res.message;
+    }
+    if (exploitType === "activate_trading_card_beta_202352" && typeof refresh === "function") {
+      try { await refresh(); } catch {}
+    }
+    if (res?.marketUrl && !res?.crafted && typeof window.open === "function") {
+      try { window.open(res.marketUrl, "_blank"); } catch {}
     }
     if (res?.consoleSnippet) {
       const vdfOut = $("overwatchScreenshotVdfOutput");
