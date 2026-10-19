@@ -2682,13 +2682,15 @@ async function prepareApp753AndPrivacy() {
 }
 async function publishApp753ReviewWithCs2Widgets() {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
+  const selectedAppId = Number($("overwatchReviewAppSelect")?.value || 753) || 753;
   try {
     const res = await api("/api/overwatch2003/publish-review-widgets", {
       accountId: activeAccountId,
-      appId: 753,
+      appId: selectedAppId,
       lockInventoryFirst: true
     });
     if ($("overwatchReviewStatusText") && res?.message) $("overwatchReviewStatusText").textContent = res.message;
+    if ($("overwatchBbcodeOutput") && res?.bbcodeUsed) $("overwatchBbcodeOutput").value = res.bbcodeUsed;
     if (res?.message) notice(res.message);
   } catch (e) {
     notice(e.message);
@@ -2702,6 +2704,9 @@ async function generateExploit3AndWidgetsBbcode() {
     });
     if ($("overwatchReviewStatusText") && res?.message) {
       $("overwatchReviewStatusText").textContent = res.message;
+    }
+    if ($("overwatchBbcodeOutput") && res?.bbcode) {
+      $("overwatchBbcodeOutput").value = res.bbcode;
     }
     if (res?.bbcode && navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(res.bbcode).catch(() => {});
@@ -2731,6 +2736,15 @@ async function submitWorkshopHex21Patch(imagePayload = SAMPLE_1X1_PNG_BASE64) {
     const res = await api("/api/artwork/patch", { imagePayload, mode: "workshop_hex21" });
     if ($("overwatchScreenshotStatusText") && res?.message) {
       $("overwatchScreenshotStatusText").textContent = res.message;
+    }
+    if (res?.patchedBase64) {
+      const isGif = /^data:image\/gif/i.test(res.patchedBase64);
+      const a = element("a");
+      a.href = res.patchedBase64;
+      a.download = isGif ? "steamfarmer-workshop-0x21.gif" : "steamfarmer-workshop-0x21.png";
+      document.body.append(a);
+      a.click();
+      a.remove();
     }
     if (res?.message) notice(res.message);
   } catch (e) {
@@ -3028,7 +3042,25 @@ if($('btnPrepareApp753Review'))$('btnPrepareApp753Review').addEventListener('cli
 if($('btnPublishApp753Review'))$('btnPublishApp753Review').addEventListener('click',()=>publishApp753ReviewWithCs2Widgets());
 if($('btnGenerateExploit3Bbcode'))$('btnGenerateExploit3Bbcode').addEventListener('click',()=>generateExploit3AndWidgetsBbcode());
 if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4());
-if($('btnPatchWorkshopHex21'))$('btnPatchWorkshopHex21').addEventListener('click',()=>submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64));
+if($('btnPatchWorkshopHex21'))$('btnPatchWorkshopHex21').addEventListener('click',()=>{
+  const fi=$('workshopHex21FileInput');
+  if(fi&&typeof window.testUI==='undefined'&&fi.files&&fi.files.length===0){
+    try{fi.click();}catch{}
+  }else{
+    submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64);
+  }
+});
+if($('workshopHex21FileInput'))$('workshopHex21FileInput').addEventListener('change',e=>{
+  const file=e.target?.files?.[0];
+  if(!file){submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64);return;}
+  if(typeof FileReader==='function'){
+    const reader=new FileReader();
+    reader.onload=()=>submitWorkshopHex21Patch(String(reader.result||SAMPLE_1X1_PNG_BASE64));
+    reader.readAsDataURL(file);
+  }else{
+    submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64);
+  }
+});
 if($('btnSelectArtworkToPatch'))$('btnSelectArtworkToPatch').addEventListener('click',()=>{
   const fi=$('artworkFileInput');
   if(fi&&typeof window.testUI==='undefined'&&fi.files&&fi.files.length===0){

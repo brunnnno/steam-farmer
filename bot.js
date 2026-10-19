@@ -55,15 +55,274 @@ const { MarketSniperService } = require('./lib/market-sniper');
 const { AlchemyTransmuter } = require('./lib/alchemy-transmuter');
 const { VanityUrlSniper } = require('./lib/vanity-sniper');
 const { LevelOptimizer } = require('./lib/level-optimizer');
-const { patchPngForInfiniteHeight, patchWorkshopHex21 } = require('./lib/long-artwork-patcher');
-const {
-  setProfileShowcaseSlotServerSide,
-  fillCollectorShowcaseWithRelics,
-  lockInventoryPrivacyOnly,
-  buildApp753RelicReviewBbcode,
-  publishApp753RelicReviewServerSide,
-  injectUcmScreenshotServerSide
-} = require('./lib/rea-overwatch-2003');
+const _artworkPatcherMod = (() => { try { return require('./lib/long-artwork-patcher'); } catch { return {}; } })();
+const _reaOverwatchMod = (() => { try { return require('./lib/rea-overwatch-2003'); } catch { return {}; } })();
+
+function _fallbackWriteVarint(value) {
+  const bytes = [];
+  let v = BigInt.asUintN(64, BigInt(value));
+  while (v >= 0x80n) { bytes.push(Number((v & 0x7fn) | 0x80n)); v >>= 7n; }
+  bytes.push(Number(v));
+  return Buffer.from(bytes);
+}
+function _fallbackEncodeFieldVarint(fieldNumber, value) {
+  if (value === undefined || value === null) return Buffer.alloc(0);
+  return Buffer.concat([_fallbackWriteVarint((BigInt(fieldNumber) << 3n) | 0n), _fallbackWriteVarint(value)]);
+}
+function _fallbackEncodeFieldFixed64(fieldNumber, value) {
+  if (value === undefined || value === null) return Buffer.alloc(0);
+  const buf = Buffer.alloc(8); buf.writeBigUInt64LE(BigInt(value), 0);
+  return Buffer.concat([_fallbackWriteVarint((BigInt(fieldNumber) << 3n) | 1n), buf]);
+}
+function _fallbackEncodeFieldBytes(fieldNumber, bufOrStr) {
+  if (bufOrStr === undefined || bufOrStr === null) return Buffer.alloc(0);
+  const data = Buffer.isBuffer(bufOrStr) ? bufOrStr : Buffer.from(String(bufOrStr), 'utf8');
+  return Buffer.concat([_fallbackWriteVarint((BigInt(fieldNumber) << 3n) | 2n), _fallbackWriteVarint(data.length), data]);
+}
+function _fallbackEncodeFieldFixed32(fieldNumber, value) {
+  if (value === undefined || value === null) return Buffer.alloc(0);
+  const buf = Buffer.alloc(4); buf.writeUInt32LE(Number(value) >>> 0, 0);
+  return Buffer.concat([_fallbackWriteVarint((BigInt(fieldNumber) << 3n) | 5n), buf]);
+}
+function _fallbackExtractSessionId(cookieString = '') {
+  const m = String(cookieString || '').match(/(?:^|;\s*)sessionid=([^;]+)/i);
+  return m ? decodeURIComponent(m[1].trim()) : '';
+}
+const patchPngForInfiniteHeight = typeof _artworkPatcherMod.patchPngForInfiniteHeight === 'function'
+  ? _artworkPatcherMod.patchPngForInfiniteHeight
+  : function (pngBuffer, targetHeight = 3840, options = {}) {
+      if (!Buffer.isBuffer(pngBuffer)) throw new Error('Se requiere un Buffer binario de imagen PNG.');
+      const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      if (pngBuffer.length < 24 || !pngBuffer.subarray(0, 8).equals(sig)) throw new Error('El archivo no es una imagen PNG válida.');
+      const patched = Buffer.from(pngBuffer);
+      const ihdrOffset = patched.indexOf(Buffer.from('IHDR', 'ascii'));
+      if (ihdrOffset === -1 || ihdrOffset + 12 > patched.length) throw new Error('Encabezado IHDR no encontrado en el PNG.');
+      const heightOffset = ihdrOffset + 8;
+      const currentHeight = patched.readUInt32BE(heightOffset);
+      const newHeight = Math.max(currentHeight, Number(targetHeight) || 3840);
+      patched.writeUInt32BE(newHeight, heightOffset);
+      if (options.appendWorkshopHex21) patched[patched.length - 1] = 0x21;
+      return {
+        success: true,
+        originalHeight: currentHeight,
+        patchedHeight: newHeight,
+        workshopHex21Applied: Boolean(options.appendWorkshopHex21),
+        patchedBuffer: patched,
+        message: 'PNG parcheado con éxito con el exploit IHDR de longitud infinita para Steam.'
+      };
+    };
+const patchWorkshopHex21 = typeof _artworkPatcherMod.patchWorkshopHex21 === 'function'
+  ? _artworkPatcherMod.patchWorkshopHex21
+  : function (fileBuffer) {
+      if (!Buffer.isBuffer(fileBuffer) || fileBuffer.length < 4) throw new Error('Se requiere un Buffer binario válido (GIF o PNG).');
+      const patched = Buffer.from(fileBuffer);
+      const previousLastByte = patched[patched.length - 1];
+      patched[patched.length - 1] = 0x21;
+      return {
+        success: true,
+        previousLastByte,
+        newLastByte: 0x21,
+        patchedBuffer: patched,
+        message: `✅ Parche binario 0x21 aplicado en el último byte (0x${previousLastByte.toString(16).padStart(2, '0')} → 0x21) listo para subir a Workshop.`
+      };
+    };
+const setProfileShowcaseSlotServerSide = typeof _reaOverwatchMod.setProfileShowcaseSlotServerSide === 'function'
+  ? _reaOverwatchMod.setProfileShowcaseSlotServerSide
+  : async function ({ steamId64, cookieString, customizationType = 2, purchaseId = 0, slotIndex = 0, appId = 753, fetchImpl = fetch } = {}) {
+      const sessionId = _fallbackExtractSessionId(cookieString);
+      if (!sessionId) throw new Error('La sesión web de Steam aún se está sincronizando (falta cookie sessionid). Esperá 5 segundos o tocá "Refresh Steam session".');
+      const targetSteamId = String(steamId64 || '').trim();
+      const endpoint = targetSteamId ? `https://steamcommunity.com/profiles/${targetSteamId}/ajaxsetshowcaseconfig` : 'https://steamcommunity.com/my/ajaxsetshowcaseconfig';
+      const body = new URLSearchParams({
+        customization_type: String(Number(customizationType) || 2),
+        purchaseid: String(purchaseId || 0),
+        slot: String(Number(slotIndex) || 0),
+        sessionid: sessionId,
+        appid: String(Number(appId) || 753)
+      });
+      const res = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Cookie': cookieString,
+          'Origin': 'https://steamcommunity.com',
+          'Referer': targetSteamId ? `https://steamcommunity.com/profiles/${targetSteamId}/edit/showcases` : 'https://steamcommunity.com/my/edit/showcases',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: body.toString()
+      });
+      const data = await res.json().catch(() => ({}));
+      const ok = Boolean(res.ok && (data.success === 1 || data.success === true));
+      return {
+        success: ok,
+        customizationType: Number(customizationType) || 2,
+        slotIndex: Number(slotIndex) || 0,
+        appId: Number(appId) || 753,
+        response: data,
+        message: ok
+          ? `✅ ¡Inyectado desde el servidor! AppID ${appId} grabado en el Slot #${slotIndex} (Tipo ${customizationType}). Entrá a tu perfil de Steam para verlo.`
+          : `⚠️ Steam recibió la petición (HTTP ${res.status}), pero esa vitrina aún no está activada en tu perfil. Entrá en Steam a "Editar perfil → Expositores", activá esa vitrina, guardá y volvé a tocar este botón.`
+      };
+    };
+const fillCollectorShowcaseWithRelics = typeof _reaOverwatchMod.fillCollectorShowcaseWithRelics === 'function'
+  ? _reaOverwatchMod.fillCollectorShowcaseWithRelics
+  : async function ({ steamId64, cookieString, purchaseId = 0, relicAppIds = [753, 766, 92, 7], fetchImpl = fetch } = {}) {
+      const results = [];
+      for (let i = 0; i < relicAppIds.length; i++) {
+        results.push(await setProfileShowcaseSlotServerSide({ steamId64, cookieString, customizationType: 2, purchaseId, slotIndex: i, appId: Number(relicAppIds[i]), fetchImpl }));
+      }
+      const injectedCount = results.filter(r => r.success).length;
+      return {
+        success: injectedCount > 0,
+        injectedCount,
+        totalRequested: relicAppIds.length,
+        relicAppIds,
+        results,
+        message: injectedCount > 0
+          ? `✅ ¡Expositor Coleccionista actualizado! Se inyectaron ${injectedCount}/${relicAppIds.length} AppIDs ocultos (${relicAppIds.join(', ')}).`
+          : '⚠️ Primero activá el expositor "Coleccionista de juegos" en Steam (Editar perfil → Expositores), guardá y volvé a tocar este botón.'
+      };
+    };
+const lockInventoryPrivacyOnly = typeof _reaOverwatchMod.lockInventoryPrivacyOnly === 'function'
+  ? _reaOverwatchMod.lockInventoryPrivacyOnly
+  : async function ({ steamId64, cookieString, fetchImpl = fetch } = {}) {
+      const sessionId = _fallbackExtractSessionId(cookieString);
+      if (!sessionId) throw new Error('Sesión web de Steam no disponible (falta cookie sessionid).');
+      const body = new URLSearchParams({
+        sessionid: sessionId,
+        Privacy: JSON.stringify({ PrivacyProfile: 3, PrivacyInventory: 1, PrivacyInventoryGifts: 1, PrivacyOwnedGames: 3, PrivacyPlaytime: 3, PrivacyFriendsList: 2 }),
+        eCommentPermission: '1'
+      });
+      const res = await fetchImpl(`https://steamcommunity.com/profiles/${String(steamId64 || '').trim()}/ajaxsetprivacy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Cookie': cookieString,
+          'Origin': 'https://steamcommunity.com',
+          'Referer': `https://steamcommunity.com/profiles/${String(steamId64 || '').trim()}/edit/settings`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: body.toString()
+      });
+      const data = await res.json().catch(() => ({}));
+      const ok = Boolean(res.ok && (data.success === 1 || data.success === true));
+      return { success: ok, privacyApplied: 'Profile: PUBLIC (3) | Inventory: PRIVATE (1)', response: data };
+    };
+const buildApp753RelicReviewBbcode = typeof _reaOverwatchMod.buildApp753RelicReviewBbcode === 'function'
+  ? _reaOverwatchMod.buildApp753RelicReviewBbcode
+  : function ({ steamId64 = '76561197960265728', accountCreatedDate = '07 Oct 2003', customExternalUrl = 'https://github.com/brunnnno/steam-farmer', customExternalLabel = '⚡ Repositorio Oficial Verificado (Sin Cartel de Dominio)' } = {}) {
+      const cleanLink = `[url=https://steamcommunity.com:/linkfilter/?url=${String(customExternalUrl).trim()}]${String(customExternalLabel).trim()}[/url]`;
+      const uris = {
+        installCodenameGordon: '[url=steam://install/92][b]⚡ Instalar Reliquia Oculta: Codename: Gordon (2004)[/b][/url]',
+        addMeFriendOneClick: `[url=steam://friends/AddFriend/${steamId64}][b]➕ Agregar a Amigos (1-Clic Protocolo Nativo)[/b][/url]`,
+        openDevConsole: '[url=steam://open/console][b]🖥️ Abrir Consola Interna de Steam[/b][/url]'
+      };
+      const bbcode = [
+        `[h1]⚡ NODO DE AUDITORÍA VALVE // CUENTA FUNDACIONAL (${accountCreatedDate})[/h1]`,
+        '[table equalcells=1]',
+        '[tr][th]Parámetro de Cuenta[/th][th]Estado Verificado[/th][th]Protocolo Activo[/th][/tr]',
+        `[tr][td][b]Fecha de Creación[/b][/td][td][code]${accountCreatedDate} (23 Años)[/code][/td][td]Insignia Fundacional 2003[/td][/tr]`,
+        `[tr][td][b]Enlace Limpio (Exploit #3)[/b][/td][td]${cleanLink}[/td][td]Bypass RFC 3986 (:)[/td][/tr]`,
+        `[tr][td][b]Reliquia Ejecutable[/b][/td][td]${uris.installCodenameGordon}[/td][td]URI Nativo steam://[/td][/tr]`,
+        '[/table]',
+        '',
+        '[h2]🎯 ARSENAL CS2 REGISTRADO EN EXPOSITOR (WIDGETS OFICIALES + INSPECCIÓN 3D)[/h2]',
+        'https://steamcommunity.com/profiles/76561198084852298/inventory/#730_2_9946351222',
+        '[b]★ Karambit | Case Hardened (Factory New)[/b] — [code]Float: 0.0480829 | Pattern #387 (Blue Gem Tier-1)[/code] • [url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611][b]🔍 Inspeccionar Modelo 3D en CS2[/b][/url]',
+        '',
+        'https://steamcommunity.com/profiles/76561198023512965/inventory/#730_2_28761239912',
+        '[b]Souvenir AWP | Dragon Lore (Factory New)[/b] — [code]Float: 0.0009142 | 4x Katowice 2014 (Holo)[/code] • [url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198023512965A28761239912D9244972541062093545][b]🔍 Inspeccionar Modelo 3D en CS2[/b][/url]',
+        '',
+        'https://steamcommunity.com/profiles/76561198165821922/inventory/#730_2_35481920114',
+        '[b]StatTrak™ AK-47 | Case Hardened (Factory New)[/b] — [code]Float: 0.0114021 | Pattern #661 (Scar) + 4x Titan (Holo)[/code] • [url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198165821922A35481920114D7812390412894012567][b]🔍 Inspeccionar Modelo 3D en CS2[/b][/url]'
+      ].join('\n');
+      return { brailleBlankTitle: '\u2800\u2800\u2800', cleanExternalLink: cleanLink, executableUris: uris, bbcode };
+    };
+const publishApp753RelicReviewServerSide = typeof _reaOverwatchMod.publishApp753RelicReviewServerSide === 'function'
+  ? _reaOverwatchMod.publishApp753RelicReviewServerSide
+  : async function ({ steamId64, cookieString, appId = 753, comment, lockInventoryFirst = true, customExternalUrl, customExternalLabel, fetchImpl = fetch } = {}) {
+      const sessionId = _fallbackExtractSessionId(cookieString);
+      if (!sessionId) throw new Error('La sesión web de Steam aún se está sincronizando (falta cookie sessionid). Esperá 5 segundos o tocá "Refresh Steam session".');
+      let privacyResult = null;
+      if (lockInventoryFirst && steamId64) {
+        try { privacyResult = await lockInventoryPrivacyOnly({ steamId64, cookieString, fetchImpl }); } catch { privacyResult = { success: false }; }
+      }
+      const generated = buildApp753RelicReviewBbcode({ steamId64, accountCreatedDate: '07 Oct 2003', customExternalUrl, customExternalLabel });
+      const finalComment = String(comment || generated.bbcode).trim();
+      const targetAppId = Number(appId) || 753;
+      const body = new URLSearchParams({
+        appid: String(targetAppId),
+        steamworksappid: String(targetAppId),
+        comment: finalComment,
+        rated_up: 'true',
+        is_public: 'true',
+        language: 'spanish',
+        received_compensation: '0',
+        disable_comments: '0',
+        sessionid: sessionId
+      });
+      const res = await fetchImpl('https://store.steampowered.com/friends/recommendgame', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Cookie': cookieString,
+          'Origin': 'https://store.steampowered.com',
+          'Referer': `https://store.steampowered.com/app/${targetAppId}/`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: body.toString()
+      });
+      const data = await res.json().catch(() => ({}));
+      const ok = Boolean(res.ok && (data.success === 1 || data.success === true));
+      return {
+        success: ok,
+        appId: targetAppId,
+        privacyResult,
+        bbcodeUsed: finalComment,
+        response: data,
+        message: ok
+          ? `✅ ¡Reseña sobre AppID ${targetAppId} publicada con éxito con tabla [table] (07 Oct 2003), Exploit #3 y Widgets Oficiales de CS2 (#730_2_)! Ahora entrá en Steam a "Editar perfil → Expositores → Expositor de reseña" y seleccioná esta reseña.`
+          : (data.strError || `⚠️ Steam indicó que aún no tenés 5 minutos en AppID ${targetAppId} (o ya tenés una reseña en ese juego). Si querés publicarla YA MISMO sin esperar 5 minutos, elegí "AppID 730 (Counter-Strike 2)" o "AppID 10 (CS 1.6)" en el selector o copiá el BBCode generado abajo.`)
+      };
+    };
+const injectUcmScreenshotServerSide = typeof _reaOverwatchMod.injectUcmScreenshotServerSide === 'function'
+  ? _reaOverwatchMod.injectUcmScreenshotServerSide
+  : function (client, options = {}) {
+      if (!client || typeof client._send !== 'function') throw new Error('Tu cuenta de Steam no está conectada en este momento.');
+      const appId = Number(options.appId) || 753;
+      const preset = options.datePreset || 'screenshots_day1_2011';
+      const timestamp = preset === 'account_oct7_2003' ? 1065484800 : (preset === 'current' ? (Math.floor(Date.now() / 1000) >>> 0) : 1298505600);
+      const label = preset === 'account_oct7_2003'
+        ? '07 de Octubre de 2003 (Creación exacta de tu cuenta de Steam)'
+        : (preset === 'current' ? 'Fecha actual' : '24 de Febrero de 2011 (Día 1 del lanzamiento de Capturas en Steam)');
+      const caption = String(options.caption || '⚡ [CUENTA FUNDACIONAL: 07 OCT 2003] // ARCHIVO OFICIAL UCM').trim();
+      const filename = String(options.filename || 'screenshots/relic_oct7_2003_node.jpg').trim();
+      const thumbname = String(options.thumbname || 'screenshots/thumbs/relic_oct7_2003_node.jpg').trim();
+      const wireBuffer = Buffer.concat([
+        _fallbackEncodeFieldVarint(1, appId >>> 0),
+        _fallbackEncodeFieldBytes(2, filename),
+        _fallbackEncodeFieldBytes(3, thumbname),
+        _fallbackEncodeFieldFixed32(4, timestamp >>> 0),
+        _fallbackEncodeFieldVarint(5, 1920),
+        _fallbackEncodeFieldVarint(6, 1080),
+        _fallbackEncodeFieldVarint(7, 2),
+        _fallbackEncodeFieldBytes(8, caption),
+        _fallbackEncodeFieldFixed64(11, 76561197960287930n)
+      ]);
+      client._send({ msg: 5514, proto: {} }, wireBuffer);
+      return {
+        success: true,
+        emsg: 5514,
+        appId,
+        rtime32Created: timestamp,
+        dateLabel: label,
+        taggedSteamIds: ['76561197960287930'],
+        caption,
+        wireBytesLength: wireBuffer.length,
+        wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),
+        message: `✅ Paquete binario CMsgClientUCMAddScreenshot (EMsg 5514, ${wireBuffer.length} bytes en Wire-Protobuf) despachado al CM de Valve con fecha "${label}" y etiqueta a Gabe Newell (76561197960287930).`
+      };
+    };
 const PRESETS = {
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
@@ -1674,6 +1933,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           acc.gameNames[753] = 'Steam';
           save();
         }
+        st.inspectingAppId = 753;
         farming(acc, true);
         let privacyResult = null;
         if (data.lockInventory !== false && st.webCookies && sid64) {
@@ -1686,7 +1946,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           appId: 753,
           farmingActive: Boolean(client && st.connected),
           privacyResult,
-          message: 'AppID 753 (Steam) activado en farmeo para acumular los 5 minutos requeridos por Valve y privacidad quirúrgica de inventario aplicada.'
+          message: '✅ Paso 1 activo: Tu cuenta ya está farmeando AppID 753 (Steam) en prioridad #1 y tu inventario de CS2 quedó oculto en Privado (Perfil Público). Si querés publicar la reseña YA MISMO sin esperar 5 minutos, elegí "AppID 730 (CS2)" o "AppID 10 (CS 1.6)" en el selector y tocá el botón 2.'
         });
       }
       if (url.pathname === '/api/overwatch2003/publish-review-widgets' && req.method === 'POST') {

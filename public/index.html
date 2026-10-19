@@ -564,6 +564,12 @@
           <div class="task-center-box status-blue">
             <span class="eyebrow">🏛️ MOTOR 3A · VITRINAS OCULTAS SERVER-SIDE (SIN F12)</span>
             <p id="overwatchShowcaseStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchShowcaseDesc">Inyecta AppIDs restringidos de Valve (753 Steam, 766 Workshop, 92 Codename: Gordon, 7 Steam Client) directo desde el servidor.</p>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
+              <strong>Cómo hacerlo paso a paso:</strong><br>
+              1️⃣ En Steam, entrá a <em>Editar perfil → Expositores</em> y poné en un espacio <strong>Juego Favorito</strong> o <strong>Coleccionista de juegos</strong> (guardá cambios).<br>
+              2️⃣ Elegí acá abajo el AppID oculto (ej. <code>753 — Steam</code> o <code>92 — Codename: Gordon</code>) y el tipo de vitrina.<br>
+              3️⃣ Tocá <strong>Inyectar Slot en Vitrina</strong> (o <strong>Llenar Coleccionista</strong> para grabar los 4 de una vez) y recargá tu perfil de Steam.
+            </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchShowcaseAppSelect" style="padding:6px 8px; font-size:0.8rem;">
                 <option value="753">AppID 753 — Steam (Oficial)</option>
@@ -573,8 +579,8 @@
                 <option value="480">AppID 480 — Spacewar SDK</option>
               </select>
               <select id="overwatchShowcaseTypeSelect" style="padding:6px 8px; font-size:0.8rem;">
-                <option value="2">Coleccionista de Juegos (Tipo 2)</option>
                 <option value="6">Juego Favorito (Tipo 6)</option>
+                <option value="2">Coleccionista de Juegos (Tipo 2)</option>
                 <option value="17">Expositor de Logros (Tipo 17)</option>
               </select>
               <button id="btnInjectHiddenShowcase" type="button" class="btn-main sam-quick-btn" data-i18n="injectHiddenShowcaseBtn">Inyectar Slot en Vitrina</button>
@@ -582,21 +588,39 @@
             </div>
           </div>
 
-          <!-- Motor 3B: AppID 753 Review + CS2 Widgets + Exploit #3 -->
+          <!-- Motor 3B: Review + CS2 Widgets + Exploit #3 -->
           <div class="task-center-box status-purple">
-            <span class="eyebrow">💎 MOTOR 3B · RESEÑA APPID 753 + WIDGETS CS2 (#730_2_) + EXPLOIT #3</span>
+            <span class="eyebrow">💎 MOTOR 3B · RESEÑA CON TABLA [TABLE] (07 OCT 2003) + WIDGETS CS2 (#730_2_) + EXPLOIT #3</span>
             <p id="overwatchReviewStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchReviewDesc">Oculta tu inventario vacío, publica una reseña en Steam (753) con tabla [table] (07 Oct 2003), Exploit #3 (:/linkfilter/) y Widgets Oficiales de Skins CS2.</p>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
+              <strong>Cómo exhibir las skins en tu perfil sin tenerlas:</strong><br>
+              1️⃣ Tocá <strong>1. Preparar AppID 753 + Ocultar Inventario</strong> (pone tu inventario de CS2 en Privado dejando tu perfil Público y empieza a sumar minutos en <code>AppID 753</code>).<br>
+              2️⃣ Si querés publicar la reseña <strong>YA MISMO sin esperar 5 minutos</strong>, elegí en el desplegable <code>AppID 730 (CS2)</code> o <code>AppID 10 (CS 1.6)</code> (donde ya tenés horas) y tocá <strong>2. Publicar Reseña con Widgets CS2</strong>.<br>
+              3️⃣ En Steam, andá a <em>Editar perfil → Expositores → Expositor de reseña</em> y seleccioná la reseña recién creada: ¡vas a ver la tabla <code>[table]</code> y las cajas interactivas oficiales de la <em>Karambit Blue Gem #387</em> y la <em>AWP Dragon Lore</em>!
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <select id="overwatchReviewAppSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="730">Publicar en AppID 730 — CS2 (Inmediato si tenés &gt;5m)</option>
+                <option value="10">Publicar en AppID 10 — CS 1.6 (Inmediato si tenés &gt;5m)</option>
+                <option value="753">Publicar en AppID 753 — Steam Oficial (Tras 5m del Paso 1)</option>
+              </select>
               <button id="btnPrepareApp753Review" type="button" class="btn-action-sm sam-quick-btn" data-i18n="prepareApp753Btn">1. Preparar AppID 753 + Ocultar Inventario</button>
               <button id="btnPublishApp753Review" type="button" class="btn-purple sam-quick-btn" data-i18n="publishApp753ReviewBtn">2. Publicar Reseña 753 con Widgets CS2</button>
               <button id="btnGenerateExploit3Bbcode" type="button" class="btn-action-sm sam-quick-btn" data-i18n="generateExploit3Btn">Copiar BBCode Exploit #3 + URIs</button>
             </div>
+            <textarea id="overwatchBbcodeOutput" readonly rows="4" placeholder="Acá va a aparecer el código BBCode completo con la tabla [table] (07 Oct 2003), el Exploit #3 (steamcommunity.com:/linkfilter/) y los Widgets CS2 (#730_2_) al tocar el botón 2 o 3..." style="width:100%; margin-top:8px; font-family:monospace; font-size:0.74rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.35); color:#d1d5db; border:1px solid rgba(255,255,255,0.12);"></textarea>
           </div>
 
           <!-- Motor 4: UCM Screenshot EMsg 5514 + Gabe Newell Tag + 0x21 Patch -->
           <div class="task-center-box status-green">
             <span class="eyebrow">📸 MOTOR 4 · CAPTURAS BINARIAS EMSG 5514 (GABE NEWELL TAG) + BYTE 0x21</span>
             <p id="overwatchScreenshotStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchScreenshotDesc">Envía CMsgClientUCMAddScreenshot (EMsg 5514) en Wire-Protobuf etiquetando a Gabe Newell con fecha del Día 1 de Capturas (24 Feb 2011) o de tu cuenta (07 Oct 2003).</p>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
+              <strong>Cómo usar las 2 herramientas del Motor 4:</strong><br>
+              🔹 <strong>Inyector Binario EMsg 5514:</strong> Elegí la fecha (<code>24 Feb 2011</code> Día 1 en que existieron las capturas en Steam o <code>07 Oct 2003</code> cumpleaños de tu cuenta) y tocá <strong>Inyectar Captura EMsg 5514 + Gabe Newell</strong> para despachar el paquete Wire-Protobuf al CM de Valve.<br>
+              🔹 <strong>Parche Byte <code>0x21</code> (Workshop 5 Columnas):</strong> Tocá <strong>Parchear Byte 0x21 (Workshop)</strong>, elegí cualquier GIF o PNG de tu PC y se descargará parcheado con el último byte en <code>0x21</code> listo para subir en <code>steamcommunity.com/sharedfiles/edititem/767/3/</code>.
+            </div>
+            <input type="file" id="workshopHex21FileInput" accept="image/gif,image/png" style="display:none;">
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchScreenshotDateSelect" style="padding:6px 8px; font-size:0.8rem;">
                 <option value="screenshots_day1_2011">24 Feb 2011 (Día 1 Capturas Steam)</option>
