@@ -1297,8 +1297,8 @@ function buildScreenshotsVdfEntry({
 }
 
 
-function buildWindowsScreenshotAutoInstallerBat({
-  appId = 4000,
+function buildWindowsScreenshotAutoInstallerPs1({
+  appId = 10,
   timestamp = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
   officialJpgName = '20110201000000_1.jpg',
   width = 1920,
@@ -1306,37 +1306,50 @@ function buildWindowsScreenshotAutoInstallerBat({
   caption = '',
   taggedSteamIds = []
 } = {}) {
-  const safeCaption = String(caption || "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
+  const safeCaption = String(caption || '').replace(/"/g, "'").replace(/\s+/g, ' ').trim();
   const vdfBlock = buildScreenshotsVdfEntry({ appId, timestamp, width, height, caption: safeCaption, taggedSteamIds });
-  const vdfBase64 = Buffer.from("\t" + vdfBlock.replace(/\n/g, "\r\n\t") + "\r\n", "utf8").toString("base64");
+  const fullVdfFile = '"Screenshots"\r\n{\r\n\t' + vdfBlock.replace(/\n/g, '\r\n\t') + '\r\n\t"shortcutnames"\r\n\t{\r\n\t}\r\n}\r\n';
+  const vdfBase64 = Buffer.from(fullVdfFile, 'utf8').toString('base64');
   const psLines = [
     "$ErrorActionPreference = 'SilentlyContinue'",
+    "Add-Type -AssemblyName System.Drawing",
     "Write-Host '==========================================================' -ForegroundColor Cyan",
-    "Write-Host '  AUTO-INSTALADOR DE CAPTURA HISTORICA STEAMFARMER (2003) ' -ForegroundColor Cyan",
+    "Write-Host '  REPARADOR E INSTALADOR DE CAPTURA STEAM (JPG + THUMB)   ' -ForegroundColor Cyan",
     "Write-Host '==========================================================' -ForegroundColor Cyan",
-    `$jpgName = "${officialJpgName}"`,
-    `$appId = "${appId}"`,
-    `$timestamp = ${Number(timestamp) || 1296518400}`,
-    "$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path",
-    "$sourceJpg = Join-Path $scriptDir $jpgName",
-    "if (-not (Test-Path $sourceJpg)) {",
-    "  $altJpg = Get-ChildItem -Path $scriptDir -Filter '*.jpg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1",
-    "  if ($altJpg) { $sourceJpg = $altJpg.FullName }",
+    "$jpgName = \"" + officialJpgName + "\"",
+    "$appId = \"" + appId + "\"",
+    "$timestamp = " + (Number(timestamp) || 1296518400),
+    "$downloadsDir = Join-Path $HOME 'Downloads'",
+    "$sourceImg = Join-Path $downloadsDir $jpgName",
+    "if (-not (Test-Path $sourceImg)) {",
+    "  $alt = Get-ChildItem -Path $downloadsDir -Filter '*.jpg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1",
+    "  if ($alt) { $sourceImg = $alt.FullName }",
     "}",
-    "if (-not (Test-Path $sourceJpg)) {",
-    "  Write-Host '[!] No se encontro la foto JPG en tu carpeta de Descargas.' -ForegroundColor Red",
+    "if (-not (Test-Path $sourceImg)) {",
+    "  $altPng = Get-ChildItem -Path $downloadsDir -Filter '*.png' | Sort-Object LastWriteTime -Descending | Select-Object -First 1",
+    "  if ($altPng) { $sourceImg = $altPng.FullName }",
+    "}",
+    "if (-not (Test-Path $sourceImg)) {",
+    "  Write-Host '[!] No se encontro ninguna imagen en tu carpeta Descargas.' -ForegroundColor Red",
     "  Pause; exit",
     "}",
+    "Write-Host '[1/3] Cerrando Steam 2 segundos para convertir a JPG real + miniatura 200px...' -ForegroundColor Yellow",
+    "Stop-Process -Name 'steam' -Force -ErrorAction SilentlyContinue",
+    "Start-Sleep -Seconds 2",
+    "$img = [System.Drawing.Image]::FromFile($sourceImg)",
+    "$w = $img.Width; $h = $img.Height",
+    "$thumbW = 200; $thumbH = [Math]::Max(1, [int]([Math]::Round(($h / [double]$w) * 200)))",
     "$steamPath = (Get-ItemProperty -Path 'HKCU:\\Software\\Valve\\Steam' -Name 'SteamPath').SteamPath",
     "if (-not $steamPath) { $steamPath = 'C:\\Program Files (x86)\\Steam' }",
     "$steamPath = $steamPath -replace '/', '\\'",
-    "Write-Host '[1/3] Cerrando Steam un segundo para grabar la fecha historica...' -ForegroundColor Yellow",
-    "Stop-Process -Name 'steam' -Force -ErrorAction SilentlyContinue",
-    "Start-Sleep -Seconds 2",
     "$userdataDir = Join-Path $steamPath 'userdata'",
     "$userFolders = Get-ChildItem -Path $userdataDir -Directory",
     "$epoch = [DateTimeOffset]::FromUnixTimeSeconds($timestamp).LocalDateTime",
-    `$entryBlock = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${vdfBase64}"))`,
+    "$utf8NoBom = New-Object System.Text.UTF8Encoding($false)",
+    "$newVdf = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(\"" + vdfBase64 + "\"))",
+    "$jpegCodec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }",
+    "$encParams = New-Object System.Drawing.Imaging.EncoderParameters(1)",
+    "$encParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, 95L)",
     "foreach ($u in $userFolders) {",
     "  $dir760 = Join-Path $u.FullName '760'",
     "  $remoteAppDir = Join-Path $dir760 \"remote\\$appId\\screenshots\"",
@@ -1345,31 +1358,40 @@ function buildWindowsScreenshotAutoInstallerBat({
     "  New-Item -ItemType Directory -Force -Path $thumbDir | Out-Null",
     "  $destMain = Join-Path $remoteAppDir $jpgName",
     "  $destThumb = Join-Path $thumbDir $jpgName",
-    "  Copy-Item -Path $sourceJpg -Destination $destMain -Force",
-    "  Copy-Item -Path $sourceJpg -Destination $destThumb -Force",
+    "  if (Test-Path $destMain) { Remove-Item $destMain -Force }",
+    "  if (Test-Path $destThumb) { Remove-Item $destThumb -Force }",
+    "  $bmpMain = New-Object System.Drawing.Bitmap($w, $h)",
+    "  $gMain = [System.Drawing.Graphics]::FromImage($bmpMain)",
+    "  $gMain.DrawImage($img, 0, 0, $w, $h)",
+    "  $gMain.Dispose()",
+    "  $bmpMain.Save($destMain, $jpegCodec, $encParams)",
+    "  $bmpMain.Dispose()",
+    "  $bmpThumb = New-Object System.Drawing.Bitmap($thumbW, $thumbH)",
+    "  $gThumb = [System.Drawing.Graphics]::FromImage($bmpThumb)",
+    "  $gThumb.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic",
+    "  $gThumb.DrawImage($img, 0, 0, $thumbW, $thumbH)",
+    "  $gThumb.Dispose()",
+    "  $bmpThumb.Save($destThumb, $jpegCodec, $encParams)",
+    "  $bmpThumb.Dispose()",
     "  (Get-Item $destMain).LastWriteTime = $epoch; (Get-Item $destMain).CreationTime = $epoch",
     "  (Get-Item $destThumb).LastWriteTime = $epoch; (Get-Item $destThumb).CreationTime = $epoch",
     "  $vdfPath = Join-Path $dir760 'screenshots.vdf'",
-    "  if (Test-Path $vdfPath) {",
-    "    Copy-Item -Path $vdfPath -Destination \"$vdfPath.bak\" -Force",
-    "    $vdfContent = Get-Content -Path $vdfPath -Raw -Encoding UTF8",
-    "    if ($vdfContent -match '\"shortcutnames\"') {",
-    "      $vdfContent = $vdfContent -replace '\"shortcutnames\"', ($entryBlock + \"`t`\"shortcutnames`\"\")",
-    "      Set-Content -Path $vdfPath -Value $vdfContent -Encoding UTF8",
-    "    }",
-    "  } else {",
-    "    $newVdf = \"`\"Screenshots`\"`r`n{`r`n\" + $entryBlock + \"`t`\"shortcutnames`\"`r`n`t{`r`n`t}`r`n}`r`n\"",
-    "    Set-Content -Path $vdfPath -Value $newVdf -Encoding UTF8",
-    "  }",
-    "  Write-Host \"[2/3] Captura instalada en cuenta $($u.Name) con fecha $epoch (AppID $appId).\" -ForegroundColor Green",
+    "  if (Test-Path $vdfPath) { Copy-Item -Path $vdfPath -Destination \"$vdfPath.bak\" -Force }",
+    "  [System.IO.File]::WriteAllText($vdfPath, $newVdf, $utf8NoBom)",
+    "  Write-Host \"[2/3] Reparado en cuenta $($u.Name): JPG real ($w x $h) + Miniatura ($thumbW x $thumbH) sin BOM.\" -ForegroundColor Green",
     "}",
-    "Write-Host '[3/3] Abriendo la ventana de Capturas de Steam...' -ForegroundColor Cyan",
+    "$img.Dispose()",
+    "Write-Host '[3/3] Abriendo tu ventana de Capturas de Steam...' -ForegroundColor Cyan",
     "Start-Process 'steam://open/screenshots'",
-    "Write-Host '¡LISTO! En la ventana de Steam que se abrio, toca tu foto y dale a SUBIR (Compartir).' -ForegroundColor Green",
-    "Pause"
-  ].join("\r\n");
-  const encodedPs = Buffer.from(psLines, "utf16le").toString("base64");
-  return "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encodedPs + "\r\n";
+    "Write-Host '¡LISTO! El triangulo de error ya desaparecio. Toca tu foto y dale a SUBIR (Compartir).' -ForegroundColor Green"
+  ].join('\r\n');
+  return psLines;
+}
+
+function buildWindowsScreenshotAutoInstallerBat(opts = {}) {
+  const psScript = buildWindowsScreenshotAutoInstallerPs1(opts);
+  const encodedPs = Buffer.from(psScript, 'utf16le').toString('base64');
+  return '@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + encodedPs + '\r\npause\r\n';
 }
 
 function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_beta_feb1_2011', customTimestamp = null) {
@@ -1540,6 +1562,7 @@ function injectUcmScreenshotServerSide(client, options = {}) {
   const emsgCode = EMsg.ClientUCMAddScreenshot || 5514;
   client._send({ msg: emsgCode, proto: {} }, wireBuffer);
 
+  const autoInstallerPs1 = buildWindowsScreenshotAutoInstallerPs1({ appId, timestamp, officialJpgName, width, height, caption, taggedSteamIds });
   const autoInstallerBat = buildWindowsScreenshotAutoInstallerBat({ appId, timestamp, officialJpgName, width, height, caption, taggedSteamIds });
   const vdfEntry = buildScreenshotsVdfEntry({
     appId,
@@ -1574,6 +1597,7 @@ function injectUcmScreenshotServerSide(client, options = {}) {
     tagSummary,
     caption,
     vdfEntry,
+    autoInstallerPs1,
     autoInstallerBat,
     wireBytesLength: wireBuffer.length,
     wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),

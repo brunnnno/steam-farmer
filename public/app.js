@@ -2816,7 +2816,9 @@ function resolveSelectedScreenshotAppId() {
   return Number($("overwatchScreenshotAppSelect")?.value || 753) || 753;
 }
 
-async function injectUcmScreenshotMotor4(downloadVdfKit = false) {
+let lastGeneratedInstallerBat = "";
+
+async function injectUcmScreenshotMotor4(actionMode = "inject") {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   const datePreset = $("overwatchScreenshotDateSelect")?.value || "screenshots_beta_feb1_2011";
   const customDateVal = ($("overwatchCustomDateInput")?.value || "").trim();
@@ -2843,15 +2845,18 @@ async function injectUcmScreenshotMotor4(downloadVdfKit = false) {
     if ($("overwatchScreenshotStatusText") && res?.message) {
       $("overwatchScreenshotStatusText").textContent = res.message;
     }
+    if (res?.autoInstallerBat) {
+      lastGeneratedInstallerBat = res.autoInstallerBat;
+    }
     const vdfOut = $("overwatchScreenshotVdfOutput");
-    if (vdfOut && res?.vdfEntry) {
+    if (vdfOut && (res?.autoInstallerPs1 || res?.vdfEntry)) {
       vdfOut.style.display = "block";
-      vdfOut.value = res.vdfEntry;
+      vdfOut.value = res.autoInstallerPs1 || res.vdfEntry;
       if (navigator?.clipboard?.writeText) {
-        navigator.clipboard.writeText(res.vdfEntry).catch(() => {});
+        navigator.clipboard.writeText(res.autoInstallerPs1 || res.vdfEntry).catch(() => {});
       }
     }
-    if (downloadVdfKit && res?.officialJpgName) {
+    if (actionMode === "download_jpg" && res?.officialJpgName) {
       const jpgSource = selectedOverwatchScreenshot.jpgDataUrl || selectedOverwatchScreenshot.dataUrl || SAMPLE_1X1_PNG_BASE64;
       const a = element("a");
       a.href = jpgSource;
@@ -2859,21 +2864,17 @@ async function injectUcmScreenshotMotor4(downloadVdfKit = false) {
       document.body.append(a);
       a.click();
       a.remove();
-      if (res?.autoInstallerBat && typeof Blob === "function" && typeof URL?.createObjectURL === "function") {
-        setTimeout(() => {
-          try {
-            const batBlob = new Blob([res.autoInstallerBat], { type: "application/x-bat" });
-            const batUrl = URL.createObjectURL(batBlob);
-            const b = element("a");
-            b.href = batUrl;
-            b.download = "Instalar_Captura_Steam.bat";
-            document.body.append(b);
-            b.click();
-            b.remove();
-          } catch {}
-        }, 350);
-      }
-      notice(`✅ Descargados "${res.officialJpgName}" + "Instalar_Captura_Steam.bat". ¡Solo hacé doble clic en Instalar_Captura_Steam.bat en tu carpeta Descargas!`);
+      notice(`✅ Foto "${res.officialJpgName}" descargada y Comando Automático copiado al portapapeles (o tocá 4C para bajar el .BAT).`);
+    } else if (actionMode === "download_bat" && res?.autoInstallerBat) {
+      const batBlob = new Blob([res.autoInstallerBat], { type: "text/plain;charset=utf-8" });
+      const batUrl = URL.createObjectURL(batBlob);
+      const b = element("a");
+      b.href = batUrl;
+      b.download = "Instalar_Captura_Steam.bat";
+      document.body.append(b);
+      b.click();
+      b.remove();
+      notice("✅ Archivo Instalar_Captura_Steam.bat descargado. ¡Hacé doble clic sobre él en tu carpeta Descargas!");
     } else if (res?.message) {
       notice(res.message);
     }
@@ -3268,8 +3269,9 @@ if($('overwatchCustomDateInput'))$('overwatchCustomDateInput').addEventListener(
   const sel=$('overwatchScreenshotDateSelect');
   if(sel)sel.value='custom';
 });
-if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4(false));
-if($('btnDownloadScreenshotVdfKit'))$('btnDownloadScreenshotVdfKit').addEventListener('click',()=>injectUcmScreenshotMotor4(true));
+if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4('inject'));
+if($('btnDownloadScreenshotVdfKit'))$('btnDownloadScreenshotVdfKit').addEventListener('click',()=>injectUcmScreenshotMotor4('download_jpg'));
+if($('btnDownloadScreenshotBatFile'))$('btnDownloadScreenshotBatFile').addEventListener('click',()=>injectUcmScreenshotMotor4('download_bat'));
 if($('btnPatchWorkshopHex21'))$('btnPatchWorkshopHex21').addEventListener('click',()=>{
   if(selectedOverwatchScreenshot.dataUrl){
     submitWorkshopHex21Patch(selectedOverwatchScreenshot.dataUrl);
