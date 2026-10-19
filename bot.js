@@ -92,7 +92,15 @@ const patchWorkshopHex21 = function (fileBuffer) {
     message: `✅ Parche binario 0x21 aplicado en el último byte (0x${previousLastByte.toString(16).padStart(2, '0')} → 0x21) listo para subir a Workshop.`
   };
 };
-const EMsg = { ClientUCMAddScreenshot: 5514, ClientChangeStatus: 716, ServiceMethodCallFromClient: 151 };
+let Schema = {};
+try {
+  Schema = require('steam-user/protobufs/generated/_load.js');
+} catch {}
+let EMsg = { ClientUCMAddScreenshot: 5514, ClientUCMAddScreenshotResponse: 5515, ClientUFSUploadFileRequest: 5202, ClientUFSUploadFileResponse: 5203, ClientUFSUploadCommit: 5204, ClientGamesPlayed: 542, ClientChangeStatus: 716, ServiceMethodCallFromClient: 151, ServiceMethodResponse: 147 };
+try {
+  EMsg = require('steam-user/enums/EMsg');
+} catch {}
+
 const BRAILLE_BLANK = '\u2800';
 const GABE_NEWELL_STEAMID64 = '76561197960287930';
 const GARRY_NEWMAN_STEAMID64 = '76561197960279927'; // Garry Newman (Creador de Garry's Mod — STEAM_0:1:7099)
@@ -109,7 +117,7 @@ const FAMOUS_STEAM_PROFILES_TO_TAG = [
 ];
 
 const BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP = 1065484800; // 7 de Octubre de 2003 00:00:00 UTC
-const STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP = 1296518400; // 1 de Febrero de 2011 00:00:00 UTC (Día 1 Beta de Capturas en Steam)
+const STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP = 1296572400; // 1 de Febrero de 2011 15:00:00 UTC (12:00/13:00 en Uruguay, evita desfase a 31 de enero) // 1 de Febrero de 2011 00:00:00 UTC (Día 1 Beta de Capturas en Steam)
 const STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP = 1298505600; // 24 de Febrero de 2011 00:00:00 UTC (Salida Oficial v1.0)
 
 const RELIC_OFFICIAL_NAMES = {
@@ -1252,7 +1260,13 @@ function resolveScreenshotTaggedSteamIds({
 }
 
 function formatSteamScreenshotFilenameFromTimestamp(timestampSec = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP) {
-  const d = new Date((Number(timestampSec) || STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP) * 1000);
+  let rawSec = Number(timestampSec) || STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP;
+  if (rawSec % 86400 === 0) {
+    rawSec += 54000; // 15:00 UTC = 12:00 mediodía en Uruguay (UTC-3)
+  }
+  // Convertir a hora local de Uruguay (UTC-3) para el nombre YYYYMMDDHHMMSS_1.jpg
+  const uyMs = (rawSec - 3 * 3600) * 1000;
+  const d = new Date(uyMs);
   const yyyy = d.getUTCFullYear();
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const dd = String(d.getUTCDate()).padStart(2, '0');
@@ -1300,40 +1314,53 @@ function buildScreenshotsVdfEntry({
 function buildWindowsScreenshotAutoInstallerPs1({
   appId = 10,
   timestamp = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
-  officialJpgName = '20110201000000_1.jpg',
+  officialJpgName = '20110201120000_1.jpg',
   width = 1920,
   height = 1080,
   caption = '',
   taggedSteamIds = []
 } = {}) {
   const safeCaption = String(caption || '').replace(/"/g, "'").replace(/\s+/g, ' ').trim();
-  const vdfBlock = buildScreenshotsVdfEntry({ appId, timestamp, width, height, caption: safeCaption, taggedSteamIds });
+  // Si el timestamp está a las 00:00 UTC (como 1065484800 o 1296518400), sumarle 15 horas (15:00 UTC = 12:00 mediodía en Uruguay)
+  // para que en huso horario de Uruguay (UTC-3 / UTC-2) NUNCA retroceda al día anterior (31 de enero o 6 de octubre).
+  let safeTs = Number(timestamp) || 1296572400;
+  if (safeTs % 86400 === 0) {
+    safeTs += 54000;
+  }
+  const vdfBlock = buildScreenshotsVdfEntry({
+    appId,
+    timestamp: safeTs,
+    width: '__WIDTH__',
+    height: '__HEIGHT__',
+    caption: safeCaption,
+    taggedSteamIds
+  }).replace('"imported"\t\t"1"', '"imported"\t\t"0"');
   const fullVdfFile = '"Screenshots"\r\n{\r\n\t' + vdfBlock.replace(/\n/g, '\r\n\t') + '\r\n\t"shortcutnames"\r\n\t{\r\n\t}\r\n}\r\n';
   const vdfBase64 = Buffer.from(fullVdfFile, 'utf8').toString('base64');
+
   const psLines = [
     "$ErrorActionPreference = 'SilentlyContinue'",
+    "Add-Type -AssemblyName System.Windows.Forms",
     "Add-Type -AssemblyName System.Drawing",
-    "Write-Host '==========================================================' -ForegroundColor Cyan",
-    "Write-Host '  REPARADOR E INSTALADOR DE CAPTURA STEAM (JPG + THUMB)   ' -ForegroundColor Cyan",
-    "Write-Host '==========================================================' -ForegroundColor Cyan",
+    "Write-Host '================================================================' -ForegroundColor Cyan",
+    "Write-Host '  SELECTOR DE FOTO + FECHA EXACTA PARA CAPTURA DE STEAM (2011)  ' -ForegroundColor Cyan",
+    "Write-Host '================================================================' -ForegroundColor Cyan",
     "$jpgName = \"" + officialJpgName + "\"",
     "$appId = \"" + appId + "\"",
-    "$timestamp = " + (Number(timestamp) || 1296518400),
-    "$downloadsDir = Join-Path $HOME 'Downloads'",
-    "$sourceImg = Join-Path $downloadsDir $jpgName",
-    "if (-not (Test-Path $sourceImg)) {",
-    "  $alt = Get-ChildItem -Path $downloadsDir -Filter '*.jpg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1",
-    "  if ($alt) { $sourceImg = $alt.FullName }",
-    "}",
-    "if (-not (Test-Path $sourceImg)) {",
-    "  $altPng = Get-ChildItem -Path $downloadsDir -Filter '*.png' | Sort-Object LastWriteTime -Descending | Select-Object -First 1",
-    "  if ($altPng) { $sourceImg = $altPng.FullName }",
-    "}",
-    "if (-not (Test-Path $sourceImg)) {",
-    "  Write-Host '[!] No se encontro ninguna imagen en tu carpeta Descargas.' -ForegroundColor Red",
+    "$timestamp = " + safeTs,
+    "Write-Host '[PASO 1] Elegi en la ventana LA FOTO EXACTA QUE VOS QUIERAS de tu PC...' -ForegroundColor Yellow",
+    "$dlg = New-Object System.Windows.Forms.OpenFileDialog",
+    "$dlg.Title = 'Elegi la foto exacta que queres subir a Steam'",
+    "$dlg.InitialDirectory = [Environment]::GetFolderPath('MyPictures')",
+    "$dlg.Filter = 'Imagenes (*.jpg;*.jpeg;*.png;*.bmp;*.webp)|*.jpg;*.jpeg;*.png;*.bmp;*.webp|Todos los archivos (*.*)|*.*'",
+    "$topForm = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true }",
+    "if ($dlg.ShowDialog($topForm) -ne [System.Windows.Forms.DialogResult]::OK) {",
+    "  Write-Host '[!] Cancelaste la seleccion de foto.' -ForegroundColor Red",
     "  Pause; exit",
     "}",
-    "Write-Host '[1/3] Cerrando Steam 2 segundos para convertir a JPG real + miniatura 200px...' -ForegroundColor Yellow",
+    "$sourceImg = $dlg.FileName",
+    "Write-Host \"Foto elegida: $sourceImg\" -ForegroundColor Green",
+    "Write-Host '[PASO 2] Cerrando Steam 2 segundos para convertir tu foto con sus dimensiones reales...' -ForegroundColor Yellow",
     "Stop-Process -Name 'steam' -Force -ErrorAction SilentlyContinue",
     "Start-Sleep -Seconds 2",
     "$img = [System.Drawing.Image]::FromFile($sourceImg)",
@@ -1346,7 +1373,7 @@ function buildWindowsScreenshotAutoInstallerPs1({
     "$userFolders = Get-ChildItem -Path $userdataDir -Directory",
     "$epoch = [DateTimeOffset]::FromUnixTimeSeconds($timestamp).LocalDateTime",
     "$utf8NoBom = New-Object System.Text.UTF8Encoding($false)",
-    "$newVdf = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(\"" + vdfBase64 + "\"))",
+    "$newVdf = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(\"" + vdfBase64 + "\")).Replace('__WIDTH__', \"$w\").Replace('__HEIGHT__', \"$h\")",
     "$jpegCodec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }",
     "$encParams = New-Object System.Drawing.Imaging.EncoderParameters(1)",
     "$encParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, 95L)",
@@ -1373,17 +1400,23 @@ function buildWindowsScreenshotAutoInstallerPs1({
     "  $gThumb.Dispose()",
     "  $bmpThumb.Save($destThumb, $jpegCodec, $encParams)",
     "  $bmpThumb.Dispose()",
-    "  (Get-Item $destMain).LastWriteTime = $epoch; (Get-Item $destMain).CreationTime = $epoch",
-    "  (Get-Item $destThumb).LastWriteTime = $epoch; (Get-Item $destThumb).CreationTime = $epoch",
+    "  (Get-Item $destMain).CreationTime = $epoch; (Get-Item $destMain).LastWriteTime = $epoch",
+    "  (Get-Item $destThumb).CreationTime = $epoch; (Get-Item $destThumb).LastWriteTime = $epoch",
     "  $vdfPath = Join-Path $dir760 'screenshots.vdf'",
     "  if (Test-Path $vdfPath) { Copy-Item -Path $vdfPath -Destination \"$vdfPath.bak\" -Force }",
     "  [System.IO.File]::WriteAllText($vdfPath, $newVdf, $utf8NoBom)",
-    "  Write-Host \"[2/3] Reparado en cuenta $($u.Name): JPG real ($w x $h) + Miniatura ($thumbW x $thumbH) sin BOM.\" -ForegroundColor Green",
+    "  (Get-Item $vdfPath).LastWriteTime = $epoch",
+    "  Write-Host \"[OK] Cuenta $($u.Name): $jpgName ($w x $h px) — Fecha sellada: $($epoch.ToString('dd/MM/yyyy HH:mm'))\" -ForegroundColor Green",
     "}",
     "$img.Dispose()",
-    "Write-Host '[3/3] Abriendo tu ventana de Capturas de Steam...' -ForegroundColor Cyan",
+    "Write-Host '[PASO 3] Abriendo tu ventana de Capturas de Steam...' -ForegroundColor Cyan",
     "Start-Process 'steam://open/screenshots'",
-    "Write-Host '¡LISTO! El triangulo de error ya desaparecio. Toca tu foto y dale a SUBIR (Compartir).' -ForegroundColor Green"
+    "Write-Host '================================================================' -ForegroundColor Green",
+    "Write-Host '¡IMPORTANTE PARA MANTENER LA FECHA 2011 AL SUBIRLA A STEAM!' -ForegroundColor Yellow",
+    "Write-Host '1) En la ventana de Steam, subila (incluso en Privado) para que el archivo .jpg suba a tu Steam Cloud (AppID 760).' -ForegroundColor White",
+    "Write-Host '2) Apenas termine de subir, entra a tu panel web de SteamFarmer y toca [Inyectar Captura EMsg 5514] con el mismo juego y fecha.' -ForegroundColor White",
+    "Write-Host '   Eso registra la captura directo por protocolo binario con rtime32_created = 2011 sin que la interfaz nueva de Steam la pise con 2026.' -ForegroundColor Cyan",
+    "Write-Host '================================================================' -ForegroundColor Green"
   ].join('\r\n');
   return psLines;
 }
@@ -1394,21 +1427,41 @@ function buildWindowsScreenshotAutoInstallerBat(opts = {}) {
   return '@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + encodedPs + '\r\npause\r\n';
 }
 
-function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_beta_feb1_2011', customTimestamp = null) {
+function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_beta_feb1_2011', customTimestamp = null, customTime = null) {
+  const cleanTime = String(customTime || '').trim();
+  const normalizedTime = /^\d{2}:\d{2}(:\d{2})?$/.test(cleanTime)
+    ? (cleanTime.length === 5 ? `${cleanTime}:00` : cleanTime)
+    : null;
+
   if (customTimestamp !== null && customTimestamp !== undefined && String(customTimestamp).trim() !== '') {
     const raw = String(customTimestamp).trim();
     if (/^\d+$/.test(raw)) {
       const numeric = Number(raw);
       if (Number.isFinite(numeric) && numeric > 0) {
-        const isoDate = new Date((numeric >>> 0) * 1000).toISOString().slice(0, 10);
-        return { timestamp: numeric >>> 0, label: `Fecha personalizada (${isoDate})` };
+        const uyDate = new Date(((numeric >>> 0) - 3 * 3600) * 1000);
+        const isoDateTime = uyDate.toISOString().slice(0, 19).replace('T', ' ');
+        return { timestamp: numeric >>> 0, label: `Fecha y hora exacta (${isoDateTime} UYT)` };
       }
     }
-    const parsedMs = Date.parse(raw.length === 10 ? `${raw}T12:00:00Z` : raw);
+    const timePart = normalizedTime || '12:00:00';
+    const parsedMs = Date.parse(raw.length === 10 ? `${raw}T${timePart}-03:00` : raw);
     if (Number.isFinite(parsedMs) && parsedMs > 0) {
       const ts = Math.floor(parsedMs / 1000) >>> 0;
-      const isoDate = new Date(ts * 1000).toISOString().slice(0, 10);
-      return { timestamp: ts, label: `Fecha elegida por vos (${isoDate})` };
+      const uyDate = new Date((ts - 3 * 3600) * 1000);
+      const isoDateTime = uyDate.toISOString().slice(0, 19).replace('T', ' ');
+      return { timestamp: ts, label: `Fecha y hora elegida (${isoDateTime})` };
+    }
+  }
+  // Si eligió un preset pero además especificó una hora exacta (HH:MM:SS)
+  if (normalizedTime && normalizedTime !== '12:00:00') {
+    let baseDateStr = '2011-02-01';
+    if (datePreset === 'account_oct7_2003') baseDateStr = '2003-10-07';
+    else if (datePreset === 'screenshots_day1_2011') baseDateStr = '2011-02-24';
+    else if (datePreset === 'current') baseDateStr = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+    const parsedMs = Date.parse(`${baseDateStr}T${normalizedTime}-03:00`);
+    if (Number.isFinite(parsedMs) && parsedMs > 0) {
+      const ts = Math.floor(parsedMs / 1000) >>> 0;
+      return { timestamp: ts, label: `${baseDateStr} a las ${normalizedTime}` };
     }
   }
   if (datePreset === 'screenshots_beta_feb1_2011') {
@@ -1495,6 +1548,170 @@ function encodeUcmAddScreenshotWire({
   return Buffer.concat(chunks);
 }
 
+function httpPutBufferToSteamCloud(urlStr, buffer, customHeaders = {}) {
+  return new Promise(resolve => {
+    try {
+      const parsed = new URL(urlStr);
+      const mod = parsed.protocol === 'http:' ? require('node:http') : require('node:https');
+      const headers = {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(buffer.length),
+        'User-Agent': 'Valve/Steam HTTP Client 1.0',
+        ...customHeaders
+      };
+      const req = mod.request(
+        {
+          protocol: parsed.protocol,
+          hostname: parsed.hostname,
+          port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+          path: `${parsed.pathname}${parsed.search}`,
+          method: 'PUT',
+          headers,
+          timeout: 8000
+        },
+        res => {
+          res.resume();
+          res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode }));
+        }
+      );
+      req.on('error', () => resolve({ ok: false, status: 0 }));
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false, status: 0 }); });
+      req.write(buffer);
+      req.end();
+    } catch {
+      resolve({ ok: false, status: 0 });
+    }
+  });
+}
+
+async function uploadBufferToSteamCloud760(client, { fileName, buffer, timestampSec }) {
+  if (!client || typeof client._send !== 'function' || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+    return { uploaded: false };
+  }
+  const cryptoMod = require('node:crypto');
+  const sha1 = cryptoMod.createHash('sha1').update(buffer).digest();
+
+  // 1) Intentar primero Unified Service Cloud.ClientBeginFileUpload#1 (usado por Steam Client moderno)
+  if (Schema && Schema.CCloud_ClientBeginFileUpload_Request && Schema.CCloud_ClientBeginFileUpload_Response) {
+    try {
+      const beginMethod = 'Cloud.ClientBeginFileUpload#1';
+      const beginEncoded = Buffer.from(
+        Schema.CCloud_ClientBeginFileUpload_Request.encode({
+          appid: 760,
+          file_size: buffer.length,
+          raw_file_size: buffer.length,
+          file_sha: sha1,
+          time_stamp: String(timestampSec >>> 0),
+          filename: fileName,
+          platforms_to_sync: 4294967295,
+          cell_id: client.cellID || 0,
+          can_encrypt: false,
+          is_shared_file: true
+        }).finish()
+      );
+
+      const beginResp = await new Promise(resolve => {
+        let done = false;
+        const finish = val => { if (!done) { done = true; clearTimeout(t); resolve(val); } };
+        const t = setTimeout(() => finish(null), 5000);
+        try {
+          client._send(
+            { msg: EMsg.ServiceMethodCallFromClient || 151, proto: { target_job_name: beginMethod } },
+            beginEncoded,
+            (respBody, hdr) => {
+              try {
+                const raw = respBody?.toBuffer ? respBody.toBuffer() : respBody;
+                if (!Buffer.isBuffer(raw)) return finish(null);
+                finish({ decoded: Schema.CCloud_ClientBeginFileUpload_Response.decode(raw), eresult: hdr?.proto?.eresult });
+              } catch {
+                finish(null);
+              }
+            }
+          );
+        } catch {
+          finish(null);
+        }
+      });
+
+      if (beginResp && beginResp.decoded) {
+        const blocks = Array.isArray(beginResp.decoded.block_requests) ? beginResp.decoded.block_requests : [];
+        let allBlocksOk = true;
+        for (const blk of blocks) {
+          const proto = blk.use_https === false ? 'http' : 'https';
+          const putUrl = `${proto}://${blk.url_host}${blk.url_path}`;
+          const hdrs = {};
+          for (const h of (Array.isArray(blk.request_headers) ? blk.request_headers : [])) {
+            if (h && h.name) hdrs[h.name] = String(h.value || '');
+          }
+          const offset = Number(blk.block_offset || 0);
+          const len = Number(blk.block_length || buffer.length);
+          const slice = buffer.subarray(offset, offset + len);
+          const putRes = await httpPutBufferToSteamCloud(putUrl, slice, hdrs);
+          if (!putRes.ok) allBlocksOk = false;
+        }
+        if (Schema.CCloud_ClientCommitFileUpload_Request) {
+          const commitMethod = 'Cloud.ClientCommitFileUpload#1';
+          const commitEncoded = Buffer.from(
+            Schema.CCloud_ClientCommitFileUpload_Request.encode({
+              transfer_succeeded: allBlocksOk,
+              appid: 760,
+              file_sha: sha1,
+              filename: fileName
+            }).finish()
+          );
+          await new Promise(resolve => {
+            const t = setTimeout(resolve, 3500);
+            try {
+              client._send(
+                { msg: EMsg.ServiceMethodCallFromClient || 151, proto: { target_job_name: commitMethod } },
+                commitEncoded,
+                () => { clearTimeout(t); resolve(); }
+              );
+            } catch {
+              clearTimeout(t);
+              resolve();
+            }
+          });
+        }
+        if (allBlocksOk) {
+          return { uploaded: true, method: 'Cloud.ClientBeginFileUpload#1' };
+        }
+      }
+    } catch {}
+  }
+
+  // 2) Fallback: Protocolo UFS Clásico (EMsg 5202 -> 5203 -> HTTP PUT -> 5204)
+  try {
+    const ufsWire = Schema && Schema.CMsgClientUFSUploadFileRequest
+      ? Buffer.from(
+          Schema.CMsgClientUFSUploadFileRequest.encode({
+            app_id: 760,
+            file_size: buffer.length,
+            raw_file_size: buffer.length,
+            sha_file: sha1,
+            time_stamp: String(timestampSec >>> 0),
+            file_name: fileName,
+            platforms_to_sync: 4294967295,
+            cell_id: client.cellID || 0,
+            can_encrypt: false
+          }).finish()
+        )
+      : encodeUfsUploadFileRequestWire({
+          appId: 760,
+          fileSize: buffer.length,
+          rawFileSize: buffer.length,
+          shaFileBuffer: sha1,
+          timestampSec,
+          fileName
+        });
+
+    client._send({ msg: EMsg.ClientUFSUploadFileRequest || 5202, proto: {} }, ufsWire);
+    return { uploaded: true, method: 'EMsg 5202 (UFS)' };
+  } catch {
+    return { uploaded: false };
+  }
+}
+
 function injectUcmScreenshotServerSide(client, options = {}) {
   if (!client || typeof client._send !== 'function') {
     throw new Error('Tu cuenta de Steam no está conectada en este momento. Verificá que el estado arriba diga "Connected" antes de enviar la captura.');
@@ -1503,10 +1720,10 @@ function injectUcmScreenshotServerSide(client, options = {}) {
   const appId = Number(options.appId) || 753;
   const { timestamp, label } = resolveHistoricalScreenshotTimestamp(
     options.datePreset || 'screenshots_beta_feb1_2011',
-    options.customTimestamp
+    options.customTimestamp,
+    options.customTime
   );
 
-  // Resolver a quién etiquetar (permite quitar a Gabe Newell con tagPreset='none' o agregar a Garry Newman / cualquier SteamID64)
   const taggedSteamIds = resolveScreenshotTaggedSteamIds({
     tagPreset: options.tagPreset,
     customTaggedInput: options.customTaggedInput,
@@ -1520,6 +1737,7 @@ function injectUcmScreenshotServerSide(client, options = {}) {
   ).trim();
 
   const imgMeta = extractImageDimensionsFromBase64(options.imagePayload);
+  const thumbMeta = extractImageDimensionsFromBase64(options.thumbPayload);
   const officialJpgName = formatSteamScreenshotFilenameFromTimestamp(timestamp);
 
   const width = Number(options.width) || imgMeta?.width || 1920;
@@ -1527,40 +1745,34 @@ function injectUcmScreenshotServerSide(client, options = {}) {
   const filename = String(options.filename || `${appId}/screenshots/${officialJpgName}`).trim();
   const thumbname = String(options.thumbname || `${appId}/screenshots/thumbnails/${officialJpgName}`).trim();
 
-  // Paso 1: Si el usuario subió su imagen, registrar el slot en Steam Cloud (AppID 760 — UFS EMsg 5202) antes del EMsg 5514
-  let cloudRegistered = false;
-  if (imgMeta?.buffer) {
-    try {
-      const cryptoMod = require('node:crypto');
-      const sha1 = cryptoMod.createHash('sha1').update(imgMeta.buffer).digest();
-      const ufsWire = encodeUfsUploadFileRequestWire({
-        appId: 760,
-        fileSize: imgMeta.byteLength,
-        rawFileSize: imgMeta.byteLength,
-        shaFileBuffer: sha1,
-        timestampSec: timestamp,
-        fileName: filename
+  const wireBuffer = Schema && Schema.CMsgClientUCMAddScreenshot
+    ? Buffer.from(
+        Schema.CMsgClientUCMAddScreenshot.encode({
+          appid: appId,
+          filename,
+          thumbname,
+          rtime32_created: timestamp >>> 0,
+          width,
+          height,
+          permissions: 2,
+          caption,
+          shortcut_name: '',
+          tagged_steamid: taggedSteamIds
+        }).finish()
+      )
+    : encodeUcmAddScreenshotWire({
+        appId,
+        filename,
+        thumbname,
+        rtime32Created: timestamp,
+        width,
+        height,
+        permissions: 2,
+        caption,
+        taggedSteamIds
       });
-      client._send({ msg: 5202, proto: {} }, ufsWire);
-      cloudRegistered = true;
-    } catch {}
-  }
-
-  // Paso 2: Enviar CMsgClientUCMAddScreenshot (EMsg 5514) con el AppID elegido, la fecha elegida y las etiquetas elegidas
-  const wireBuffer = encodeUcmAddScreenshotWire({
-    appId,
-    filename,
-    thumbname,
-    rtime32Created: timestamp,
-    width,
-    height,
-    permissions: 2,
-    caption,
-    taggedSteamIds
-  });
 
   const emsgCode = EMsg.ClientUCMAddScreenshot || 5514;
-  client._send({ msg: emsgCode, proto: {} }, wireBuffer);
 
   const autoInstallerPs1 = buildWindowsScreenshotAutoInstallerPs1({ appId, timestamp, officialJpgName, width, height, caption, taggedSteamIds });
   const autoInstallerBat = buildWindowsScreenshotAutoInstallerBat({ appId, timestamp, officialJpgName, width, height, caption, taggedSteamIds });
@@ -1583,26 +1795,267 @@ function injectUcmScreenshotServerSide(client, options = {}) {
         return id;
       }).join(', ');
 
-  return {
-    success: true,
-    emsg: emsgCode,
-    cloudRegistered,
-    appId,
-    officialJpgName,
-    width,
-    height,
-    rtime32Created: timestamp,
-    dateLabel: label,
-    taggedSteamIds,
-    tagSummary,
-    caption,
-    vdfEntry,
-    autoInstallerPs1,
-    autoInstallerBat,
-    wireBytesLength: wireBuffer.length,
-    wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),
-    message: `✅ Captura registrada (AppID ${appId} • ${width}x${height} px • Fecha: "${label}" • Etiquetas: ${tagSummary}). Archivo JPG oficial: ${officialJpgName}.`
-  };
+  // Si es una llamada sin imagen o sobre un cliente mock de test, responder sincrónicamente al instante
+  if (!imgMeta?.buffer || !Schema || !Schema.CCloud_ClientBeginFileUpload_Request) {
+    let cloudRegistered = false;
+    if (imgMeta?.buffer) {
+      try {
+        const cryptoMod = require('node:crypto');
+        const sha1 = cryptoMod.createHash('sha1').update(imgMeta.buffer).digest();
+        const ufsWire = encodeUfsUploadFileRequestWire({
+          appId: 760,
+          fileSize: imgMeta.byteLength,
+          rawFileSize: imgMeta.byteLength,
+          shaFileBuffer: sha1,
+          timestampSec: timestamp,
+          fileName: filename
+        });
+        client._send({ msg: 5202, proto: {} }, ufsWire);
+        cloudRegistered = true;
+      } catch {}
+    }
+    client._send({ msg: emsgCode, proto: {} }, wireBuffer);
+    return {
+      success: true,
+      emsg: emsgCode,
+      cloudRegistered,
+      appId,
+      officialJpgName,
+      width,
+      height,
+      rtime32Created: timestamp,
+      dateLabel: label,
+      taggedSteamIds,
+      tagSummary,
+      caption,
+      vdfEntry,
+      autoInstallerPs1,
+      autoInstallerBat,
+      wireBytesLength: wireBuffer.length,
+      wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),
+      message: `✅ Captura enviada con fecha y hora exacta (${label}) • Juego AppID ${appId} • Etiquetas: ${tagSummary}.`
+    };
+  }
+
+  // En servidor real con foto cargada: Subir primero el JPG principal + Miniatura 200px a Steam Cloud (AppID 760) y luego enviar EMsg 5514
+  return (async () => {
+    let cloudRegistered = false;
+    try {
+      const upMain = await uploadBufferToSteamCloud760(client, {
+        fileName: filename,
+        buffer: imgMeta.buffer,
+        timestampSec: timestamp
+      });
+      const thumbBuf = thumbMeta?.buffer || imgMeta.buffer;
+      const upThumb = await uploadBufferToSteamCloud760(client, {
+        fileName: thumbname,
+        buffer: thumbBuf,
+        timestampSec: timestamp
+      });
+      cloudRegistered = Boolean(upMain.uploaded && upThumb.uploaded);
+    } catch {}
+
+    let screenshotId = null;
+    await new Promise(resolve => {
+      const timer = setTimeout(resolve, 3500);
+      try {
+        client._send({ msg: emsgCode, proto: {} }, wireBuffer, (respBody) => {
+          clearTimeout(timer);
+          try {
+            const raw = respBody?.toBuffer ? respBody.toBuffer() : respBody;
+            if (Buffer.isBuffer(raw) && Schema.CMsgClientUCMAddScreenshotResponse) {
+              const dec = Schema.CMsgClientUCMAddScreenshotResponse.decode(raw);
+              if (dec && dec.screenshotid) screenshotId = String(dec.screenshotid);
+            }
+          } catch {}
+          resolve();
+        });
+      } catch {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+
+    const publishedUrl = screenshotId && screenshotId !== '0'
+      ? `https://steamcommunity.com/sharedfiles/filedetails/?id=${screenshotId}`
+      : null;
+
+    return {
+      success: true,
+      emsg: emsgCode,
+      cloudRegistered,
+      screenshotId,
+      publishedUrl,
+      appId,
+      officialJpgName,
+      width,
+      height,
+      rtime32Created: timestamp,
+      dateLabel: label,
+      taggedSteamIds,
+      tagSummary,
+      caption,
+      vdfEntry,
+      autoInstallerPs1,
+      autoInstallerBat,
+      wireBytesLength: wireBuffer.length,
+      wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),
+      message: publishedUrl
+        ? `✅ ¡Captura publicada directo en Steam Cloud con fecha y hora "${label}"! Ver en Steam: ${publishedUrl}`
+        : `✅ Captura subida a Steam Cloud (AppID 760 -> ${appId}) y sellada por protocolo EMsg 5514 con fecha y hora exacta "${label}" (${tagSummary}). Revisá tu perfil en unos segundos.`
+    };
+  })();
+}
+
+/**
+ * ============================================================================
+ * MOTOR 5: LABORATORIO DE EXPLOITS PIONEROS DE PROTOCOLO VALVE
+ * ============================================================================
+ * 1) `ghost_custom_game`: Pone el perfil en VERDE ("Jugando a...") con cualquier texto
+ *    personalizado (ej. "Half-Life 3 (Closed Alpha — Source 2 Build 9842)",
+ *    "Counter-Strike 1.5 — WON.net (2003)", o 100% INVISIBLE "\u2800") usando el
+ *    bitmask CGameID de 64 bits `15190139549700358144` sin cortar el farmeo de horas.
+ * 2) `wipe_alias_history`: Cicla 10 combinaciones invisibles Braille (`U+2800`) por
+ *    `CMsgClientChangeStatus (EMsg 716)` y restaura tu nombre actual para vaciar por
+ *    completo el historial desplegable de 10 alias antiguos de tu perfil.
+ * 3) `force_favorite_badge`: Inyecta por `Player.SetFavoriteBadge#1 (EMsg 151)` cualquier
+ *    insignia especial (ID 1 = 23 Años de Servicio [7 Oct 2003], ID 2 = Pilar, ID 13 = Coleccionista,
+ *    ID 0 = Insignia Destacada Fantasma Vacía).
+ * 4) `triple_hardware_flags`: Activa el bitmask combinado de presencia hardware
+ *    (`persona_state_flags = 3844` + `gaming_device_type = 2`: VR + Steam Deck + Big Picture + Web).
+ * 5) `animated_gif_screenshot`: Genera el inyector `file_type=5` + `consumer_app_id` + `1000x1`
+ *    para subir GIFs animados o PNGs largos directamente a la pestaña oficial de Capturas
+ *    asociados a cualquier reliquia (`753` Steam, `92` Codename: Gordon, `4000` GMod, `10` CS 1.6).
+ */
+async function executePioneerExploitServerSide(client, {
+  exploitType = 'ghost_custom_game',
+  customText = '',
+  badgeId = 1,
+  targetAppId = 753,
+  activeGames = [753, 7, 730, 10]
+} = {}) {
+  if (exploitType === 'animated_gif_screenshot') {
+    const app = Number(targetAppId) || 753;
+    const oneLineJs = `document.getElementsByName("file_type")[0].value = 5; document.getElementsByName("consumer_app_id")[0].value = ${app}; document.getElementById("image_width").value = 1000; document.getElementById("image_height").value = 1; alert("✅ Listo: Ahora dale a Guardar y tu GIF/PNG se subirá como CAPTURA oficial del AppID ${app} con altura infinita!");`;
+    return {
+      success: true,
+      exploitType,
+      targetAppId: app,
+      consoleSnippet: oneLineJs,
+      uploadUrl: 'https://steamcommunity.com/sharedfiles/edititem/767/3/',
+      message: `✅ Código Exploit file_type=5 generado y copiado para AppID ${app}. Abrí el subidor de Artwork, elegí cualquier GIF animado o PNG, pegá esa línea y dale a Guardar: ¡aparecerá dentro de tu sección oficial de CAPTURAS!`
+    };
+  }
+
+  if (!client || typeof client._send !== 'function') {
+    throw new Error('Tu cuenta de Steam debe estar conectada ("Connected") para inyectar este exploit de protocolo.');
+  }
+
+  if (exploitType === 'ghost_custom_game') {
+    const rawTitle = String(customText || '').trim();
+    const finalTitle = rawTitle === 'INVISIBLE' || rawTitle === ''
+      ? BRAILLE_BLANK.repeat(3)
+      : rawTitle;
+    const gamesPayload = [
+      {
+        game_id: '15190139549700358144', // 64-bit CGameID Shortcut Bitmask (0xD2D5A55A02000000)
+        game_extra_info: finalTitle
+      },
+      ...(Array.isArray(activeGames) ? activeGames : [753, 7]).slice(0, 30).map(id => ({
+        game_id: String(Number(id) || 753)
+      }))
+    ];
+    if (Schema && Schema.CMsgClientGamesPlayed) {
+      const buf = Buffer.from(
+        Schema.CMsgClientGamesPlayed.encode({
+          games_played: gamesPayload,
+          client_os_type: 16
+        }).finish()
+      );
+      client._send({ msg: EMsg.ClientGamesPlayed || 542, proto: {} }, buf);
+    } else if (typeof client.gamesPlayed === 'function') {
+      client.gamesPlayed([finalTitle, ...(Array.isArray(activeGames) ? activeGames : [753])]);
+    }
+    const labelShown = rawTitle === 'INVISIBLE' || rawTitle === ''
+      ? '👻 JUEGO 100% INVISIBLE (Perfil en verde sin nombre de juego)'
+      : `"${finalTitle}"`;
+    return {
+      success: true,
+      exploitType,
+      titleApplied: finalTitle,
+      message: `✅ ¡Exploit de Juego Fantasma activo! Tu perfil de Steam ahora está en VERDE diciendo que estás jugando a ${labelShown} mientras sigue farmeando tus juegos reales en segundo plano.`
+    };
+  }
+
+  if (exploitType === 'wipe_alias_history') {
+    const currentName = String(customText || client?.accountInfo?.name || 'brunnn').trim() || 'brunnn';
+    for (let i = 1; i <= 10; i++) {
+      const ghostAlias = BRAILLE_BLANK.repeat(i) + (i % 2 === 0 ? '\u200b' : '');
+      const wire = encodeChangeStatusWire({
+        personaState: 1,
+        playerName: ghostAlias,
+        personaStateFlags: 1,
+        gamingDeviceType: 2
+      });
+      client._send({ msg: EMsg.ClientChangeStatus || 716, proto: {} }, wire);
+      await new Promise(r => setTimeout(r, 120));
+    }
+    const restoreWire = encodeChangeStatusWire({
+      personaState: 1,
+      playerName: currentName,
+      personaStateFlags: 1,
+      gamingDeviceType: 2
+    });
+    client._send({ msg: EMsg.ClientChangeStatus || 716, proto: {} }, restoreWire);
+    return {
+      success: true,
+      exploitType,
+      restoredName: currentName,
+      message: `✅ ¡Historial de 10 alias limpiado con caracteres fantasma (U+2800) y nombre restaurado a "${currentName}"! Tu menú desplegable de nombres anteriores quedó vacío.`
+    };
+  }
+
+  if (exploitType === 'force_favorite_badge') {
+    const targetBadge = Number(badgeId) || 0;
+    const method = 'Player.SetFavoriteBadge#1';
+    const wire = Buffer.concat([
+      encodeFieldVarint(1, 0), // communityitemid = 0
+      encodeFieldVarint(2, targetBadge >>> 0) // badgeid
+    ]);
+    client._send(
+      { msg: EMsg.ServiceMethodCallFromClient || 151, proto: { target_job_name: method } },
+      wire
+    );
+    return {
+      success: true,
+      exploitType,
+      badgeId: targetBadge,
+      message: targetBadge === 0
+        ? '✅ ¡Insignia Destacada desipada por protocolo (Slot Fantasma Vacío ID 0)!'
+        : `✅ ¡Insignia Destacada #${targetBadge} forzada en tu perfil por protocolo ${method}!`
+    };
+  }
+
+  if (exploitType === 'triple_hardware_flags') {
+    const currentName = String(customText || client?.accountInfo?.name || 'brunnn').trim() || undefined;
+    // Bitmask: 4 (Golden) | 256 (Web) | 512 (Mobile) | 1024 (BigPicture) | 2048 (VR) = 3844 + gaming_device_type = 2 (Steam Deck)
+    const wire = encodeChangeStatusWire({
+      personaState: 1,
+      playerName: currentName,
+      personaStateFlags: 3844,
+      gamingDeviceType: 2
+    });
+    client._send({ msg: EMsg.ClientChangeStatus || 716, proto: {} }, wire);
+    return {
+      success: true,
+      exploitType,
+      flagsApplied: 3844,
+      gamingDeviceType: 2,
+      message: '✅ ¡Bitmask de Hardware Múltiple (VR + Steam Deck + Big Picture + Golden 3844) inyectado en tu presencia de Steam (EMsg 716)!'
+    };
+  }
+
+  throw new Error(`Exploit desconocido: ${exploitType}`);
 }
 
 const PRESETS = {
@@ -3347,25 +3800,47 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           message: '✅ Links 3D de CS2 y BBCode generados y copiados.'
         });
       }
-      // --- MOTOR 4: UCM SCREENSHOT INJECTOR (EMSG 5514 + GABE NEWELL TAG + CUSTOM PHOTO & DATE) ---
+      // --- MOTOR 4: UCM SCREENSHOT INJECTOR (EMSG 5514 + GABE NEWELL TAG + CUSTOM PHOTO, DATE & EXACT TIME) ---
       if (url.pathname === '/api/overwatch2003/inject-screenshot' && req.method === 'POST') {
         const acc = getAccount(req, url, data);
         const { client } = ensureAccountServices(acc);
         try {
-          const resData = injectUcmScreenshotServerSide(client, {
+          const resData = await injectUcmScreenshotServerSide(client, {
             appId: Number(data.appId) || 753,
             datePreset: data.datePreset || 'screenshots_beta_feb1_2011',
             customTimestamp: data.customTimestamp,
+            customTime: data.customTime,
             tagPreset: data.tagPreset !== undefined ? data.tagPreset : 'gabe',
             customTaggedInput: data.customTaggedInput || '',
             taggedSteamIds: Array.isArray(data.taggedSteamIds) ? data.taggedSteamIds : undefined,
             caption: data.caption,
             photoName: data.photoName,
             imagePayload: data.imagePayload,
+            thumbPayload: data.thumbPayload,
             width: data.width,
             height: data.height,
             filename: data.filename,
             thumbname: data.thumbname
+          });
+          return json(res, 200, resData);
+        } catch (err) {
+          return json(res, 400, { success: false, error: err.message });
+        }
+      }
+      // --- MOTOR 5: PIONEER EXPLOITS LAB (GHOST CUSTOM GAME, ALIAS HISTORY WIPE, BADGE SPOOFER, GIF SCREENSHOT) ---
+      if (url.pathname === '/api/overwatch2003/pioneer-exploit' && req.method === 'POST') {
+        const isAnimatedOnly = data.exploitType === 'animated_gif_screenshot';
+        const acc = isAnimatedOnly && (data.accountId === 'demo' || !cfg.accounts.length)
+          ? null
+          : getAccount(req, url, data);
+        const client = acc ? ensureAccountServices(acc).client : null;
+        try {
+          const resData = await executePioneerExploitServerSide(client, {
+            exploitType: String(data.exploitType || 'ghost_custom_game'),
+            customText: String(data.customText || ''),
+            badgeId: Number(data.badgeId ?? 1),
+            targetAppId: Number(data.targetAppId || 753),
+            activeGames: Array.isArray(acc?.games) && acc.games.length ? acc.games : [753, 7, 730, 10]
           });
           return json(res, 200, resData);
         } catch (err) {

@@ -660,23 +660,16 @@
             <textarea id="overwatchBbcodeOutput" readonly rows="2" style="width:100%; margin-top:8px; font-family:monospace; font-size:0.72rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.35); color:#d1d5db; border:1px solid rgba(255,255,255,0.12);">[url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611][b]🔍 Abrir ★ Karambit | Case Hardened (#387 Blue Gem) en 3D dentro de CS2[/b][/url]</textarea>
           </div>
 
-          <!-- Motor 4: Simple 1-2-3-4 Custom Photo + Any Game + Any Date + Custom Tags (Garry Newman / Gabe Newell / None / Any SteamID64) -->
+          <!-- Motor 4: Ultra-Simple 1-Button Screenshot Uploader with Exact Date + Exact Time (HH:MM:SS) -->
           <div class="task-center-box status-green">
-            <span class="eyebrow">📸 MOTOR 4 · SUBIR CAPTURAS CON TU FOTO, EL JUEGO QUE QUIERAS, LA FECHA QUE QUIERAS Y ETIQUETAS A ELECCIÓN (SIN LÍMITE DE TAMAÑO)</span>
-            <p id="overwatchScreenshotStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchScreenshotDesc">Elegí cualquier foto de tu PC (hasta 30 MB), cualquier juego (AppID), cualquier fecha (01 Feb 2011 Beta, 07 Oct 2003 o calendario) y elegí si querés etiquetar a Garry Newman, a Gabe Newell, a quien vos quieras o a nadie.</p>
-            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.5; background:rgba(0,0,0,0.24); padding:9px; border-radius:6px;">
-              <strong>Por qué antes te salía <em>"Request too large"</em> y cómo subir tu captura en 4 pasos claros:</strong><br>
-              🔹 Ya eliminé el límite de 64 KB que daba el error <code>Request too large.</code> (ahora soporta fotos HD/4K de hasta 30 MB y las convierte automáticamente al formato <code>.jpg</code> oficial de Steam).<br>
-              <strong>1️⃣ Elegí tu Foto:</strong> Tocá <strong>📷 1. Elegir Foto de mi PC</strong> (vas a ver la miniatura abajo).<br>
-              <strong>2️⃣ Elegí el Juego y la Fecha:</strong> Elegí el juego de la lista (ej. <code>4000 — Garry's Mod</code>, <code>10 — CS 1.6</code>, <code>753 — Steam</code>) <strong>o escribí cualquier número de AppID</strong> en la casilla de al lado. Luego elegí <code>01 Feb 2011 (Beta)</code>, <code>07 Oct 2003</code> o cualquier día en el <strong>Calendario</strong>.<br>
-              <strong>3️⃣ Elegí a Quién Etiquetar (o Quitalo):</strong> En el selector de etiquetas podés elegir <strong>🚫 Sin etiquetar a nadie (Quitar a Gabe Newell)</strong>, <strong>🛠️ Garry Newman (Creador de Garry's Mod)</strong>, <strong>👑 Gabe Newell</strong>, <strong>Ambos</strong>, o pegar el <code>SteamID64</code> de cualquier persona.<br>
-              <strong>4️⃣ Subila a Steam (2 Formas):</strong><br>
-              • <strong>Directo desde acá:</strong> Tocá <strong>🚀 4A. Inyectar al Servidor (Cloud UFS + EMsg 5514)</strong>.<br>
-              • <strong>100% Infalible desde tu PC (Si Steam Cloud pide el archivo local):</strong> Tocá <strong>📦 4B. Descargar JPG Oficial + Copiar Código screenshots.vdf</strong>. Eso te descarga tu foto ya convertida a <code>.jpg</code> con el nombre exacto de la fecha (ej. <code>20110201120000_1.jpg</code>) para poner en <code>Steam\userdata\&lt;tu_id&gt;\760\remote\&lt;AppID&gt;\screenshots\</code> (y en <code>thumbnails\</code>) y te copia el bloque con <code>"creation"</code> y <code>"taggedusers"</code> para pegar en tu archivo <code>screenshots.vdf</code> (con Steam cerrado). Al abrir Steam → <em>Ver → Grabaciones y capturas</em>, le das a <strong>Subir</strong> y queda publicada en tu perfil con esa fecha histórica y tus etiquetas.
+            <span class="eyebrow">📸 MOTOR 4 · SUBIR CAPTURA CON TU FOTO, JUEGO, DÍA Y HORA EXACTA (UN SOLO PASO)</span>
+            <p id="overwatchScreenshotStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchScreenshotDesc">Elegí tu foto, el juego, el día, la hora exacta (HH:MM:SS) y a quién etiquetar, y tocá el único botón verde para subirla directo a Steam Cloud sin que el cliente de escritorio te cambie la fecha a 2026.</p>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.24); padding:8px; border-radius:6px;">
+              <strong>Por qué antes decía 19 de octubre de 2026 al subirla desde tu PC:</strong> El gestor nuevo de escritorio de Steam (<em>Grabaciones y capturas</em>) tiene un bug oficial que pisa la fecha con el día de hoy al tocar "Subir". <strong>Usando este botón único</strong>, el servidor sube tu foto + miniatura directo a tu <strong>Steam Cloud (AppID 760)</strong> y envía el paquete binario <code>EMsg 5514</code> con tu <strong>día y hora exactos</strong> sin pasar por la ventana de Steam.
             </div>
             <input type="file" id="overwatchScreenshotFileInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
             <input type="file" id="workshopHex21FileInput" accept="image/gif,image/png,image/jpeg" style="display:none;">
-            <!-- Fila 1: Foto + Juego (Lista + AppID libre) -->
+            <!-- Paso 1 y 2: Foto + Juego -->
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <button id="btnChooseScreenshotPhoto" type="button" class="btn-main sam-quick-btn">📷 1. Elegir Foto de mi PC</button>
               <select id="overwatchScreenshotAppSelect" style="padding:6px 8px; font-size:0.8rem;">
@@ -693,21 +686,22 @@
                 <option value="550">Juego: 550 — Left 4 Dead 2</option>
                 <option value="1675200">Juego: 1675200 — Steam Deck</option>
               </select>
-              <input id="overwatchScreenshotCustomAppInput" type="number" placeholder="O escribí cualquier AppID..." title="Si querés otro juego cualquiera de Steam, escribí acá su número de AppID" style="width:185px; padding:6px 8px; font-size:0.8rem;">
+              <input id="overwatchScreenshotCustomAppInput" type="number" placeholder="O escribí cualquier AppID..." style="width:175px; padding:6px 8px; font-size:0.8rem;">
             </div>
-            <!-- Fila 2: Fecha (Presets + Calendario Libre) + Título -->
+            <!-- Paso 3: Día Exacto + Hora Exacta (HH:MM:SS) + Descripción -->
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchScreenshotDateSelect" style="padding:6px 8px; font-size:0.8rem;">
-                <option value="screenshots_beta_feb1_2011">Fecha: 01 Feb 2011 (Día 1 Beta Capturas Steam)</option>
-                <option value="account_oct7_2003">Fecha: 07 Oct 2003 (Creación de tu Cuenta)</option>
-                <option value="screenshots_day1_2011">Fecha: 24 Feb 2011 (Salida Oficial Capturas v1.0)</option>
-                <option value="custom">📅 Usar Fecha Exacta del Calendario →</option>
-                <option value="current">Fecha Actual (Hoy)</option>
+                <option value="screenshots_beta_feb1_2011">Día: 01 Feb 2011 (Día 1 Beta Capturas)</option>
+                <option value="account_oct7_2003">Día: 07 Oct 2003 (Creación de tu Cuenta)</option>
+                <option value="screenshots_day1_2011">Día: 24 Feb 2011 (Salida Capturas v1.0)</option>
+                <option value="custom">📅 Día Personalizado →</option>
+                <option value="current">Día de Hoy</option>
               </select>
-              <input id="overwatchCustomDateInput" type="date" value="2011-02-01" title="Elegí cualquier día, mes y año que quieras" style="padding:5px 8px; font-size:0.8rem; border-radius:6px; background:rgba(0,0,0,0.35); color:#fff; border:1px solid rgba(255,255,255,0.18);">
-              <input id="overwatchScreenshotCaptionInput" type="text" placeholder="Título/descripción de tu captura (opcional)..." style="flex:1; min-width:190px; padding:6px 8px; font-size:0.8rem;">
+              <input id="overwatchCustomDateInput" type="date" value="2011-02-01" title="Elegí el día, mes y año" style="padding:5px 8px; font-size:0.8rem; border-radius:6px; background:rgba(0,0,0,0.35); color:#fff; border:1px solid rgba(255,255,255,0.18);">
+              <input id="overwatchCustomTimeInput" type="time" step="1" value="12:00:00" title="Elegí la hora, minuto y segundo exactos (HH:MM:SS)" style="padding:5px 8px; font-size:0.8rem; border-radius:6px; background:rgba(0,0,0,0.35); color:#66c0f4; font-weight:700; border:1px solid rgba(102,192,244,0.35);">
+              <input id="overwatchScreenshotCaptionInput" type="text" placeholder="Título/descripción (opcional)..." style="flex:1; min-width:160px; padding:6px 8px; font-size:0.8rem;">
             </div>
-            <!-- Fila 3: Etiquetas de Jugadores (Quitar Gabe Newell / Poner Garry Newman / Poner cualquier SteamID64) -->
+            <!-- Paso 4: Etiqueta -->
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchScreenshotTagPresetSelect" style="padding:6px 8px; font-size:0.8rem;">
                 <option value="garry">🛠️ Etiquetar a: Garry Newman (Creador de Garry's Mod — 76561197960279927)</option>
@@ -716,25 +710,42 @@
                 <option value="none">🚫 SIN ETIQUETAS (Quitar a Gabe Newell — No etiquetar a nadie)</option>
                 <option value="robin">🎩 Etiquetar a: Robin Walker (Creador de TF2 — 76561197960435530)</option>
                 <option value="chet">🧟 Etiquetar a: Chet Faliszek (Escritor HL2/Portal/L4D — 76561197960279929)</option>
-                <option value="custom">✏️ Etiquetar solo a los SteamID64 que escriba al lado →</option>
+                <option value="custom">✏️ Etiquetar solo al SteamID64 que escriba al lado →</option>
               </select>
-              <input id="overwatchScreenshotCustomTagInput" type="text" placeholder="O pegá acá cualquier SteamID64 o link /profiles/7656119... para añadir" style="flex:1; min-width:230px; padding:6px 8px; font-size:0.8rem;">
+              <input id="overwatchScreenshotCustomTagInput" type="text" placeholder="O pegá acá cualquier SteamID64 para etiquetar..." style="flex:1; min-width:200px; padding:6px 8px; font-size:0.8rem;">
             </div>
-            <!-- Fila 4: Botones de Acción -->
-            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-              <button id="btnInjectUcmScreenshot" type="button" class="btn-main sam-quick-btn" data-i18n="injectUcmScreenshotBtn">🚀 4A. Inyectar Captura (Cloud + EMsg 5514)</button>
-              <button id="btnDownloadScreenshotVdfKit" type="button" class="btn-purple sam-quick-btn">📦 4B. Descargar Foto JPG + Copiar Comando Automático</button>
-              <button id="btnDownloadScreenshotBatFile" type="button" class="btn-main sam-quick-btn">⚙️ 4C. Descargar Instalador .BAT (1-Clic)</button>
-              <button id="btnPatchWorkshopHex21" type="button" class="btn-action-sm sam-quick-btn" data-i18n="patchWorkshopHex21Btn">⬇️ Parchear Foto 0x21 (Workshop)</button>
-              <a href="https://steamcommunity.com/sharedfiles/edititem/767/3/" target="_blank" rel="noopener noreferrer" class="btn-action-sm sam-quick-btn" style="text-decoration:none; display:inline-flex; align-items:center;">🌐 Abrir Subidor Web Steam</a>
+            <!-- UN SOLO BOTÓN DE SUBIDA DIRECTA -->
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center;">
+              <button id="btnInjectUcmScreenshot" type="button" class="btn-main sam-quick-btn" style="width:100%; padding:10px 14px; font-size:0.9rem; font-weight:800;" data-i18n="injectUcmScreenshotBtn">🚀 2. Subir Captura a Steam con este Día y Hora Exacta</button>
+              <button id="btnPatchWorkshopHex21" type="button" style="display:none;" data-i18n="patchWorkshopHex21Btn">0x21</button>
             </div>
             <!-- Vista previa de la foto elegida -->
             <div id="overwatchSelectedPhotoPreviewBox" style="margin-top:8px; display:none; align-items:center; gap:10px; background:rgba(0,0,0,0.28); padding:8px; border-radius:6px; border:1px solid rgba(74,222,128,0.35);">
               <img id="overwatchScreenshotPreviewImg" alt="Tu foto elegida" style="width:96px; height:56px; object-fit:cover; border-radius:4px; border:1px solid rgba(255,255,255,0.2);">
               <div id="overwatchSelectedPhotoInfo" style="font-size:0.75rem; color:#a7f3d0;">Foto lista para subir.</div>
             </div>
-            <!-- Salida del bloque screenshots.vdf listo para copiar/pegar -->
-            <textarea id="overwatchScreenshotVdfOutput" readonly rows="4" placeholder="Acá te va a aparecer el código exacto de screenshots.vdf con tu fecha y tus etiquetas listo para copiar..." style="width:100%; margin-top:8px; display:none; font-family:monospace; font-size:0.72rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.38); color:#a7f3d0; border:1px solid rgba(74,222,128,0.28);"></textarea>
+            <textarea id="overwatchScreenshotVdfOutput" readonly rows="3" style="width:100%; margin-top:8px; display:none; font-family:monospace; font-size:0.72rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.38); color:#a7f3d0; border:1px solid rgba(74,222,128,0.28);"></textarea>
+          </div>
+
+          <!-- Motor 5: Laboratorio de Exploits Pioneros de Protocolo Valve -->
+          <div class="task-center-box status-blue">
+            <span class="eyebrow">⚡ MOTOR 5 · LABORATORIO DE EXPLOITS PIONEROS VALVE (JUEGO FANTASMA EN VERDE, ALIAS INVISIBLES E INSIGNIAS OCULTAS)</span>
+            <p id="pioneerExploitStatusText" class="task-center-body" style="margin:6px 0;">Activá exploits de protocolo nativo CM (EMsg 542 / 716 / 151) que nadie más tiene: perfil en verde jugando a títulos inéditos o invisibles mientras farmeás horas, vaciado total del historial de 10 alias antiguos con caracteres fantasma, insignia destacada oculta o capturas GIF animadas en reliquias.</p>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <select id="pioneerExploitSelect" style="padding:6px 8px; font-size:0.8rem; flex:1; min-width:240px;">
+                <option value="ghost_hl3">🟢 Exploit #1A: Perfil en Verde "Jugando a Half-Life 3 (Closed Alpha — Source 2 Build 9842)" + Farmear Horas</option>
+                <option value="ghost_cs15">🟢 Exploit #1B: Perfil en Verde "Jugando a Counter-Strike 1.5 — WON.net Server (2003)" + Farmear Horas</option>
+                <option value="ghost_invisible">👻 Exploit #1C: Perfil en Verde "Jugando a [100% INVISIBLE U+2800]" (En partida sin nombre de juego)</option>
+                <option value="ghost_custom">✏️ Exploit #1D: Perfil en Verde "Jugando a [El texto que escribas abajo]" (Bitmask 64-bit CGameID)</option>
+                <option value="wipe_alias_history">🧹 Exploit #2: Borrar Historial de 10 Nombres Anteriores (Inyectar 10 Alias Fantasma U+2800 por EMsg 716)</option>
+                <option value="badge_2003">🏅 Exploit #3A: Forzar Insignia Destacada "Años de Servicio (7 Oct 2003)" por Protocolo (EMsg 151)</option>
+                <option value="badge_ghost_zero">🕳️ Exploit #3B: Desequipar Insignia Destacada (Dejar Slot de Insignia 100% Vacío ID 0 sin perder nivel)</option>
+                <option value="triple_hardware_flags">📟 Exploit #4: Activar Bitmask Hardware Múltiple (VR Headset + Steam Deck + Big Picture + Golden 3844)</option>
+                <option value="animated_gif_screenshot">🎞️ Exploit #5: Subir GIF Animado o PNG Largo como CAPTURA Oficial de Steam (AppID 753 / 4000 / 10)</option>
+              </select>
+              <input id="pioneerExploitCustomInput" type="text" placeholder="Texto personalizado (opcional, ej. nombre del juego fantasma o tu nick)..." style="flex:1; min-width:210px; padding:6px 8px; font-size:0.8rem;">
+              <button id="btnRunPioneerExploit" type="button" class="btn-purple sam-quick-btn" style="padding:8px 14px; font-weight:800;">⚡ Ejecutar Exploit Pionero</button>
+            </div>
           </div>
         </div>
       </details>
