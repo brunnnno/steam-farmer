@@ -1998,7 +1998,7 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
   assert.match(revRes.bbcodeUsed, /07 Oct 2003/);
   assert.doesNotMatch(revRes.bbcodeUsed, /12 Sep/i);
   assert.match(revRes.bbcodeUsed, /steamcommunity\.com:\/linkfilter\//);
-  assert.match(revRes.bbcodeUsed, /#730_2_9946351222/);
+  assert.match(revRes.bbcodeUsed, /Pattern #387 \(Blue Gem\)/);
 
   // Motor 4: Verify UCM Screenshot Wire Encoding (EMsg 5514) with Feb 24, 2011 & Oct 7, 2003 presets + Gabe Newell tag + 0x21 Workshop patch
   assert.equal(BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP, 1065484800);

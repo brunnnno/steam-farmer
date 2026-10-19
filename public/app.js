@@ -2652,7 +2652,7 @@ async function craftCheapestLevelBadge(){
     notice(e.message);
   }
 }
-async function injectHiddenShowcaseServerSide(fillCollectorRelics = false) {
+async function injectHiddenShowcaseServerSide(fillCollectorRelics = false, slotsCount = 4) {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   const customTyped = Number(($("overwatchCustomAppIdInput")?.value || "").trim());
   const appId = (Number.isInteger(customTyped) && customTyped > 0)
@@ -2660,18 +2660,72 @@ async function injectHiddenShowcaseServerSide(fillCollectorRelics = false) {
     : (Number($("overwatchShowcaseAppSelect")?.value || 92) || 92);
   const customizationType = Number($("overwatchShowcaseTypeSelect")?.value || 6) || 6;
   const targetInstance = $("overwatchShowcaseInstanceSelect")?.value || "second";
+  const slotIndex = Number($("overwatchShowcaseSlotSelect")?.value || 0) || 0;
+  const relicAppIds = Number(slotsCount) === 12
+    ? [753, 766, 92, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 220, 10]
+    : [753, 766, 92, 1675200];
   try {
     const res = await api("/api/overwatch2003/showcase-inject", {
       accountId: activeAccountId,
       appId,
       customizationType,
       targetInstance,
-      slotIndex: 0,
+      slotIndex,
+      slotsCount: Number(slotsCount) || 4,
       fillCollectorRelics: Boolean(fillCollectorRelics),
-      relicAppIds: [92, 1675200, 766, 7]
+      relicAppIds
     });
     if ($("overwatchShowcaseStatusText") && res?.message) $("overwatchShowcaseStatusText").textContent = res.message;
     if (res?.message) notice(res.message);
+  } catch (e) {
+    notice(e.message);
+  }
+}
+async function generateCs2VisualShowcasePreview(autoDownloadPng = false) {
+  const featuredSlotIndex = Number($("overwatchFeaturedSkinSelect")?.value || 0) || 0;
+  try {
+    const res = await api("/api/overwatch2003/cs2-visual-showcase", {
+      accountId: activeAccountId || "demo",
+      featuredSlotIndex,
+      showcaseTitle: "Expositor de objetos"
+    });
+    if ($("overwatchReviewStatusText") && res?.message) {
+      $("overwatchReviewStatusText").textContent = res.message;
+    }
+    const imgEl = $("overwatchCs2VisualPreview");
+    if (imgEl && (res?.svgDataUri || res?.svgBase64)) {
+      imgEl.src = (res.svgDataUri || res.svgBase64);
+      imgEl.style.display = "inline-block";
+    }
+    if (autoDownloadPng && (res?.svgDataUri || res?.svgBase64)) {
+      if (typeof Image === "function" && typeof document?.createElement === "function") {
+        const tempImg = new Image();
+        tempImg.onload = async () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = 1272;
+            canvas.height = 720;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(tempImg, 0, 0, 1272, 720);
+              const pngDataUrl = canvas.toDataURL("image/png");
+              const patchedRes = await api("/api/artwork/patch", { imagePayload: pngDataUrl }).catch(() => null);
+              const finalUrl = patchedRes?.patchedBase64 || pngDataUrl;
+              const a = element("a");
+              a.href = finalUrl;
+              a.download = "vitrina-inventario-cs2-3d.png";
+              document.body.append(a);
+              a.click();
+              a.remove();
+              notice("✅ PNG HD de Vitrina CS2 (7 Cuadrados + Arma 3D) descargado y parcheado con IHDR.");
+            }
+          } catch {}
+        };
+        tempImg.src = (res.svgDataUri || res.svgBase64);
+      }
+    } else if (res?.message) {
+      notice(res.message);
+    }
   } catch (e) {
     notice(e.message);
   }
@@ -3042,8 +3096,12 @@ if($('btnRunAlchemyCycle'))$('btnRunAlchemyCycle').addEventListener('click',()=>
 if($('btnStartVanitySniper'))$('btnStartVanitySniper').addEventListener('click',()=>startVanitySniper());
 if($('btnStopVanitySniper'))$('btnStopVanitySniper').addEventListener('click',()=>stopVanitySniper());
 if($('btnCraftCheapestBadge'))$('btnCraftCheapestBadge').addEventListener('click',()=>craftCheapestLevelBadge());
-if($('btnInjectHiddenShowcase'))$('btnInjectHiddenShowcase').addEventListener('click',()=>injectHiddenShowcaseServerSide(false));
-if($('btnFillCollectorRelics'))$('btnFillCollectorRelics').addEventListener('click',()=>injectHiddenShowcaseServerSide(true));
+if($('btnInjectHiddenShowcase'))$('btnInjectHiddenShowcase').addEventListener('click',()=>injectHiddenShowcaseServerSide(false, 4));
+if($('btnFillCollectorRelics'))$('btnFillCollectorRelics').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 4));
+if($('btnFillCollector12Slots'))$('btnFillCollector12Slots').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 12));
+if($('btnGenerateCs2VisualShowcase'))$('btnGenerateCs2VisualShowcase').addEventListener('click',()=>generateCs2VisualShowcasePreview(false));
+if($('btnDownloadCs2VisualPng'))$('btnDownloadCs2VisualPng').addEventListener('click',()=>generateCs2VisualShowcasePreview(true));
+if($('overwatchFeaturedSkinSelect'))$('overwatchFeaturedSkinSelect').addEventListener('change',()=>generateCs2VisualShowcasePreview(false));
 if($('btnPrepareApp753Review'))$('btnPrepareApp753Review').addEventListener('click',()=>prepareApp753AndPrivacy());
 if($('btnPublishApp753Review'))$('btnPublishApp753Review').addEventListener('click',()=>publishApp753ReviewWithCs2Widgets());
 if($('btnGenerateExploit3Bbcode'))$('btnGenerateExploit3Bbcode').addEventListener('click',()=>generateExploit3AndWidgetsBbcode());

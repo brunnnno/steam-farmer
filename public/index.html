@@ -555,101 +555,107 @@
         <summary class="cards-panel-heading">
           <div>
             <span class="eyebrow" data-i18n="overwatch2003Eyebrow">MOTORES 1, 3 Y 4 · CUENTA FUNDACIONAL 07 OCT 2003 (CERO F12)</span>
-            <h3><span data-i18n="overwatch2003PanelTitle">Suite Overwatch 2003: Vitrinas Server-Side, Reseña AppID 753 + Widgets CS2 y Capturas EMsg 5514</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+            <h3><span data-i18n="overwatch2003PanelTitle">Suite Overwatch 2003: Vitrinas Server-Side (#1 y #2), Vitrina Visual CS2 3D y Capturas EMsg 5514</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
           </div>
           <span class="cards-summary" data-i18n="overwatch2003SummaryBadge">Motores 1 · 3 · 4 activos</span>
         </summary>
         <div class="task-center-grid" style="margin-top:10px;">
-          <!-- Motor 3A: Server-Side Showcase Mutator (16 Exclusive Relics + 1st & 2nd Favorite Game Support) -->
+          <!-- Motor 3A: Server-Side Showcase Mutator (1st & 2nd Favorite Game + 1st & 2nd Game Collector + Slot 1..12) -->
           <div class="task-center-box status-blue">
-            <span class="eyebrow">🏛️ MOTOR 3A · 16 RELIQUIAS ULTRA-EXCLUSIVAS + SOPORTE PARA TUS 2 CUADROS DE JUEGO FAVORITO</span>
-            <p id="overwatchShowcaseStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchShowcaseDesc">Inyecta AppIDs restringidos de Valve (753 Steam, 766 Workshop, 92 Codename: Gordon, 7 Steam Client) directo desde el servidor.</p>
+            <span class="eyebrow">🏛️ MOTOR 3A · JUEGO FAVORITO (#1 Y #2) + COLECCIONISTA DE JUEGOS (#1 Y #2) + SLOTS #1 A #12</span>
+            <p id="overwatchShowcaseStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchShowcaseDesc">Inyecta AppIDs restringidos de Valve (753 Steam, 766 Workshop, 92 Codename: Gordon, 1675200 Steam Deck) en tu 1ra o 2da vitrina directo desde el servidor.</p>
             <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
-              <strong>Cómo cambiar tu 1er o 2do "Juego Favorito" (donde tenés GTA):</strong><br>
-              1️⃣ Elegí el AppID exclusivo de la lista (ej. <code>92 — Codename: Gordon</code>, <code>1675200 — Steam Deck</code> o <code>1059530 — Valve Index</code>) o escribí cualquier número de AppID.<br>
-              2️⃣ En el selector de cuadro elegí <strong>Cuadro #1 (Principal)</strong>, <strong>Cuadro #2 (2do Juego Favorito de Tienda de Puntos / GTA)</strong> o <strong>¡En AMBOS Cuadros (#1 y #2)!</strong>.<br>
-              3️⃣ Tocá <strong>Inyectar Slot en Vitrina</strong> y recargá tu perfil de Steam.
+              <strong>Cómo modificar tu 2da Colección de Juegos o tu 2do Juego Favorito (sin íconos rotos):</strong><br>
+              🔹 <strong>¿Por qué <code>AppID 7 (Steam Client)</code> se ve con ícono roto?</strong> Porque Valve nunca subió un banner de tienda para el ejecutable <code>AppID 7</code>. Si querés que <strong>todos los casilleros tengan imagen oficial</strong>, usá cualquiera de los marcados con <strong>✅ CON IMAGEN</strong> (<code>753 Steam</code>, <code>766 Workshop</code>, <code>92 Codename: Gordon</code>, <code>1675200 Steam Deck</code>, <code>1059530 Valve Index</code>, <code>353380 Steam Controller</code>, <code>353370 Steam Link</code>).<br>
+              🔹 <strong>Para llenar o cambiar tu 2da Colección de Juegos:</strong> Elegí <strong>Vitrina #2 (2da Colección / 2do Favorito)</strong> o <strong>¡En AMBAS Vitrinas (#1 y #2)!</strong> y tocá <strong>Llenar 4 Slots (Con Imagen)</strong>, <strong>Llenar los 12 Slots</strong>, o elegí un <strong>Slot (#1 a #12)</strong> puntual y tocá <strong>Inyectar Slot en Vitrina</strong>.
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchShowcaseAppSelect" style="padding:6px 8px; font-size:0.8rem; max-width:100%;">
-                <optgroup label="🔥 Reliquias Retiradas y Demos Prohibidas (Casi Nadie las Tiene)">
-                  <option value="92">AppID 92 — Codename: Gordon (Reliquia Flash 2004 Retirada)</option>
-                  <option value="211">AppID 211 — Source SDK (Ingeniería Source 2004)</option>
-                  <option value="340">AppID 340 — Half-Life 2: Lost Coast (Tech Demo 2005)</option>
-                  <option value="480">AppID 480 — Spacewar (App Secreta Steamworks SDK)</option>
+                <optgroup label="✅ CON IMAGEN OFICIAL — Reliquias y Subsistemas de Valve (Se ven con su Banner)">
+                  <option value="92">✅ AppID 92 — Codename: Gordon (Reliquia Flash 2004 Retirada — Con Imagen)</option>
+                  <option value="753">✅ AppID 753 — Steam (Cliente / Ecosistema Oficial Valve — Con Imagen)</option>
+                  <option value="766">✅ AppID 766 — Steam Workshop (Subsistema Interno — Con Imagen)</option>
+                  <option value="1675200">✅ AppID 1675200 — Steam Deck (Consola Hardware Oficial — Con Imagen)</option>
+                  <option value="1059530">✅ AppID 1059530 — Valve Index VR Kit (,000 Hardware — Con Imagen)</option>
+                  <option value="353380">✅ AppID 353380 — Steam Controller (Hardware Retirado 2015 — Con Imagen)</option>
+                  <option value="353370">✅ AppID 353370 — Steam Link (Hardware Retirado 2015 — Con Imagen)</option>
+                  <option value="250820">✅ AppID 250820 — SteamVR (Subsistema Hardware VR — Con Imagen)</option>
+                  <option value="340">✅ AppID 340 — Half-Life 2: Lost Coast (Tech Demo 2005 — Con Imagen)</option>
+                  <option value="211">✅ AppID 211 — Source SDK (Ingeniería Source 2004 — Con Imagen)</option>
                 </optgroup>
-                <optgroup label="🕹️ Hardware Oficial de Valve (Bloqueados en el Buscador Normal)">
-                  <option value="1675200">AppID 1675200 — Steam Deck (Consola Hardware Oficial)</option>
-                  <option value="1059530">AppID 1059530 — Valve Index VR Kit ($1,000 Hardware)</option>
-                  <option value="353380">AppID 353380 — Steam Controller (Hardware Retirado 2015)</option>
-                  <option value="353370">AppID 353370 — Steam Link (Hardware Retirado 2015)</option>
-                  <option value="250820">AppID 250820 — SteamVR (Subsistema Hardware VR)</option>
-                </optgroup>
-                <optgroup label="⚙️ Subsistemas Internos del Núcleo de Steam (2003–2011)">
-                  <option value="766">AppID 766 — Steam Workshop (Subsistema Interno)</option>
-                  <option value="760">AppID 760 — Steam Screenshots (Subsistema UCM)</option>
-                  <option value="767">AppID 767 — Steam Artwork (Subsistema Obras de Arte)</option>
-                  <option value="7">AppID 7 — Steam Client (Núcleo Ejecutable 2003)</option>
-                  <option value="8">AppID 8 — WinUI (Interfaz Fundacional Octubre 2003)</option>
-                  <option value="761">AppID 761 — Steam Cloud / Video (Subsistema Interno)</option>
-                  <option value="753">AppID 753 — Steam (Cliente Oficial)</option>
+                <optgroup label="⚠️ SIN IMAGEN EN CDN — Reliquias de Texto / Ícono Roto (Solo Curiosidad Técnica)">
+                  <option value="7">⚠️ AppID 7 — Steam Client (Núcleo 2003 — Muestra ícono roto sin banner)</option>
+                  <option value="8">⚠️ AppID 8 — WinUI (Interfaz Octubre 2003 — Muestra ícono roto sin banner)</option>
+                  <option value="480">⚠️ AppID 480 — Spacewar (App Secreta Steamworks SDK)</option>
+                  <option value="760">⚠️ AppID 760 — Steam Screenshots (Subsistema UCM)</option>
+                  <option value="767">⚠️ AppID 767 — Steam Artwork (Subsistema Obras de Arte)</option>
+                  <option value="761">⚠️ AppID 761 — Steam Cloud / Video (Subsistema Interno)</option>
                 </optgroup>
               </select>
-              <input id="overwatchCustomAppIdInput" type="number" placeholder="O escribí otro AppID..." style="width:155px; padding:6px 8px; font-size:0.8rem;">
+              <input id="overwatchCustomAppIdInput" type="number" placeholder="O escribí otro AppID..." style="width:150px; padding:6px 8px; font-size:0.8rem;">
               <select id="overwatchShowcaseTypeSelect" style="padding:6px 8px; font-size:0.8rem;">
                 <option value="6">Juego Favorito (Tipo 6)</option>
                 <option value="2">Coleccionista de Juegos (Tipo 2)</option>
                 <option value="17">Expositor de Logros (Tipo 17)</option>
               </select>
               <select id="overwatchShowcaseInstanceSelect" style="padding:6px 8px; font-size:0.8rem;">
-                <option value="second">Cuadro #2 — 2do Juego Favorito (Donde está GTA)</option>
-                <option value="first">Cuadro #1 — 1er Juego Favorito (Principal)</option>
-                <option value="both">¡En AMBOS Juegos Favoritos (#1 y #2)!</option>
+                <option value="second">Vitrina #2 — 2da Colección o 2do Favorito (Tienda de Puntos)</option>
+                <option value="first">Vitrina #1 — 1ra Colección o 1er Favorito (Principal)</option>
+                <option value="both">¡En AMBAS Vitrinas (#1 y #2 al mismo tiempo)!</option>
+              </select>
+              <select id="overwatchShowcaseSlotSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="0">Slot #1 (Arriba Izq. / Favorito)</option>
+                <option value="1">Slot #2</option>
+                <option value="2">Slot #3</option>
+                <option value="3">Slot #4 (Arriba Der.)</option>
+                <option value="4">Slot #5</option>
+                <option value="5">Slot #6</option>
+                <option value="6">Slot #7</option>
+                <option value="7">Slot #8</option>
+                <option value="8">Slot #9</option>
+                <option value="9">Slot #10</option>
+                <option value="10">Slot #11</option>
+                <option value="11">Slot #12 (Abajo Der.)</option>
               </select>
               <button id="btnInjectHiddenShowcase" type="button" class="btn-main sam-quick-btn" data-i18n="injectHiddenShowcaseBtn">Inyectar Slot en Vitrina</button>
-              <button id="btnFillCollectorRelics" type="button" class="btn-action-sm sam-quick-btn" data-i18n="fillCollectorRelicsBtn">Llenar Coleccionista (92/Deck/766/7)</button>
+              <button id="btnFillCollectorRelics" type="button" class="btn-action-sm sam-quick-btn" data-i18n="fillCollectorRelicsBtn">Llenar 4 Slots (753/766/92/Deck)</button>
+              <button id="btnFillCollector12Slots" type="button" class="btn-purple sam-quick-btn">Llenar los 12 Slots Con Imagen</button>
             </div>
           </div>
 
-          <!-- Motor 3B: Review + CS2 Widgets + Exploit #3 (Super Easy 3-Step Guide for 0-Review Profiles) -->
+          <!-- Motor 3B: Visual CS2 Inventory Squares + Giant 3D Weapon Showcase Generator -->
           <div class="task-center-box status-purple">
-            <span class="eyebrow">💎 MOTOR 3B · TABLA [TABLE] (07 OCT 2003) + SKINS CS2 (#730_2_) + EXPLOIT #3 (PARA PERFILES CON 0 RESEÑAS)</span>
-            <p id="overwatchReviewStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchReviewDesc">Oculta tu inventario vacío, publica una reseña en Steam (753) con tabla [table] (07 Oct 2003), Exploit #3 (:/linkfilter/) y Widgets Oficiales de Skins CS2.</p>
+            <span class="eyebrow">🔫 MOTOR 3B · VITRINA VISUAL DE INVENTARIO CS2 (LOS 7 CUADRADOS + ARMA 3D GIGANTE — SIN TEXTOS)</span>
+            <p id="overwatchReviewStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchReviewDesc">Genera la vitrina gráfica idéntica al Expositor de Objetos de Steam con los 7 cuadrados de inventario arriba + el arma 3D gigante destacada abajo (lista para subir a Artwork/Capturas).</p>
             <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.5; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
-              <strong>Por qué no tenías ninguna reseña y cómo crearla en 20 segundos:</strong><br>
-              🔹 Como tenés <strong>0 reseñas</strong> en tu perfil, la forma más rápida y 100% infalible es:<br>
-              <strong>Paso 1:</strong> Tocá <strong>1. Preparar + Ocultar Inventario CS2</strong> (pone tu inventario vacío en Privado y deja tu perfil Público).<br>
-              <strong>Paso 2:</strong> Tocá <strong>Copiar BBCode Exploit #3 + URIs</strong> (copia todo el código del recuadro negro de abajo) y tocá <strong>Abrir Tienda CS2 para Pegar Reseña</strong> (o intentá con el botón morado <strong>2. Publicar Reseña</strong>). En la página de CS2 que se abre, pegá (<code>Ctrl+V</code>) el código en <em>"Escribir una reseña"</em> y dale a <strong>Publicar reseña</strong>.<br>
-              <strong>Paso 3:</strong> En tu perfil de Steam andá a <em>Editar perfil → Expositores</em>, poné <strong>Expositor de reseña</strong> y elegí esa reseña recién creada: ¡vas a ver la tabla <code>[table]</code> y las skins oficiales de CS2 (<em>Karambit Blue Gem #387</em> y <em>AWP Dragon Lore</em>) en tu perfil!
+              <strong>Por qué en las reseñas solo salía texto y cómo poner los cuadrados + el arma 3D real:</strong><br>
+              🔹 Steam bloquea todas las imágenes y cajas gráficas dentro de las reseñas de texto. Para que en tu perfil se vean <strong>los 7 cuadrados de inventario con bordes de color + el arma 3D gigante abajo</strong> (sin tener las skins en tu cuenta):<br>
+              <strong>Paso 1:</strong> Tocá <strong>1. Ocultar Mi Inventario CS2</strong> (deja tu perfil Público pero tu inventario en Privado para que nadie vea que tenés 0 skins).<br>
+              <strong>Paso 2:</strong> Elegí qué arma querés destacar en 3D gigante abajo (ej. <em>Karambit Blue Gem #387</em> o <em>Souvenir AWP Dragon Lore</em>), tocá <strong>2. Generar Vitrina Visual 3D</strong> para verla acá mismo y luego <strong>3. Descargar PNG HD Parcheado</strong>.<br>
+              <strong>Paso 3:</strong> Subí ese PNG en <a href="https://steamcommunity.com/sharedfiles/edititem/767/3/" target="_blank" rel="noopener noreferrer" style="color:#66c0f4;">Subir Artwork de Steam</a> y ponelo en tu <strong>Expositor de Artwork Destacado</strong>: ¡queda idéntico a un inventario de 00,000 USD!
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-              <select id="overwatchReviewAppSelect" style="padding:6px 8px; font-size:0.8rem;">
-                <option value="730">Juego a reseñar: AppID 730 — Counter-Strike 2</option>
-                <option value="10">Juego a reseñar: AppID 10 — Counter-Strike 1.6</option>
-                <option value="753">Juego a reseñar: AppID 753 — Steam Oficial</option>
+              <select id="overwatchFeaturedSkinSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="0">Arma 3D Destacada: ★ Karambit | Case Hardened (#387 Blue Gem)</option>
+                <option value="1">Arma 3D Destacada: Souvenir AWP | Dragon Lore (4x Katowice 2014 Holo)</option>
+                <option value="2">Arma 3D Destacada: StatTrak™ AK-47 | Case Hardened (#661 Scar 4x Titan)</option>
+                <option value="3">Arma 3D Destacada: StatTrak™ M4A4 | Howl (Contraband 4x iBP Holo)</option>
+                <option value="4">Arma 3D Destacada: ★ Butterfly Knife | Gamma Doppler (Emerald)</option>
+                <option value="5">Arma 3D Destacada: ★ Sport Gloves | Pandora's Box (Factory New)</option>
+                <option value="6">Arma 3D Destacada: ★ M9 Bayonet | Doppler (Ruby #1 Rank)</option>
               </select>
-              <button id="btnPrepareApp753Review" type="button" class="btn-action-sm sam-quick-btn" data-i18n="prepareApp753Btn">1. Preparar AppID 753 + Ocultar Inventario</button>
-              <button id="btnPublishApp753Review" type="button" class="btn-purple sam-quick-btn" data-i18n="publishApp753ReviewBtn">2. Publicar Reseña 753 con Widgets CS2</button>
-              <button id="btnGenerateExploit3Bbcode" type="button" class="btn-main sam-quick-btn" data-i18n="generateExploit3Btn">Copiar BBCode Exploit #3 + URIs</button>
-              <a href="https://store.steampowered.com/app/730/" target="_blank" rel="noopener noreferrer" class="btn-action-sm sam-quick-btn" style="text-decoration:none; display:inline-flex; align-items:center;">🔗 Abrir Tienda CS2 (Pegar Reseña)</a>
+              <button id="btnPrepareApp753Review" type="button" class="btn-action-sm sam-quick-btn" data-i18n="prepareApp753Btn">1. Ocultar Mi Inventario CS2</button>
+              <button id="btnGenerateCs2VisualShowcase" type="button" class="btn-main sam-quick-btn">🎨 2. Generar Vitrina Visual (Cuadrados + Arma 3D)</button>
+              <button id="btnDownloadCs2VisualPng" type="button" class="btn-purple sam-quick-btn">⬇️ 3. Descargar PNG HD Parcheado (Artwork)</button>
+              <button id="btnPublishApp753Review" type="button" class="btn-action-sm sam-quick-btn" data-i18n="publishApp753ReviewBtn" style="display:none;">Publicar Reseña</button>
+              <button id="btnGenerateExploit3Bbcode" type="button" class="btn-action-sm sam-quick-btn" data-i18n="generateExploit3Btn">Copiar Links 3D (steam://)</button>
             </div>
-            <textarea id="overwatchBbcodeOutput" readonly rows="5" style="width:100%; margin-top:8px; font-family:monospace; font-size:0.74rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.35); color:#d1d5db; border:1px solid rgba(255,255,255,0.12);">[h1]⚡ NODO DE AUDITORÍA VALVE // CUENTA FUNDACIONAL (07 Oct 2003)[/h1]
-[table equalcells=1]
-[tr][th]Parámetro de Cuenta[/th][th]Estado Verificado[/th][th]Protocolo Activo[/th][/tr]
-[tr][td][b]Fecha de Creación[/b][/td][td][code]07 Oct 2003 (23 Años)[/code][/td][td]Insignia Fundacional 2003[/td][/tr]
-[tr][td][b]Enlace Limpio (Exploit #3)[/b][/td][td][url=https://steamcommunity.com:/linkfilter/?url=https://github.com/brunnnno/steam-farmer]⚡ Repositorio Oficial Verificado (Sin Cartel de Dominio)[/url][/td][td]Bypass RFC 3986 (:)[/td][/tr]
-[tr][td][b]Reliquia Ejecutable[/b][/td][td][url=steam://install/92][b]⚡ Instalar Reliquia Oculta: Codename: Gordon (2004)[/b][/url][/td][td]URI Nativo steam://[/td][/tr]
-[/table]
-
-[h2]🎯 ARSENAL CS2 REGISTRADO EN EXPOSITOR (WIDGETS OFICIALES + INSPECCIÓN 3D)[/h2]
-https://steamcommunity.com/profiles/76561198084852298/inventory/#730_2_9946351222
-[b]★ Karambit | Case Hardened (Factory New)[/b] — [code]Float: 0.0480829 | Pattern #387 (Blue Gem Tier-1)[/code] • [url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611][b]🔍 Inspeccionar Modelo 3D en CS2[/b][/url]
-
-https://steamcommunity.com/profiles/76561198023512965/inventory/#730_2_28761239912
-[b]Souvenir AWP | Dragon Lore (Factory New)[/b] — [code]Float: 0.0009142 | 4x Katowice 2014 (Holo)[/code] • [url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198023512965A28761239912D9244972541062093545][b]🔍 Inspeccionar Modelo 3D en CS2[/b][/url]
-
-https://steamcommunity.com/profiles/76561198165821922/inventory/#730_2_35481920114
-[b]StatTrak™ AK-47 | Case Hardened (Factory New)[/b] — [code]Float: 0.0114021 | Pattern #661 (Scar) + 4x Titan (Holo)[/code] • [url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198165821922A35481920114D7812390412894012567][b]🔍 Inspeccionar Modelo 3D en CS2[/b][/url]</textarea>
+            <div id="overwatchCs2VisualPreviewWrap" style="margin-top:10px; background:#0b0f16; border:1px solid rgba(102,192,244,0.28); border-radius:6px; padding:8px; text-align:center;">
+              <div style="font-size:0.72rem; color:#8f98a0; margin-bottom:6px;">Vista previa en vivo de tu Vitrina Visual CS2 (7 Cuadrados de Inventario + Inspección 3D Gigante):</div>
+              <img id="overwatchCs2VisualPreview" alt="Vista Previa Vitrina CS2 3D" style="max-width:100%; height:auto; border-radius:4px; border:1px solid #263345; display:none;">
+            </div>
+            <textarea id="overwatchBbcodeOutput" readonly rows="3" style="width:100%; margin-top:8px; font-family:monospace; font-size:0.72rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.35); color:#d1d5db; border:1px solid rgba(255,255,255,0.12);">[url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611][b]🔍 Abrir ★ Karambit | Case Hardened (#387 Blue Gem) en 3D dentro de CS2[/b][/url]
+[url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198023512965A28761239912D9244972541062093545][b]🔍 Abrir Souvenir AWP | Dragon Lore (4x Katowice 2014 Holo) en 3D dentro de CS2[/b][/url]</textarea>
           </div>
 
           <!-- Motor 4: UCM Screenshot EMsg 5514 + Gabe Newell Tag + 0x21 Patch -->
