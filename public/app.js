@@ -2859,7 +2859,21 @@ async function injectUcmScreenshotMotor4(downloadVdfKit = false) {
       document.body.append(a);
       a.click();
       a.remove();
-      notice(`✅ Descargado "${res.officialJpgName}" y copiado el bloque screenshots.vdf al portapapeles.`);
+      if (res?.autoInstallerBat && typeof Blob === "function" && typeof URL?.createObjectURL === "function") {
+        setTimeout(() => {
+          try {
+            const batBlob = new Blob([res.autoInstallerBat], { type: "application/x-bat" });
+            const batUrl = URL.createObjectURL(batBlob);
+            const b = element("a");
+            b.href = batUrl;
+            b.download = "Instalar_Captura_Steam.bat";
+            document.body.append(b);
+            b.click();
+            b.remove();
+          } catch {}
+        }, 350);
+      }
+      notice(`✅ Descargados "${res.officialJpgName}" + "Instalar_Captura_Steam.bat". ¡Solo hacé doble clic en Instalar_Captura_Steam.bat en tu carpeta Descargas!`);
     } else if (res?.message) {
       notice(res.message);
     }
