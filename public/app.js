@@ -2810,27 +2810,59 @@ async function generateExploit3AndWidgetsBbcode() {
   }
 }
 
-async function injectUcmScreenshotMotor4() {
+function resolveSelectedScreenshotAppId() {
+  const customTyped = Number(($("overwatchScreenshotCustomAppInput")?.value || "").trim());
+  if (Number.isInteger(customTyped) && customTyped > 0) return customTyped;
+  return Number($("overwatchScreenshotAppSelect")?.value || 753) || 753;
+}
+
+async function injectUcmScreenshotMotor4(downloadVdfKit = false) {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   const datePreset = $("overwatchScreenshotDateSelect")?.value || "screenshots_beta_feb1_2011";
   const customDateVal = ($("overwatchCustomDateInput")?.value || "").trim();
   const customTimestamp = datePreset === "custom" ? customDateVal : null;
-  const appId = Number($("overwatchScreenshotAppSelect")?.value || 753) || 753;
+  const appId = resolveSelectedScreenshotAppId();
+  const tagPreset = $("overwatchScreenshotTagPresetSelect")?.value || "gabe";
+  const customTaggedInput = ($("overwatchScreenshotCustomTagInput")?.value || "").trim();
   const caption = ($("overwatchScreenshotCaptionInput")?.value || "").trim();
+  const payloadToSend = selectedOverwatchScreenshot.jpgDataUrl || selectedOverwatchScreenshot.dataUrl || undefined;
   try {
     const res = await api("/api/overwatch2003/inject-screenshot", {
       accountId: activeAccountId,
       appId,
       datePreset,
       customTimestamp,
+      tagPreset,
+      customTaggedInput,
       caption: caption || undefined,
       photoName: selectedOverwatchScreenshot.name || undefined,
-      imagePayload: selectedOverwatchScreenshot.dataUrl || undefined,
+      imagePayload: payloadToSend,
       width: selectedOverwatchScreenshot.width || 1920,
       height: selectedOverwatchScreenshot.height || 1080
     });
-    if ($("overwatchScreenshotStatusText") && res?.message) $("overwatchScreenshotStatusText").textContent = res.message;
-    if (res?.message) notice(res.message);
+    if ($("overwatchScreenshotStatusText") && res?.message) {
+      $("overwatchScreenshotStatusText").textContent = res.message;
+    }
+    const vdfOut = $("overwatchScreenshotVdfOutput");
+    if (vdfOut && res?.vdfEntry) {
+      vdfOut.style.display = "block";
+      vdfOut.value = res.vdfEntry;
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(res.vdfEntry).catch(() => {});
+      }
+    }
+    if (downloadVdfKit && res?.officialJpgName) {
+      const jpgSource = selectedOverwatchScreenshot.jpgDataUrl || selectedOverwatchScreenshot.dataUrl || SAMPLE_1X1_PNG_BASE64;
+      const a = element("a");
+      a.href = jpgSource;
+      a.download = res.officialJpgName;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      notice(`✅ Descargado "${res.officialJpgName}" y copiado el bloque screenshots.vdf al portapapeles.`);
+    } else if (res?.message) {
+      notice(res.message);
+    }
   } catch (e) {
     notice(e.message);
   }
@@ -3171,7 +3203,7 @@ if($('overwatchScreenshotFileInput'))$('overwatchScreenshotFileInput').addEventL
     const reader=new FileReader();
     reader.onload=()=>{
       const dataUrl=String(reader.result||'');
-      selectedOverwatchScreenshot={name:file.name||'captura.jpg',dataUrl,width:1920,height:1080};
+      selectedOverwatchScreenshot={name:file.name||'captura.jpg',dataUrl,jpgDataUrl:dataUrl,width:1920,height:1080};
       const box=$('overwatchSelectedPhotoPreviewBox');
       const img=$('overwatchScreenshotPreviewImg');
       const info=$('overwatchSelectedPhotoInfo');
@@ -3180,14 +3212,31 @@ if($('overwatchScreenshotFileInput'))$('overwatchScreenshotFileInput').addEventL
       if(typeof Image==='function'){
         const probe=new Image();
         probe.onload=()=>{
-          selectedOverwatchScreenshot.width=probe.naturalWidth||1920;
-          selectedOverwatchScreenshot.height=probe.naturalHeight||1080;
-          if(info)info.textContent=`✅ Foto elegida: ${file.name} (${selectedOverwatchScreenshot.width}x${selectedOverwatchScreenshot.height} px) — Ahora elegí la fecha y tocá el botón 2 o 3.`;
+          const w=probe.naturalWidth||1920;
+          const h=probe.naturalHeight||1080;
+          selectedOverwatchScreenshot.width=w;
+          selectedOverwatchScreenshot.height=h;
+          try{
+            if(typeof document?.createElement==='function'){
+              const canvas=document.createElement('canvas');
+              canvas.width=w;
+              canvas.height=h;
+              const ctx=canvas.getContext('2d');
+              if(ctx){
+                ctx.fillStyle='#000000';
+                ctx.fillRect(0,0,w,h);
+                ctx.drawImage(probe,0,0,w,h);
+                const jpgUrl=canvas.toDataURL('image/jpeg',0.90);
+                if(jpgUrl&&jpgUrl.startsWith('data:image/jpeg'))selectedOverwatchScreenshot.jpgDataUrl=jpgUrl;
+              }
+            }
+          }catch{}
+          if(info)info.textContent=`✅ Foto convertida a JPG oficial: ${file.name} (${w}x${h} px) — Ahora elegí el juego, la fecha y a quién etiquetar, y tocá 4A o 4B.`;
         };
         probe.src=dataUrl;
       }
-      if(info)info.textContent=`✅ Foto elegida: ${file.name} — Ahora elegí la fecha y tocá el botón 2 o 3.`;
-      if($('overwatchScreenshotStatusText'))$('overwatchScreenshotStatusText').textContent=`✅ Foto "${file.name}" cargada. Elegí la fecha y tocá "2. Registrar Captura" o "3. Descargar Mi Foto Parcheada".`;
+      if(info)info.textContent=`✅ Foto cargada: ${file.name} — Ahora elegí el juego, la fecha y a quién etiquetar, y tocá 4A o 4B.`;
+      if($('overwatchScreenshotStatusText'))$('overwatchScreenshotStatusText').textContent=`✅ Foto "${file.name}" lista (sin error de tamaño). Elegí juego, fecha y etiquetas abajo y tocá 4A o 4B.`;
     };
     reader.readAsDataURL(file);
   }
@@ -3205,7 +3254,8 @@ if($('overwatchCustomDateInput'))$('overwatchCustomDateInput').addEventListener(
   const sel=$('overwatchScreenshotDateSelect');
   if(sel)sel.value='custom';
 });
-if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4());
+if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4(false));
+if($('btnDownloadScreenshotVdfKit'))$('btnDownloadScreenshotVdfKit').addEventListener('click',()=>injectUcmScreenshotMotor4(true));
 if($('btnPatchWorkshopHex21'))$('btnPatchWorkshopHex21').addEventListener('click',()=>{
   if(selectedOverwatchScreenshot.dataUrl){
     submitWorkshopHex21Patch(selectedOverwatchScreenshot.dataUrl);

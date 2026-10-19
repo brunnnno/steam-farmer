@@ -95,6 +95,18 @@ const patchWorkshopHex21 = function (fileBuffer) {
 const EMsg = { ClientUCMAddScreenshot: 5514, ClientChangeStatus: 716, ServiceMethodCallFromClient: 151 };
 const BRAILLE_BLANK = '\u2800';
 const GABE_NEWELL_STEAMID64 = '76561197960287930';
+const GARRY_NEWMAN_STEAMID64 = '76561197960279927'; // Garry Newman (Creador de Garry's Mod — STEAM_0:1:7099)
+const ROBIN_WALKER_STEAMID64 = '76561197960435530'; // Robin Walker (Creador de Team Fortress)
+const CHET_FALISZEK_STEAMID64 = '76561197960279929'; // Chet Faliszek (Escritor de Half-Life / Portal / L4D)
+
+const FAMOUS_STEAM_PROFILES_TO_TAG = [
+  { id: 'none', name: '🚫 Sin etiquetar a nadie (Sin Gabe Newell)', steamIds: [] },
+  { id: "garry", name: "🛠️ Garry Newman (Creador de Garry's Mod — 76561197960279927)", steamIds: [GARRY_NEWMAN_STEAMID64] },
+  { id: 'gabe', name: '👑 Gabe Newell (Fundador de Valve — 76561197960287930)', steamIds: [GABE_NEWELL_STEAMID64] },
+  { id: 'gabe_and_garry', name: '👑+🛠️ Gabe Newell + Garry Newman (Ambos en la captura)', steamIds: [GABE_NEWELL_STEAMID64, GARRY_NEWMAN_STEAMID64] },
+  { id: 'robin', name: '🎩 Robin Walker (Creador de Team Fortress 2 — 76561197960435530)', steamIds: [ROBIN_WALKER_STEAMID64] },
+  { id: 'chet', name: '🧟 Chet Faliszek (Escritor de Half-Life / Portal / L4D — 76561197960279929)', steamIds: [CHET_FALISZEK_STEAMID64] }
+];
 
 const BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP = 1065484800; // 7 de Octubre de 2003 00:00:00 UTC
 const STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP = 1296518400; // 1 de Febrero de 2011 00:00:00 UTC (Día 1 Beta de Capturas en Steam)
@@ -1159,13 +1171,11 @@ function extractImageDimensionsFromBase64(imagePayload = '') {
     if (!clean) return null;
     const buf = Buffer.from(clean, 'base64');
     if (buf.length < 24) return null;
-    // PNG signature
     if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
       const width = buf.readUInt32BE(16);
       const height = buf.readUInt32BE(20);
-      if (width > 0 && height > 0) return { width, height, ext: 'png', byteLength: buf.length };
+      if (width > 0 && height > 0) return { width, height, ext: 'png', byteLength: buf.length, buffer: buf };
     }
-    // JPEG SOF0/SOF2 scan
     if (buf[0] === 0xff && buf[1] === 0xd8) {
       let pos = 2;
       while (pos + 9 < buf.length) {
@@ -1175,15 +1185,115 @@ function extractImageDimensionsFromBase64(imagePayload = '') {
         if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
           const height = buf.readUInt16BE(pos + 5);
           const width = buf.readUInt16BE(pos + 7);
-          if (width > 0 && height > 0) return { width, height, ext: 'jpg', byteLength: buf.length };
+          if (width > 0 && height > 0) return { width, height, ext: 'jpg', byteLength: buf.length, buffer: buf };
         }
         if (len < 2) break;
         pos += 2 + len;
       }
-      return { width: 1920, height: 1080, ext: 'jpg', byteLength: buf.length };
+      return { width: 1920, height: 1080, ext: 'jpg', byteLength: buf.length, buffer: buf };
     }
   } catch {}
   return null;
+}
+
+/**
+ * Resuelve la lista de SteamID64 a etiquetar en la captura:
+ * - Permite quitar a Gabe Newell por completo (`tagPreset = 'none'`)
+ * - Permite elegir a Garry Newman (`76561197960279927`), Gabe Newell (`76561197960287930`), Robin Walker, Chet Faliszek
+ * - Permite agregar cualquier SteamID64 o link `steamcommunity.com/profiles/7656119...` escrito por el usuario
+ */
+function resolveScreenshotTaggedSteamIds({
+  tagPreset = 'gabe',
+  customTaggedInput = '',
+  explicitTaggedSteamIds = null
+} = {}) {
+  if (Array.isArray(explicitTaggedSteamIds)) {
+    return explicitTaggedSteamIds
+      .map(s => String(s || '').trim())
+      .filter(s => /^7656119\d{10}$/.test(s));
+  }
+
+  const set = new Set();
+  const preset = String(tagPreset || 'gabe').trim().toLowerCase();
+
+  if (preset === 'none' || preset === 'nobody' || preset === 'sin_etiquetas' || preset === '0') {
+    // No agregar a Gabe Newell ni a ningún preset
+  } else if (preset === 'garry' || preset === GARRY_NEWMAN_STEAMID64) {
+    set.add(GARRY_NEWMAN_STEAMID64);
+  } else if (preset === 'gabe_and_garry' || preset === 'both') {
+    set.add(GABE_NEWELL_STEAMID64);
+    set.add(GARRY_NEWMAN_STEAMID64);
+  } else if (preset === 'robin' || preset === ROBIN_WALKER_STEAMID64) {
+    set.add(ROBIN_WALKER_STEAMID64);
+  } else if (preset === 'chet' || preset === CHET_FALISZEK_STEAMID64) {
+    set.add(CHET_FALISZEK_STEAMID64);
+  } else if (preset === 'custom') {
+    // Solo usar lo que el usuario escriba en customTaggedInput
+  } else if (preset === 'gabe' || preset === GABE_NEWELL_STEAMID64) {
+    set.add(GABE_NEWELL_STEAMID64);
+  } else {
+    // Si pasaron varios IDs separados por coma en el preset
+    for (const part of preset.split(/[\s,;]+/)) {
+      if (/^7656119\d{10}$/.test(part)) set.add(part);
+    }
+  }
+
+  // Extraer cualquier SteamID64 de 17 dígitos escrito en el campo personalizado (acepta IDs directos o URLs /profiles/7656119...)
+  const rawCustom = String(customTaggedInput || '');
+  const matches = rawCustom.match(/7656119\d{10}/g);
+  if (matches) {
+    for (const m of matches) set.add(m);
+  }
+  if (/garry/i.test(rawCustom)) set.add(GARRY_NEWMAN_STEAMID64);
+  if (/gabe|newell/i.test(rawCustom)) set.add(GABE_NEWELL_STEAMID64);
+  if (/robin|walker/i.test(rawCustom)) set.add(ROBIN_WALKER_STEAMID64);
+
+  return [...set];
+}
+
+function formatSteamScreenshotFilenameFromTimestamp(timestampSec = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP) {
+  const d = new Date((Number(timestampSec) || STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP) * 1000);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mi = String(d.getUTCMinutes()).padStart(2, '0');
+  const ss = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}${hh}${mi}${ss}_1.jpg`;
+}
+
+function buildScreenshotsVdfEntry({
+  appId = 753,
+  timestamp = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
+  width = 1920,
+  height = 1080,
+  caption = '',
+  taggedSteamIds = []
+} = {}) {
+  const jpgName = formatSteamScreenshotFilenameFromTimestamp(timestamp);
+  const tagLines = (Array.isArray(taggedSteamIds) ? taggedSteamIds : [])
+    .map((sid, idx) => `\t\t\t\t"${idx}"\t\t"${sid}"`)
+    .join('\n');
+  const taggedBlock = tagLines
+    ? `\n\t\t\t"taggedusers"\n\t\t\t{\n${tagLines}\n\t\t\t}`
+    : '';
+  return `"${appId}"
+{
+\t"0"
+\t{
+\t\t"type"\t\t"1"
+\t\t"filename"\t\t"${appId}/screenshots/${jpgName}"
+\t\t"thumbnail"\t\t"${appId}/screenshots/thumbnails/${jpgName}"
+\t\t"vrfilename"\t\t""
+\t\t"imported"\t\t"1"
+\t\t"width"\t\t"${width}"
+\t\t"height"\t\t"${height}"
+\t\t"gameid"\t\t"${appId}"
+\t\t"creation"\t\t"${timestamp}"
+\t\t"caption"\t\t"${String(caption || '').replace(/"/g, "'")}"
+\t\t"Permissions"\t\t"2"${taggedBlock}
+\t}
+}`;
 }
 
 function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_beta_feb1_2011', customTimestamp = null) {
@@ -1234,10 +1344,30 @@ function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_beta_feb
   };
 }
 
+function encodeUfsUploadFileRequestWire({
+  appId = 760,
+  fileSize = 1024,
+  rawFileSize = 1024,
+  shaFileBuffer = Buffer.alloc(20, 0x03),
+  timestampSec = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
+  fileName = '753/screenshots/20110201120000_1.jpg'
+} = {}) {
+  return Buffer.concat([
+    encodeFieldVarint(1, Number(appId) >>> 0),
+    encodeFieldVarint(2, Number(fileSize) >>> 0),
+    encodeFieldVarint(3, Number(rawFileSize) >>> 0),
+    encodeFieldBytes(4, Buffer.isBuffer(shaFileBuffer) ? shaFileBuffer : Buffer.alloc(20, 0x03)),
+    encodeFieldFixed64(5, BigInt(Number(timestampSec) >>> 0)),
+    encodeFieldBytes(6, String(fileName)),
+    encodeFieldVarint(7, 0xffffffff),
+    encodeFieldVarint(9, 1)
+  ]);
+}
+
 function encodeUcmAddScreenshotWire({
   appId = 753,
-  filename = 'screenshots/relic_oct7_2003_node.jpg',
-  thumbname = 'screenshots/thumbs/relic_oct7_2003_node.jpg',
+  filename = '753/screenshots/20110201120000_1.jpg',
+  thumbname = '753/screenshots/thumbnails/20110201120000_1.jpg',
   rtime32Created = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
   width = 1920,
   height = 1080,
@@ -1277,23 +1407,48 @@ function injectUcmScreenshotServerSide(client, options = {}) {
     options.datePreset || 'screenshots_beta_feb1_2011',
     options.customTimestamp
   );
-  const taggedSteamIds = Array.isArray(options.taggedSteamIds) && options.taggedSteamIds.length
-    ? options.taggedSteamIds.map(String)
-    : [GABE_NEWELL_STEAMID64];
+
+  // Resolver a quién etiquetar (permite quitar a Gabe Newell con tagPreset='none' o agregar a Garry Newman / cualquier SteamID64)
+  const taggedSteamIds = resolveScreenshotTaggedSteamIds({
+    tagPreset: options.tagPreset,
+    customTaggedInput: options.customTaggedInput,
+    explicitTaggedSteamIds: Array.isArray(options.taggedSteamIds) ? options.taggedSteamIds : null
+  });
+
   const caption = String(
-    options.caption || '⚡ [CUENTA FUNDACIONAL: 07 OCT 2003] // ARCHIVO OFICIAL UCM'
+    options.caption !== undefined && options.caption !== null && String(options.caption).trim() !== ''
+      ? options.caption
+      : ''
   ).trim();
 
   const imgMeta = extractImageDimensionsFromBase64(options.imagePayload);
-  const cleanPhotoName = String(options.photoName || '')
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .replace(/^_+/, '') || `captura_${timestamp}.${imgMeta?.ext || 'jpg'}`;
+  const officialJpgName = formatSteamScreenshotFilenameFromTimestamp(timestamp);
 
   const width = Number(options.width) || imgMeta?.width || 1920;
   const height = Number(options.height) || imgMeta?.height || 1080;
-  const filename = String(options.filename || `screenshots/${cleanPhotoName}`).trim();
-  const thumbname = String(options.thumbname || `screenshots/thumbs/${cleanPhotoName}`).trim();
+  const filename = String(options.filename || `${appId}/screenshots/${officialJpgName}`).trim();
+  const thumbname = String(options.thumbname || `${appId}/screenshots/thumbnails/${officialJpgName}`).trim();
 
+  // Paso 1: Si el usuario subió su imagen, registrar el slot en Steam Cloud (AppID 760 — UFS EMsg 5202) antes del EMsg 5514
+  let cloudRegistered = false;
+  if (imgMeta?.buffer) {
+    try {
+      const cryptoMod = require('node:crypto');
+      const sha1 = cryptoMod.createHash('sha1').update(imgMeta.buffer).digest();
+      const ufsWire = encodeUfsUploadFileRequestWire({
+        appId: 760,
+        fileSize: imgMeta.byteLength,
+        rawFileSize: imgMeta.byteLength,
+        shaFileBuffer: sha1,
+        timestampSec: timestamp,
+        fileName: filename
+      });
+      client._send({ msg: 5202, proto: {} }, ufsWire);
+      cloudRegistered = true;
+    } catch {}
+  }
+
+  // Paso 2: Enviar CMsgClientUCMAddScreenshot (EMsg 5514) con el AppID elegido, la fecha elegida y las etiquetas elegidas
   const wireBuffer = encodeUcmAddScreenshotWire({
     appId,
     filename,
@@ -1309,20 +1464,42 @@ function injectUcmScreenshotServerSide(client, options = {}) {
   const emsgCode = EMsg.ClientUCMAddScreenshot || 5514;
   client._send({ msg: emsgCode, proto: {} }, wireBuffer);
 
+  const vdfEntry = buildScreenshotsVdfEntry({
+    appId,
+    timestamp,
+    width,
+    height,
+    caption,
+    taggedSteamIds
+  });
+
+  const tagSummary = taggedSteamIds.length === 0
+    ? 'Sin etiquetar a nadie'
+    : taggedSteamIds.map(id => {
+        if (id === GABE_NEWELL_STEAMID64) return 'Gabe Newell (76561197960287930)';
+        if (id === GARRY_NEWMAN_STEAMID64) return 'Garry Newman (76561197960279927)';
+        if (id === ROBIN_WALKER_STEAMID64) return 'Robin Walker (76561197960435530)';
+        if (id === CHET_FALISZEK_STEAMID64) return 'Chet Faliszek (76561197960279929)';
+        return id;
+      }).join(', ');
+
   return {
     success: true,
     emsg: emsgCode,
+    cloudRegistered,
     appId,
-    photoName: cleanPhotoName,
+    officialJpgName,
     width,
     height,
     rtime32Created: timestamp,
     dateLabel: label,
     taggedSteamIds,
+    tagSummary,
     caption,
+    vdfEntry,
     wireBytesLength: wireBuffer.length,
     wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),
-    message: `✅ Captura "${cleanPhotoName}" (${width}x${height} px, AppID ${appId}) registrada por EMsg ${emsgCode} con fecha "${label}" y etiqueta a Gabe Newell.`
+    message: `✅ Captura registrada (AppID ${appId} • ${width}x${height} px • Fecha: "${label}" • Etiquetas: ${tagSummary}). Archivo JPG oficial: ${officialJpgName}.`
   };
 }
 
@@ -1885,7 +2062,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       const cleanup=()=>{req.removeListener('data',data);req.removeListener('end',end);req.removeListener('error',error);req.removeListener('aborted',aborted);};
       const error=()=>{if(done)return;done=true;cleanup();chunks.length=0;reject(fail('The request could not be read.',400));};
       const aborted=()=>error();
-      const data=chunk=>{if(done)return;size+=chunk.length;if(size>65536){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
+      const maxBytes=/^\/api\/(?:artwork\/patch|overwatch2003\/)/i.test(req.url||'')?30*1024*1024:65536;const data=chunk=>{if(done)return;size+=chunk.length;if(size>maxBytes){done=true;cleanup();chunks.length=0;req.once('error',()=>{});req.resume();reject(fail('Request too large.',413));}else chunks.push(chunk);};
       const end=()=>{if(done)return;done=true;cleanup();resolve(Buffer.concat(chunks,size));};
       req.on('data',data);req.once('end',end);req.once('error',error);req.once('aborted',aborted);
     });
@@ -3077,6 +3254,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             appId: Number(data.appId) || 753,
             datePreset: data.datePreset || 'screenshots_beta_feb1_2011',
             customTimestamp: data.customTimestamp,
+            tagPreset: data.tagPreset !== undefined ? data.tagPreset : 'gabe',
+            customTaggedInput: data.customTaggedInput || '',
+            taggedSteamIds: Array.isArray(data.taggedSteamIds) ? data.taggedSteamIds : undefined,
             caption: data.caption,
             photoName: data.photoName,
             imagePayload: data.imagePayload,
