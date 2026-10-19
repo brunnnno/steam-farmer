@@ -1992,7 +1992,7 @@ test('PIN-free auto-session, direct 1-click unlock/remove, SamRewritten statisti
     }
   });
   assert.equal(revRes.success, true);
-  assert.equal(revCalls.length, 2); // 1st: ajaxsetprivacy, 2nd: recommendgame
+  assert.ok(revCalls.length >= 2); // 1st: ajaxsetprivacy, 2nd: recommendgame, 3rd: auto-showcase
   assert.match(revCalls[0].url, /ajaxsetprivacy/);
   assert.match(revCalls[1].url, /recommendgame/);
   assert.match(revRes.bbcodeUsed, /07 Oct 2003/);

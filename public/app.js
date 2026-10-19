@@ -2654,15 +2654,21 @@ async function craftCheapestLevelBadge(){
 }
 async function injectHiddenShowcaseServerSide(fillCollectorRelics = false) {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
-  const appId = Number($("overwatchShowcaseAppSelect")?.value || 753) || 753;
-  const customizationType = Number($("overwatchShowcaseTypeSelect")?.value || 2) || 2;
+  const customTyped = Number(($("overwatchCustomAppIdInput")?.value || "").trim());
+  const appId = (Number.isInteger(customTyped) && customTyped > 0)
+    ? customTyped
+    : (Number($("overwatchShowcaseAppSelect")?.value || 92) || 92);
+  const customizationType = Number($("overwatchShowcaseTypeSelect")?.value || 6) || 6;
+  const targetInstance = $("overwatchShowcaseInstanceSelect")?.value || "second";
   try {
     const res = await api("/api/overwatch2003/showcase-inject", {
       accountId: activeAccountId,
       appId,
       customizationType,
+      targetInstance,
       slotIndex: 0,
-      fillCollectorRelics: Boolean(fillCollectorRelics)
+      fillCollectorRelics: Boolean(fillCollectorRelics),
+      relicAppIds: [92, 1675200, 766, 7]
     });
     if ($("overwatchShowcaseStatusText") && res?.message) $("overwatchShowcaseStatusText").textContent = res.message;
     if (res?.message) notice(res.message);
