@@ -2652,12 +2652,39 @@ async function craftCheapestLevelBadge(){
     notice(e.message);
   }
 }
+let selectedOverwatchScreenshot = {
+  name: '',
+  dataUrl: '',
+  width: 1920,
+  height: 1080
+};
+
+async function farmExclusiveRelics(mode = "all") {
+  if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
+  const customTyped = Number(($("overwatchCustomAppIdInput")?.value || "").trim());
+  const appId = (Number.isInteger(customTyped) && customTyped > 0)
+    ? customTyped
+    : (Number($("overwatchShowcaseAppSelect")?.value || 753) || 753);
+  try {
+    const res = await api("/api/overwatch2003/farm-relics", {
+      accountId: activeAccountId,
+      mode,
+      appId
+    });
+    if ($("overwatchShowcaseStatusText") && res?.message) $("overwatchShowcaseStatusText").textContent = res.message;
+    if (res?.message) notice(res.message);
+    if (typeof refresh === "function") refresh().catch(() => {});
+  } catch (e) {
+    notice(e.message);
+  }
+}
+
 async function injectHiddenShowcaseServerSide(fillCollectorRelics = false, slotsCount = 4) {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   const customTyped = Number(($("overwatchCustomAppIdInput")?.value || "").trim());
   const appId = (Number.isInteger(customTyped) && customTyped > 0)
     ? customTyped
-    : (Number($("overwatchShowcaseAppSelect")?.value || 92) || 92);
+    : (Number($("overwatchShowcaseAppSelect")?.value || 753) || 753);
   const customizationType = Number($("overwatchShowcaseTypeSelect")?.value || 6) || 6;
   const targetInstance = $("overwatchShowcaseInstanceSelect")?.value || "second";
   const slotIndex = Number($("overwatchShowcaseSlotSelect")?.value || 0) || 0;
@@ -2677,10 +2704,12 @@ async function injectHiddenShowcaseServerSide(fillCollectorRelics = false, slots
     });
     if ($("overwatchShowcaseStatusText") && res?.message) $("overwatchShowcaseStatusText").textContent = res.message;
     if (res?.message) notice(res.message);
+    if (typeof refresh === "function") refresh().catch(() => {});
   } catch (e) {
     notice(e.message);
   }
 }
+
 async function generateCs2VisualShowcasePreview(autoDownloadPng = false) {
   const featuredSlotIndex = Number($("overwatchFeaturedSkinSelect")?.value || 0) || 0;
   try {
@@ -2730,16 +2759,19 @@ async function generateCs2VisualShowcasePreview(autoDownloadPng = false) {
     notice(e.message);
   }
 }
+
 async function prepareApp753AndPrivacy() {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   try {
     const res = await api("/api/overwatch2003/prepare-app753", { accountId: activeAccountId, lockInventory: true });
     if ($("overwatchReviewStatusText") && res?.message) $("overwatchReviewStatusText").textContent = res.message;
     if (res?.message) notice(res.message);
+    if (typeof refresh === "function") refresh().catch(() => {});
   } catch (e) {
     notice(e.message);
   }
 }
+
 async function publishApp753ReviewWithCs2Widgets() {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
   const selectedAppId = Number($("overwatchReviewAppSelect")?.value || 753) || 753;
@@ -2756,6 +2788,7 @@ async function publishApp753ReviewWithCs2Widgets() {
     notice(e.message);
   }
 }
+
 async function generateExploit3AndWidgetsBbcode() {
   try {
     const res = await api("/api/overwatch2003/exploit3-links", {
@@ -2776,14 +2809,25 @@ async function generateExploit3AndWidgetsBbcode() {
     notice(e.message);
   }
 }
+
 async function injectUcmScreenshotMotor4() {
   if (!activeAccountId) { notice(t("liveActionNotice")); openAddAccModal(); return; }
-  const datePreset = $("overwatchScreenshotDateSelect")?.value || "screenshots_day1_2011";
+  const datePreset = $("overwatchScreenshotDateSelect")?.value || "screenshots_beta_feb1_2011";
+  const customDateVal = ($("overwatchCustomDateInput")?.value || "").trim();
+  const customTimestamp = datePreset === "custom" ? customDateVal : null;
+  const appId = Number($("overwatchScreenshotAppSelect")?.value || 753) || 753;
+  const caption = ($("overwatchScreenshotCaptionInput")?.value || "").trim();
   try {
     const res = await api("/api/overwatch2003/inject-screenshot", {
       accountId: activeAccountId,
-      appId: 753,
-      datePreset
+      appId,
+      datePreset,
+      customTimestamp,
+      caption: caption || undefined,
+      photoName: selectedOverwatchScreenshot.name || undefined,
+      imagePayload: selectedOverwatchScreenshot.dataUrl || undefined,
+      width: selectedOverwatchScreenshot.width || 1920,
+      height: selectedOverwatchScreenshot.height || 1080
     });
     if ($("overwatchScreenshotStatusText") && res?.message) $("overwatchScreenshotStatusText").textContent = res.message;
     if (res?.message) notice(res.message);
@@ -2791,17 +2835,26 @@ async function injectUcmScreenshotMotor4() {
     notice(e.message);
   }
 }
+
 async function submitWorkshopHex21Patch(imagePayload = SAMPLE_1X1_PNG_BASE64) {
   try {
-    const res = await api("/api/artwork/patch", { imagePayload, mode: "workshop_hex21" });
+    const payloadToUse = imagePayload !== SAMPLE_1X1_PNG_BASE64
+      ? imagePayload
+      : (selectedOverwatchScreenshot.dataUrl || SAMPLE_1X1_PNG_BASE64);
+    const res = await api("/api/artwork/patch", { imagePayload: payloadToUse, mode: "workshop_hex21" });
     if ($("overwatchScreenshotStatusText") && res?.message) {
       $("overwatchScreenshotStatusText").textContent = res.message;
     }
     if (res?.patchedBase64) {
       const isGif = /^data:image\/gif/i.test(res.patchedBase64);
+      const isJpg = /^data:image\/jpe?g/i.test(res.patchedBase64);
+      const ext = isGif ? "gif" : (isJpg ? "jpg" : "png");
+      const baseName = selectedOverwatchScreenshot.name
+        ? selectedOverwatchScreenshot.name.replace(/\.[a-zA-Z0-9]+$/, "")
+        : "steamfarmer-captura";
       const a = element("a");
       a.href = res.patchedBase64;
-      a.download = isGif ? "steamfarmer-workshop-0x21.gif" : "steamfarmer-workshop-0x21.png";
+      a.download = `${baseName}-0x21.${ext}`;
       document.body.append(a);
       a.click();
       a.remove();
@@ -3096,6 +3149,8 @@ if($('btnRunAlchemyCycle'))$('btnRunAlchemyCycle').addEventListener('click',()=>
 if($('btnStartVanitySniper'))$('btnStartVanitySniper').addEventListener('click',()=>startVanitySniper());
 if($('btnStopVanitySniper'))$('btnStopVanitySniper').addEventListener('click',()=>stopVanitySniper());
 if($('btnCraftCheapestBadge'))$('btnCraftCheapestBadge').addEventListener('click',()=>craftCheapestLevelBadge());
+if($('btnFarmSingleRelic'))$('btnFarmSingleRelic').addEventListener('click',()=>farmExclusiveRelics('single'));
+if($('btnFarmAllRelics'))$('btnFarmAllRelics').addEventListener('click',()=>farmExclusiveRelics('all'));
 if($('btnInjectHiddenShowcase'))$('btnInjectHiddenShowcase').addEventListener('click',()=>injectHiddenShowcaseServerSide(false, 4));
 if($('btnFillCollectorRelics'))$('btnFillCollectorRelics').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 4));
 if($('btnFillCollector12Slots'))$('btnFillCollector12Slots').addEventListener('click',()=>injectHiddenShowcaseServerSide(true, 12));
@@ -3105,8 +3160,57 @@ if($('overwatchFeaturedSkinSelect'))$('overwatchFeaturedSkinSelect').addEventLis
 if($('btnPrepareApp753Review'))$('btnPrepareApp753Review').addEventListener('click',()=>prepareApp753AndPrivacy());
 if($('btnPublishApp753Review'))$('btnPublishApp753Review').addEventListener('click',()=>publishApp753ReviewWithCs2Widgets());
 if($('btnGenerateExploit3Bbcode'))$('btnGenerateExploit3Bbcode').addEventListener('click',()=>generateExploit3AndWidgetsBbcode());
+if($('btnChooseScreenshotPhoto'))$('btnChooseScreenshotPhoto').addEventListener('click',()=>{
+  const fi=$('overwatchScreenshotFileInput');
+  if(fi)try{fi.click();}catch{}
+});
+if($('overwatchScreenshotFileInput'))$('overwatchScreenshotFileInput').addEventListener('change',e=>{
+  const file=e.target?.files?.[0];
+  if(!file)return;
+  if(typeof FileReader==='function'){
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const dataUrl=String(reader.result||'');
+      selectedOverwatchScreenshot={name:file.name||'captura.jpg',dataUrl,width:1920,height:1080};
+      const box=$('overwatchSelectedPhotoPreviewBox');
+      const img=$('overwatchScreenshotPreviewImg');
+      const info=$('overwatchSelectedPhotoInfo');
+      if(box)box.style.display='flex';
+      if(img)img.src=dataUrl;
+      if(typeof Image==='function'){
+        const probe=new Image();
+        probe.onload=()=>{
+          selectedOverwatchScreenshot.width=probe.naturalWidth||1920;
+          selectedOverwatchScreenshot.height=probe.naturalHeight||1080;
+          if(info)info.textContent=`✅ Foto elegida: ${file.name} (${selectedOverwatchScreenshot.width}x${selectedOverwatchScreenshot.height} px) — Ahora elegí la fecha y tocá el botón 2 o 3.`;
+        };
+        probe.src=dataUrl;
+      }
+      if(info)info.textContent=`✅ Foto elegida: ${file.name} — Ahora elegí la fecha y tocá el botón 2 o 3.`;
+      if($('overwatchScreenshotStatusText'))$('overwatchScreenshotStatusText').textContent=`✅ Foto "${file.name}" cargada. Elegí la fecha y tocá "2. Registrar Captura" o "3. Descargar Mi Foto Parcheada".`;
+    };
+    reader.readAsDataURL(file);
+  }
+});
+if($('overwatchScreenshotDateSelect'))$('overwatchScreenshotDateSelect').addEventListener('change',e=>{
+  const val=e.target?.value;
+  const dateInput=$('overwatchCustomDateInput');
+  if(!dateInput)return;
+  if(val==='screenshots_beta_feb1_2011')dateInput.value='2011-02-01';
+  else if(val==='account_oct7_2003')dateInput.value='2003-10-07';
+  else if(val==='screenshots_day1_2011')dateInput.value='2011-02-24';
+  else if(val==='current')dateInput.value=new Date().toISOString().slice(0,10);
+});
+if($('overwatchCustomDateInput'))$('overwatchCustomDateInput').addEventListener('change',()=>{
+  const sel=$('overwatchScreenshotDateSelect');
+  if(sel)sel.value='custom';
+});
 if($('btnInjectUcmScreenshot'))$('btnInjectUcmScreenshot').addEventListener('click',()=>injectUcmScreenshotMotor4());
 if($('btnPatchWorkshopHex21'))$('btnPatchWorkshopHex21').addEventListener('click',()=>{
+  if(selectedOverwatchScreenshot.dataUrl){
+    submitWorkshopHex21Patch(selectedOverwatchScreenshot.dataUrl);
+    return;
+  }
   const fi=$('workshopHex21FileInput');
   if(fi&&typeof window.testUI==='undefined'&&fi.files&&fi.files.length===0){
     try{fi.click();}catch{}
@@ -3119,7 +3223,11 @@ if($('workshopHex21FileInput'))$('workshopHex21FileInput').addEventListener('cha
   if(!file){submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64);return;}
   if(typeof FileReader==='function'){
     const reader=new FileReader();
-    reader.onload=()=>submitWorkshopHex21Patch(String(reader.result||SAMPLE_1X1_PNG_BASE64));
+    reader.onload=()=>{
+      const dataUrl=String(reader.result||SAMPLE_1X1_PNG_BASE64);
+      selectedOverwatchScreenshot={name:file.name||'captura.png',dataUrl,width:1920,height:1080};
+      submitWorkshopHex21Patch(dataUrl);
+    };
     reader.readAsDataURL(file);
   }else{
     submitWorkshopHex21Patch(SAMPLE_1X1_PNG_BASE64);

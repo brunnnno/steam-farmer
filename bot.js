@@ -97,7 +97,27 @@ const BRAILLE_BLANK = '\u2800';
 const GABE_NEWELL_STEAMID64 = '76561197960287930';
 
 const BRUNO_ACCOUNT_OCT_7_2003_TIMESTAMP = 1065484800; // 7 de Octubre de 2003 00:00:00 UTC
-const STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP = 1298505600; // 24 de Febrero de 2011 00:00:00 UTC
+const STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP = 1296518400; // 1 de Febrero de 2011 00:00:00 UTC (Día 1 Beta de Capturas en Steam)
+const STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP = 1298505600; // 24 de Febrero de 2011 00:00:00 UTC (Salida Oficial v1.0)
+
+const RELIC_OFFICIAL_NAMES = {
+  7: 'Steam Client',
+  8: 'WinUI',
+  92: 'Codename: Gordon',
+  211: 'Source SDK',
+  340: 'Half-Life 2: Lost Coast',
+  480: 'Spacewar',
+  753: 'Steam',
+  760: 'Steam Screenshots',
+  761: 'Steam Cloud / Video',
+  766: 'Steam Workshop',
+  767: 'Steam Artwork',
+  250820: 'SteamVR',
+  353370: 'Steam Link',
+  353380: 'Steam Controller',
+  1059530: 'Valve Index VR Kit',
+  1675200: 'Steam Deck'
+};
 
 // Catálogo expandido con las 16 reliquias, hardware y subsistemas más exclusivos de Valve
 const HIDDEN_VALVE_RELIC_APPS = [
@@ -1133,15 +1153,61 @@ async function publishApp753RelicReviewServerSide({
  * MOTOR 4: INYECTOR BINARIO DE CAPTURAS (`EMsg 5514`) + ETIQUETA A GABE NEWELL
  * ============================================================================
  */
-function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_day1_2011', customTimestamp = null) {
+function extractImageDimensionsFromBase64(imagePayload = '') {
+  try {
+    const clean = String(imagePayload || '').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
+    if (!clean) return null;
+    const buf = Buffer.from(clean, 'base64');
+    if (buf.length < 24) return null;
+    // PNG signature
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+      const width = buf.readUInt32BE(16);
+      const height = buf.readUInt32BE(20);
+      if (width > 0 && height > 0) return { width, height, ext: 'png', byteLength: buf.length };
+    }
+    // JPEG SOF0/SOF2 scan
+    if (buf[0] === 0xff && buf[1] === 0xd8) {
+      let pos = 2;
+      while (pos + 9 < buf.length) {
+        if (buf[pos] !== 0xff) { pos++; continue; }
+        const marker = buf[pos + 1];
+        const len = buf.readUInt16BE(pos + 2);
+        if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+          const height = buf.readUInt16BE(pos + 5);
+          const width = buf.readUInt16BE(pos + 7);
+          if (width > 0 && height > 0) return { width, height, ext: 'jpg', byteLength: buf.length };
+        }
+        if (len < 2) break;
+        pos += 2 + len;
+      }
+      return { width: 1920, height: 1080, ext: 'jpg', byteLength: buf.length };
+    }
+  } catch {}
+  return null;
+}
+
+function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_beta_feb1_2011', customTimestamp = null) {
   if (customTimestamp !== null && customTimestamp !== undefined && String(customTimestamp).trim() !== '') {
-    const numeric = Number(customTimestamp);
-    if (Number.isFinite(numeric) && numeric > 0) return { timestamp: numeric >>> 0, label: `Timestamp personalizado (${numeric >>> 0})` };
-    const parsedMs = Date.parse(String(customTimestamp));
+    const raw = String(customTimestamp).trim();
+    if (/^\d+$/.test(raw)) {
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        const isoDate = new Date((numeric >>> 0) * 1000).toISOString().slice(0, 10);
+        return { timestamp: numeric >>> 0, label: `Fecha personalizada (${isoDate})` };
+      }
+    }
+    const parsedMs = Date.parse(raw.length === 10 ? `${raw}T12:00:00Z` : raw);
     if (Number.isFinite(parsedMs) && parsedMs > 0) {
       const ts = Math.floor(parsedMs / 1000) >>> 0;
-      return { timestamp: ts, label: `Fecha personalizada (${new Date(ts * 1000).toISOString().slice(0, 10)})` };
+      const isoDate = new Date(ts * 1000).toISOString().slice(0, 10);
+      return { timestamp: ts, label: `Fecha elegida por vos (${isoDate})` };
     }
+  }
+  if (datePreset === 'screenshots_beta_feb1_2011') {
+    return {
+      timestamp: STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
+      label: '01 de Febrero de 2011 (Día 1 Beta de Capturas en Steam)'
+    };
   }
   if (datePreset === 'account_oct7_2003') {
     return {
@@ -1156,9 +1222,15 @@ function resolveHistoricalScreenshotTimestamp(datePreset = 'screenshots_day1_201
       label: `Fecha actual (${new Date(nowSec * 1000).toISOString().slice(0, 10)})`
     };
   }
+  if (datePreset === 'screenshots_day1_2011') {
+    return {
+      timestamp: STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP,
+      label: '24 de Febrero de 2011 (Lanzamiento oficial Capturas v1.0)'
+    };
+  }
   return {
-    timestamp: STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP,
-    label: '24 de Febrero de 2011 (Día 1 del lanzamiento de Capturas en Steam)'
+    timestamp: STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
+    label: '01 de Febrero de 2011 (Día 1 Beta de Capturas en Steam)'
   };
 }
 
@@ -1166,7 +1238,7 @@ function encodeUcmAddScreenshotWire({
   appId = 753,
   filename = 'screenshots/relic_oct7_2003_node.jpg',
   thumbname = 'screenshots/thumbs/relic_oct7_2003_node.jpg',
-  rtime32Created = STEAM_SCREENSHOTS_DAY1_2011_TIMESTAMP,
+  rtime32Created = STEAM_SCREENSHOTS_BETA_FEB1_2011_TIMESTAMP,
   width = 1920,
   height = 1080,
   permissions = 2,
@@ -1197,12 +1269,12 @@ function encodeUcmAddScreenshotWire({
 
 function injectUcmScreenshotServerSide(client, options = {}) {
   if (!client || typeof client._send !== 'function') {
-    throw new Error('Tu cuenta de Steam no está conectada en este momento. Verificá que el estado arriba diga "Connected" antes de enviar el paquete binario EMsg 5514.');
+    throw new Error('Tu cuenta de Steam no está conectada en este momento. Verificá que el estado arriba diga "Connected" antes de enviar la captura.');
   }
 
   const appId = Number(options.appId) || 753;
   const { timestamp, label } = resolveHistoricalScreenshotTimestamp(
-    options.datePreset || 'screenshots_day1_2011',
+    options.datePreset || 'screenshots_beta_feb1_2011',
     options.customTimestamp
   );
   const taggedSteamIds = Array.isArray(options.taggedSteamIds) && options.taggedSteamIds.length
@@ -1211,16 +1283,24 @@ function injectUcmScreenshotServerSide(client, options = {}) {
   const caption = String(
     options.caption || '⚡ [CUENTA FUNDACIONAL: 07 OCT 2003] // ARCHIVO OFICIAL UCM'
   ).trim();
-  const filename = String(options.filename || 'screenshots/relic_oct7_2003_node.jpg').trim();
-  const thumbname = String(options.thumbname || 'screenshots/thumbs/relic_oct7_2003_node.jpg').trim();
+
+  const imgMeta = extractImageDimensionsFromBase64(options.imagePayload);
+  const cleanPhotoName = String(options.photoName || '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/^_+/, '') || `captura_${timestamp}.${imgMeta?.ext || 'jpg'}`;
+
+  const width = Number(options.width) || imgMeta?.width || 1920;
+  const height = Number(options.height) || imgMeta?.height || 1080;
+  const filename = String(options.filename || `screenshots/${cleanPhotoName}`).trim();
+  const thumbname = String(options.thumbname || `screenshots/thumbs/${cleanPhotoName}`).trim();
 
   const wireBuffer = encodeUcmAddScreenshotWire({
     appId,
     filename,
     thumbname,
     rtime32Created: timestamp,
-    width: Number(options.width) || 1920,
-    height: Number(options.height) || 1080,
+    width,
+    height,
     permissions: 2,
     caption,
     taggedSteamIds
@@ -1233,26 +1313,21 @@ function injectUcmScreenshotServerSide(client, options = {}) {
     success: true,
     emsg: emsgCode,
     appId,
+    photoName: cleanPhotoName,
+    width,
+    height,
     rtime32Created: timestamp,
     dateLabel: label,
     taggedSteamIds,
     caption,
     wireBytesLength: wireBuffer.length,
     wireHexPreview: wireBuffer.subarray(0, 32).toString('hex'),
-    message: `✅ Paquete binario CMsgClientUCMAddScreenshot (EMsg ${emsgCode}, ${wireBuffer.length} bytes en Wire-Protobuf) despachado al CM de Valve con fecha "${label}" y etiqueta a Gabe Newell (${taggedSteamIds.join(', ')}).`
+    message: `✅ Captura "${cleanPhotoName}" (${width}x${height} px, AppID ${appId}) registrada por EMsg ${emsgCode} con fecha "${label}" y etiqueta a Gabe Newell.`
   };
 }
 
-function escapeXml(str) {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
 const PRESETS = {
+  relics: { name: 'Valve Exclusivos (753, 7, 92, 766...)', games: [753, 7, 92, 766, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 480, 8, 760, 767, 761] },
   competitive: { name: 'Competitive', games: [730, 440, 570, 252490, 1172470, 578080] },
   valve: { name: 'Valve Classics', games: [10, 240, 220, 550, 620] },
   aaa: { name: 'AAA Hits', games: [271590, 1938090, 1091500, 292030, 379720] }
@@ -1748,6 +1823,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
   async function resolveNames(acc) {
     if(namePending.has(acc.id))return namePending.get(acc.id);
     const task=(async()=>{
+    for (const id of acc.games) { if (!acc.gameNames[id] && RELIC_OFFICIAL_NAMES[id]) { acc.gameNames[id] = RELIC_OFFICIAL_NAMES[id]; save(); } }
     for (const id of acc.games.filter(id => !acc.gameNames[id])) {
       if(closing||!cfg.accounts.includes(acc))break;
       try { const data = JSON.parse((await budget.run(()=>remote(`https://store.steampowered.com/api/appdetails?appids=${id}&filters=basic&l=english`,{maxBytes:128*1024}),'small')).body); if (data[id]?.success && cfg.accounts.includes(acc)&&acc.games.includes(id)&&typeof data[id].data.name==='string') { acc.gameNames[id] = data[id].data.name.slice(0,256); save(); } } catch {}
@@ -2822,18 +2898,60 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         }
       }
       // --- MOTOR 3: SERVER-SIDE SHOWCASE INJECTOR & APPID 753 REVIEW + CS2 WIDGETS + EXPLOIT #3 ---
+      if (url.pathname === '/api/overwatch2003/farm-relics' && req.method === 'POST') {
+        const acc = getAccount(req, url, data);
+        const { st, client } = ensureAccountServices(acc);
+        const allRelicIds = [753, 7, 92, 766, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 480, 8, 760, 767, 761];
+        const targetIds = data.mode === 'single' && Number(data.appId) > 0
+          ? [Number(data.appId)]
+          : (Array.isArray(data.appIds) && data.appIds.length ? data.appIds.map(Number).filter(n => n > 0) : allRelicIds);
+        acc.gameNames ||= {};
+        for (const gid of targetIds) {
+          if (RELIC_OFFICIAL_NAMES[gid]) acc.gameNames[gid] = RELIC_OFFICIAL_NAMES[gid];
+          else if (!acc.gameNames[gid]) acc.gameNames[gid] = `AppID ${gid}`;
+        }
+        acc.games = [...new Set([...targetIds, ...(acc.games || [])])].slice(0, 32);
+        acc.cardFarming = false;
+        acc.paused = false;
+        acc.ignoreSessionCollision = true;
+        st.isPaused = false;
+        st.isCollisionPaused = false;
+        if (client?.playingState) client.playingState.blocked = false;
+        save();
+        if (st.connected && client) {
+          claimFreeLicenses(client, targetIds).catch(() => {});
+        }
+        farming(acc, true);
+        const namesAdded = targetIds.map(id => `${id} (${acc.gameNames[id]})`).slice(0, 6).join(', ');
+        return json(res, 200, {
+          success: true,
+          farmedAppIds: targetIds,
+          totalGames: acc.games.length,
+          isFarming: st.isFarming,
+          message: `✅ ¡Farmeo de Horas Activado! Se agregaron a tu Biblioteca de Juegos y están acumulando horas en vivo: ${namesAdded}${targetIds.length > 6 ? ' y ' + (targetIds.length - 6) + ' más' : ''}.`
+        });
+      }
       if (url.pathname === '/api/overwatch2003/showcase-inject' && req.method === 'POST') {
         const acc = getAccount(req, url, data);
-        const { st } = ensureAccountServices(acc);
+        const { st, client } = ensureAccountServices(acc);
         const sid64 = st.steamId64 || acc.mySteamID || '';
         try {
           if (data.fillCollectorRelics) {
             const defaultRelics = Number(data.slotsCount) === 12
-              ? [753, 766, 92, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 480, 7]
+              ? [753, 766, 92, 1675200, 1059530, 353380, 353370, 250820, 340, 211, 220, 10]
               : [753, 766, 92, 1675200];
             const relicIds = Array.isArray(data.relicAppIds) && data.relicAppIds.length
               ? data.relicAppIds.map(Number)
               : defaultRelics;
+            // También agregarlos a la Biblioteca de Juegos para que acumulen horas
+            acc.gameNames ||= {};
+            for (const gid of relicIds) {
+              if (RELIC_OFFICIAL_NAMES[gid]) acc.gameNames[gid] = RELIC_OFFICIAL_NAMES[gid];
+            }
+            acc.games = [...new Set([...relicIds, ...(acc.games || [])])].slice(0, 32);
+            st.isPaused = false; acc.paused = false; st.isCollisionPaused = false; acc.ignoreSessionCollision = true;
+            save();
+            farming(acc, true);
             const resData = await fillCollectorShowcaseWithRelics({
               steamId64: sid64,
               cookieString: st.webCookies,
@@ -2843,6 +2961,16 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             });
             return json(res, 200, resData);
           }
+          const targetAppId = Number(data.appId) || 753;
+          // Agregar automáticamente a la Biblioteca de Juegos y activar farmeo de horas
+          acc.gameNames ||= {};
+          if (RELIC_OFFICIAL_NAMES[targetAppId]) acc.gameNames[targetAppId] = RELIC_OFFICIAL_NAMES[targetAppId];
+          if (!acc.games.includes(targetAppId)) {
+            acc.games = [targetAppId, ...(acc.games || [])].slice(0, 32);
+          }
+          st.isPaused = false; acc.paused = false; st.isCollisionPaused = false; acc.ignoreSessionCollision = true;
+          save();
+          farming(acc, true);
           const resData = await setProfileShowcaseSlotServerSide({
             steamId64: sid64,
             cookieString: st.webCookies,
@@ -2850,7 +2978,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             purchaseId: data.purchaseId || 0,
             targetInstance: data.targetInstance || 'second',
             slotIndex: Number(data.slotIndex) || 0,
-            appId: Number(data.appId) || 753
+            appId: targetAppId
           });
           return json(res, 200, resData);
         } catch (err) {
@@ -2878,9 +3006,14 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           acc.games.unshift(753);
           acc.gameNames ||= {};
           acc.gameNames[753] = 'Steam';
-          save();
         }
+        acc.paused = false;
+        acc.ignoreSessionCollision = true;
+        st.isPaused = false;
+        st.isCollisionPaused = false;
+        if (client?.playingState) client.playingState.blocked = false;
         st.inspectingAppId = 753;
+        save();
         farming(acc, true);
         let privacyResult = null;
         if (data.lockInventory !== false && st.webCookies && sid64) {
@@ -2891,9 +3024,11 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         return json(res, 200, {
           success: true,
           appId: 753,
-          farmingActive: Boolean(client && st.connected),
+          farmingActive: true,
           privacyResult,
-          message: '✅ Paso 1 activo: Tu cuenta ya está farmeando AppID 753 (Steam) en prioridad #1 y tu inventario de CS2 quedó oculto en Privado (Perfil Público). Si querés publicar la reseña YA MISMO sin esperar 5 minutos, elegí "AppID 730 (CS2)" o "AppID 10 (CS 1.6)" en el selector y tocá el botón 2.'
+          message: privacyResult?.success
+            ? '✅ Inventario CS2 puesto en Privado (con perfil Público) y AppID 753 (Steam) farmeando horas en vivo.'
+            : '✅ AppID 753 (Steam) activado y farmeando horas en vivo en tu Biblioteca de Juegos.'
         });
       }
       if (url.pathname === '/api/overwatch2003/publish-review-widgets' && req.method === 'POST') {
@@ -2907,8 +3042,8 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             appId: Number(data.appId) || 753,
             comment: data.comment,
             lockInventoryFirst: data.lockInventoryFirst !== false,
-            customExternalUrl: data.customExternalUrl,
-            customExternalLabel: data.customExternalLabel
+            customExternalUrl: data.customExternalUrl || 'https://github.com/brunnnno/steam-farmer',
+            customExternalLabel: data.customExternalLabel || '⚡ Proyecto Oficial de Ingeniería Inversa'
           });
           return json(res, 200, resData);
         } catch (err) {
@@ -2916,31 +3051,37 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         }
       }
       if (url.pathname === '/api/overwatch2003/exploit3-links' && req.method === 'POST') {
-        const acc = cfg.accounts.length ? getAccount(req, url, data) : null;
+        const acc = data.accountId === 'demo' || !cfg.accounts.length ? null : getAccount(req, url, data);
         const st = acc ? stateFor(acc.id) : null;
-        const sid64 = st?.steamId64 || acc?.mySteamID || data.steamId64 || '76561197960265728';
-        const bundle = buildApp753RelicReviewBbcode({
+        const sid64 = st?.steamId64 || acc?.mySteamID || '76561197960265728';
+        const targetUrl = String(data.targetUrl || 'https://github.com/brunnnno/steam-farmer').trim();
+        const label = String(data.label || '⚡ Proyecto Oficial de Ingeniería Inversa').trim();
+        const generated = buildApp753RelicReviewBbcode({
           steamId64: sid64,
           accountCreatedDate: '07 Oct 2003',
-          customExternalUrl: data.targetUrl || 'https://github.com/brunnnno/steam-farmer',
-          customExternalLabel: data.labelText || '⚡ Repositorio Oficial Verificado (Sin Cartel de Dominio)'
+          customExternalUrl: targetUrl,
+          customExternalLabel: label
         });
         return json(res, 200, {
           success: true,
-          ...bundle,
-          message: 'Bloque BBCode con Exploit #3 (steamcommunity.com:/linkfilter/), tabla [table] (07 Oct 2003) y Widgets CS2 (#730_2_) generado.'
+          ...generated,
+          message: '✅ Links 3D de CS2 y BBCode generados y copiados.'
         });
       }
-      // --- MOTOR 4: UCM SCREENSHOT INJECTOR (EMSG 5514 + GABE NEWELL TAG) ---
+      // --- MOTOR 4: UCM SCREENSHOT INJECTOR (EMSG 5514 + GABE NEWELL TAG + CUSTOM PHOTO & DATE) ---
       if (url.pathname === '/api/overwatch2003/inject-screenshot' && req.method === 'POST') {
         const acc = getAccount(req, url, data);
         const { client } = ensureAccountServices(acc);
         try {
           const resData = injectUcmScreenshotServerSide(client, {
             appId: Number(data.appId) || 753,
-            datePreset: data.datePreset || 'screenshots_day1_2011',
+            datePreset: data.datePreset || 'screenshots_beta_feb1_2011',
             customTimestamp: data.customTimestamp,
             caption: data.caption,
+            photoName: data.photoName,
+            imagePayload: data.imagePayload,
+            width: data.width,
+            height: data.height,
             filename: data.filename,
             thumbname: data.thumbname
           });

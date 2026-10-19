@@ -555,44 +555,48 @@
         <summary class="cards-panel-heading">
           <div>
             <span class="eyebrow" data-i18n="overwatch2003Eyebrow">MOTORES 1, 3 Y 4 · CUENTA FUNDACIONAL 07 OCT 2003 (CERO F12)</span>
-            <h3><span data-i18n="overwatch2003PanelTitle">Suite Overwatch 2003: Vitrinas Server-Side (#1 y #2), Vitrina Visual CS2 3D y Capturas EMsg 5514</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+            <h3><span data-i18n="overwatch2003PanelTitle">Suite Overwatch 2003: Farmeo de Exclusivos (753/7/92), Vitrinas (#1 y #2), Vitrina CS2 3D y Capturas con Foto/Fecha Libre</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
           </div>
           <span class="cards-summary" data-i18n="overwatch2003SummaryBadge">Motores 1 · 3 · 4 activos</span>
         </summary>
         <div class="task-center-grid" style="margin-top:10px;">
-          <!-- Motor 3A: Server-Side Showcase Mutator (1st & 2nd Favorite Game + 1st & 2nd Game Collector + Slot 1..12) -->
+          <!-- Motor 3A: Server-Side Showcase Mutator + Exclusive Relics Hours Farmer -->
           <div class="task-center-box status-blue">
-            <span class="eyebrow">🏛️ MOTOR 3A · JUEGO FAVORITO (#1 Y #2) + COLECCIONISTA DE JUEGOS (#1 Y #2) + SLOTS #1 A #12</span>
-            <p id="overwatchShowcaseStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchShowcaseDesc">Inyecta AppIDs restringidos de Valve (753 Steam, 766 Workshop, 92 Codename: Gordon, 1675200 Steam Deck) en tu 1ra o 2da vitrina directo desde el servidor.</p>
+            <span class="eyebrow">🏛️ MOTOR 3A · FARMEAR HORAS EN EXCLUSIVOS (753, 7, 92, 766...) + VITRINAS (#1 Y #2)</span>
+            <p id="overwatchShowcaseStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchShowcaseDesc">Agrega y farmea horas reales en Steam (753), Steam Client (7), Codename: Gordon (92), Workshop (766) o Steam Deck (1675200) e inyéctalos en tus vitrinas #1 y #2.</p>
             <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
-              <strong>Cómo modificar tu 2da Colección de Juegos o tu 2do Juego Favorito (sin íconos rotos):</strong><br>
-              🔹 <strong>¿Por qué <code>AppID 7 (Steam Client)</code> se ve con ícono roto?</strong> Porque Valve nunca subió un banner de tienda para el ejecutable <code>AppID 7</code>. Si querés que <strong>todos los casilleros tengan imagen oficial</strong>, usá cualquiera de los marcados con <strong>✅ CON IMAGEN</strong> (<code>753 Steam</code>, <code>766 Workshop</code>, <code>92 Codename: Gordon</code>, <code>1675200 Steam Deck</code>, <code>1059530 Valve Index</code>, <code>353380 Steam Controller</code>, <code>353370 Steam Link</code>).<br>
-              🔹 <strong>Para llenar o cambiar tu 2da Colección de Juegos:</strong> Elegí <strong>Vitrina #2 (2da Colección / 2do Favorito)</strong> o <strong>¡En AMBAS Vitrinas (#1 y #2)!</strong> y tocá <strong>Llenar 4 Slots (Con Imagen)</strong>, <strong>Llenar los 12 Slots</strong>, o elegí un <strong>Slot (#1 a #12)</strong> puntual y tocá <strong>Inyectar Slot en Vitrina</strong>.
+              <strong>Cómo farmear horas en <code>753 (Steam)</code>, <code>7 (Steam Client)</code> y todos los exclusivos para que salgan con horas en Juego Favorito:</strong><br>
+              🔹 Tocá <strong>🔥 Agregar y Farmear TODOS los Exclusivos (16 Reliquias)</strong> (o <strong>⏱️ Farmear Este AppID Elegido</strong>): aparecen al instante abajo en tu <strong>Biblioteca de juegos</strong> en estado <strong>Running in Steam</strong> (quitando el modo <em>Standby</em>) y empiezan a sumar horas para tu vitrina de <em>Juego Favorito</em>.<br>
+              🔹 Para ponerlos en tu <strong>1er o 2do Juego Favorito</strong> o en tu <strong>1ra o 2da Colección de Juegos</strong>, elegí abajo <strong>Vitrina #2</strong>, <strong>Vitrina #1</strong> o <strong>¡En AMBAS Vitrinas!</strong> y tocá <strong>Inyectar Slot</strong> o <strong>Llenar 4 / 12 Slots</strong>.
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchShowcaseAppSelect" style="padding:6px 8px; font-size:0.8rem; max-width:100%;">
-                <optgroup label="✅ CON IMAGEN OFICIAL — Reliquias y Subsistemas de Valve (Se ven con su Banner)">
-                  <option value="92">✅ AppID 92 — Codename: Gordon (Reliquia Flash 2004 Retirada — Con Imagen)</option>
+                <optgroup label="✅ CON IMAGEN OFICIAL — Reliquias y Subsistemas de Valve (Con Banner)">
                   <option value="753">✅ AppID 753 — Steam (Cliente / Ecosistema Oficial Valve — Con Imagen)</option>
+                  <option value="92">✅ AppID 92 — Codename: Gordon (Reliquia Flash 2004 Retirada — Con Imagen)</option>
                   <option value="766">✅ AppID 766 — Steam Workshop (Subsistema Interno — Con Imagen)</option>
                   <option value="1675200">✅ AppID 1675200 — Steam Deck (Consola Hardware Oficial — Con Imagen)</option>
-                  <option value="1059530">✅ AppID 1059530 — Valve Index VR Kit (,000 Hardware — Con Imagen)</option>
+                  <option value="1059530">✅ AppID 1059530 — Valve Index VR Kit ($1,000 Hardware — Con Imagen)</option>
                   <option value="353380">✅ AppID 353380 — Steam Controller (Hardware Retirado 2015 — Con Imagen)</option>
                   <option value="353370">✅ AppID 353370 — Steam Link (Hardware Retirado 2015 — Con Imagen)</option>
                   <option value="250820">✅ AppID 250820 — SteamVR (Subsistema Hardware VR — Con Imagen)</option>
                   <option value="340">✅ AppID 340 — Half-Life 2: Lost Coast (Tech Demo 2005 — Con Imagen)</option>
                   <option value="211">✅ AppID 211 — Source SDK (Ingeniería Source 2004 — Con Imagen)</option>
                 </optgroup>
-                <optgroup label="⚠️ SIN IMAGEN EN CDN — Reliquias de Texto / Ícono Roto (Solo Curiosidad Técnica)">
-                  <option value="7">⚠️ AppID 7 — Steam Client (Núcleo 2003 — Muestra ícono roto sin banner)</option>
-                  <option value="8">⚠️ AppID 8 — WinUI (Interfaz Octubre 2003 — Muestra ícono roto sin banner)</option>
-                  <option value="480">⚠️ AppID 480 — Spacewar (App Secreta Steamworks SDK)</option>
-                  <option value="760">⚠️ AppID 760 — Steam Screenshots (Subsistema UCM)</option>
-                  <option value="767">⚠️ AppID 767 — Steam Artwork (Subsistema Obras de Arte)</option>
-                  <option value="761">⚠️ AppID 761 — Steam Cloud / Video (Subsistema Interno)</option>
+                <optgroup label="⚙️ RELIQUIAS DE NÚCLEO 2003 — Farmeables con Horas (Sin Banner en Tienda)">
+                  <option value="7">⚙️ AppID 7 — Steam Client (Núcleo Ejecutable 2003 — Farmeable con Horas)</option>
+                  <option value="8">⚙️ AppID 8 — WinUI (Interfaz Octubre 2003 — Farmeable con Horas)</option>
+                  <option value="480">⚙️ AppID 480 — Spacewar (App Secreta Steamworks SDK)</option>
+                  <option value="760">⚙️ AppID 760 — Steam Screenshots (Subsistema UCM)</option>
+                  <option value="767">⚙️ AppID 767 — Steam Artwork (Subsistema Obras de Arte)</option>
+                  <option value="761">⚙️ AppID 761 — Steam Cloud / Video (Subsistema Interno)</option>
                 </optgroup>
               </select>
-              <input id="overwatchCustomAppIdInput" type="number" placeholder="O escribí otro AppID..." style="width:150px; padding:6px 8px; font-size:0.8rem;">
+              <input id="overwatchCustomAppIdInput" type="number" placeholder="O escribí otro AppID..." style="width:145px; padding:6px 8px; font-size:0.8rem;">
+              <button id="btnFarmSingleRelic" type="button" class="btn-main sam-quick-btn">⏱️ Farmear Este AppID Elegido</button>
+              <button id="btnFarmAllRelics" type="button" class="btn-purple sam-quick-btn">🔥 Agregar y Farmear TODOS los Exclusivos (753, 7, 92, 766...)</button>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchShowcaseTypeSelect" style="padding:6px 8px; font-size:0.8rem;">
                 <option value="6">Juego Favorito (Tipo 6)</option>
                 <option value="2">Coleccionista de Juegos (Tipo 2)</option>
@@ -628,11 +632,10 @@
             <span class="eyebrow">🔫 MOTOR 3B · VITRINA VISUAL DE INVENTARIO CS2 (LOS 7 CUADRADOS + ARMA 3D GIGANTE — SIN TEXTOS)</span>
             <p id="overwatchReviewStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchReviewDesc">Genera la vitrina gráfica idéntica al Expositor de Objetos de Steam con los 7 cuadrados de inventario arriba + el arma 3D gigante destacada abajo (lista para subir a Artwork/Capturas).</p>
             <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.5; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
-              <strong>Por qué en las reseñas solo salía texto y cómo poner los cuadrados + el arma 3D real:</strong><br>
-              🔹 Steam bloquea todas las imágenes y cajas gráficas dentro de las reseñas de texto. Para que en tu perfil se vean <strong>los 7 cuadrados de inventario con bordes de color + el arma 3D gigante abajo</strong> (sin tener las skins en tu cuenta):<br>
-              <strong>Paso 1:</strong> Tocá <strong>1. Ocultar Mi Inventario CS2</strong> (deja tu perfil Público pero tu inventario en Privado para que nadie vea que tenés 0 skins).<br>
-              <strong>Paso 2:</strong> Elegí qué arma querés destacar en 3D gigante abajo (ej. <em>Karambit Blue Gem #387</em> o <em>Souvenir AWP Dragon Lore</em>), tocá <strong>2. Generar Vitrina Visual 3D</strong> para verla acá mismo y luego <strong>3. Descargar PNG HD Parcheado</strong>.<br>
-              <strong>Paso 3:</strong> Subí ese PNG en <a href="https://steamcommunity.com/sharedfiles/edititem/767/3/" target="_blank" rel="noopener noreferrer" style="color:#66c0f4;">Subir Artwork de Steam</a> y ponelo en tu <strong>Expositor de Artwork Destacado</strong>: ¡queda idéntico a un inventario de 00,000 USD!
+              <strong>Cómo poner los 7 cuadrados de inventario + el arma 3D gigante sin textos:</strong><br>
+              <strong>Paso 1:</strong> Tocá <strong>1. Ocultar Mi Inventario CS2</strong> (deja tu perfil Público pero tu inventario en Privado).<br>
+              <strong>Paso 2:</strong> Elegí qué arma destacar en 3D gigante abajo, tocá <strong>🎨 2. Generar Vitrina Visual (Cuadrados + Arma 3D)</strong> y luego <strong>⬇️ 3. Descargar PNG HD Parcheado</strong>.<br>
+              <strong>Paso 3:</strong> Subí ese PNG en <a href="https://steamcommunity.com/sharedfiles/edititem/767/3/" target="_blank" rel="noopener noreferrer" style="color:#66c0f4;">Subir Artwork de Steam</a> y ponelo en tu <strong>Expositor de Artwork Destacado</strong>.
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
               <select id="overwatchFeaturedSkinSelect" style="padding:6px 8px; font-size:0.8rem;">
@@ -654,28 +657,50 @@
               <div style="font-size:0.72rem; color:#8f98a0; margin-bottom:6px;">Vista previa en vivo de tu Vitrina Visual CS2 (7 Cuadrados de Inventario + Inspección 3D Gigante):</div>
               <img id="overwatchCs2VisualPreview" alt="Vista Previa Vitrina CS2 3D" style="max-width:100%; height:auto; border-radius:4px; border:1px solid #263345; display:none;">
             </div>
-            <textarea id="overwatchBbcodeOutput" readonly rows="3" style="width:100%; margin-top:8px; font-family:monospace; font-size:0.72rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.35); color:#d1d5db; border:1px solid rgba(255,255,255,0.12);">[url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611][b]🔍 Abrir ★ Karambit | Case Hardened (#387 Blue Gem) en 3D dentro de CS2[/b][/url]
-[url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198023512965A28761239912D9244972541062093545][b]🔍 Abrir Souvenir AWP | Dragon Lore (4x Katowice 2014 Holo) en 3D dentro de CS2[/b][/url]</textarea>
+            <textarea id="overwatchBbcodeOutput" readonly rows="2" style="width:100%; margin-top:8px; font-family:monospace; font-size:0.72rem; padding:6px; border-radius:6px; background:rgba(0,0,0,0.35); color:#d1d5db; border:1px solid rgba(255,255,255,0.12);">[url=steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611][b]🔍 Abrir ★ Karambit | Case Hardened (#387 Blue Gem) en 3D dentro de CS2[/b][/url]</textarea>
           </div>
 
-          <!-- Motor 4: UCM Screenshot EMsg 5514 + Gabe Newell Tag + 0x21 Patch -->
+          <!-- Motor 4: Simple 1-2-3 Custom Photo + Custom Date Screenshot Uploader (01 Feb 2011 Beta / 07 Oct 2003 / Any Date) -->
           <div class="task-center-box status-green">
-            <span class="eyebrow">📸 MOTOR 4 · CAPTURAS BINARIAS EMSG 5514 (GABE NEWELL TAG) + BYTE 0x21</span>
-            <p id="overwatchScreenshotStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchScreenshotDesc">Envía CMsgClientUCMAddScreenshot (EMsg 5514) en Wire-Protobuf etiquetando a Gabe Newell con fecha del Día 1 de Capturas (24 Feb 2011) o de tu cuenta (07 Oct 2003).</p>
-            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.45; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
-              <strong>Cómo usar las 2 herramientas del Motor 4:</strong><br>
-              🔹 <strong>Inyector Binario EMsg 5514:</strong> Elegí la fecha (<code>24 Feb 2011</code> Día 1 en que existieron las capturas en Steam o <code>07 Oct 2003</code> cumpleaños de tu cuenta) y tocá <strong>Inyectar Captura EMsg 5514 + Gabe Newell</strong>.<br>
-              🔹 <strong>Parche Byte <code>0x21</code> (Workshop 5 Columnas):</strong> Tocá <strong>Parchear Byte 0x21 (Workshop)</strong>, elegí cualquier GIF o PNG de tu PC y se descargará parcheado con el último byte en <code>0x21</code> listo para subir en <code>steamcommunity.com/sharedfiles/edititem/767/3/</code>.
+            <span class="eyebrow">📸 MOTOR 4 · SUBIR LA FOTO QUE VOS QUIERAS CON LA FECHA QUE VOS ELIJAS (BETA 01 FEB 2011 / 07 OCT 2003 / CALENDARIO LIBRE)</span>
+            <p id="overwatchScreenshotStatusText" class="task-center-body" style="margin:6px 0;" data-i18n="overwatchScreenshotDesc">Elegí cualquier foto de tu PC, elegí la fecha exacta que quieras (1 de Febrero de 2011 Beta, 7 de Octubre de 2003 o cualquier día del calendario) e inyectala con etiqueta a Gabe Newell.</p>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin:6px 0; line-height:1.5; background:rgba(0,0,0,0.22); padding:8px; border-radius:6px;">
+              <strong>Pasos súper simples para subir la foto que quieras con la fecha a elección:</strong><br>
+              <strong>Paso 1:</strong> Tocá <strong>📷 1. Elegir Foto de mi PC</strong> y seleccioná la imagen (<code>.jpg</code> o <code>.png</code>) que querés usar (abajo vas a ver la miniatura de tu foto).<br>
+              <strong>Paso 2:</strong> Elegí la fecha en el desplegable (ej. <strong>01 Feb 2011 — Día 1 Beta de Capturas</strong> o <strong>07 Oct 2003 — Creación de tu Cuenta</strong>) o tocá el <strong>Calendario Libre</strong> para poner el día, mes y año exacto que vos quieras.<br>
+              <strong>Paso 3:</strong> Tocá <strong>🚀 2. Registrar Captura con Fecha Elegida + Gabe Newell</strong> (envía el paquete binario <code>EMsg 5514</code> con los datos de tu foto y tu fecha). Y si querés subir el archivo visual ancho a tu vitrina, tocá <strong>⬇️ 3. Descargar Mi Foto Parcheada (0x21)</strong> y subila en <a href="https://steamcommunity.com/sharedfiles/edititem/767/3/" target="_blank" rel="noopener noreferrer" style="color:#66c0f4;">Subir Captura/Artwork de Steam</a>.
             </div>
-            <input type="file" id="workshopHex21FileInput" accept="image/gif,image/png" style="display:none;">
+            <input type="file" id="overwatchScreenshotFileInput" accept="image/jpeg,image/png,image/gif" style="display:none;">
+            <input type="file" id="workshopHex21FileInput" accept="image/gif,image/png,image/jpeg" style="display:none;">
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-              <select id="overwatchScreenshotDateSelect" style="padding:6px 8px; font-size:0.8rem;">
-                <option value="screenshots_day1_2011">24 Feb 2011 (Día 1 Capturas Steam)</option>
-                <option value="account_oct7_2003">07 Oct 2003 (Creación de tu Cuenta)</option>
-                <option value="current">Fecha Actual</option>
+              <button id="btnChooseScreenshotPhoto" type="button" class="btn-action-sm sam-quick-btn">📷 1. Elegir Foto de mi PC</button>
+              <select id="overwatchScreenshotAppSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="753">Juego de la captura: 753 — Steam</option>
+                <option value="7">Juego de la captura: 7 — Steam Client (2003)</option>
+                <option value="92">Juego de la captura: 92 — Codename: Gordon</option>
+                <option value="766">Juego de la captura: 766 — Steam Workshop</option>
+                <option value="730">Juego de la captura: 730 — Counter-Strike 2</option>
+                <option value="10">Juego de la captura: 10 — Counter-Strike 1.6</option>
+                <option value="1675200">Juego de la captura: 1675200 — Steam Deck</option>
               </select>
-              <button id="btnInjectUcmScreenshot" type="button" class="btn-main sam-quick-btn" data-i18n="injectUcmScreenshotBtn">Inyectar Captura EMsg 5514 + Gabe Newell</button>
-              <button id="btnPatchWorkshopHex21" type="button" class="btn-action-sm sam-quick-btn" data-i18n="patchWorkshopHex21Btn">Parchear Byte 0x21 (Workshop)</button>
+              <select id="overwatchScreenshotDateSelect" style="padding:6px 8px; font-size:0.8rem;">
+                <option value="screenshots_beta_feb1_2011">01 Feb 2011 (Día 1 Beta de Capturas Steam)</option>
+                <option value="account_oct7_2003">07 Oct 2003 (Creación de tu Cuenta)</option>
+                <option value="screenshots_day1_2011">24 Feb 2011 (Salida Oficial Capturas v1.0)</option>
+                <option value="custom">📅 Usar Fecha Exacta del Calendario →</option>
+                <option value="current">Fecha Actual (Hoy)</option>
+              </select>
+              <input id="overwatchCustomDateInput" type="date" value="2011-02-01" title="Elegí cualquier fecha exacta que quieras" style="padding:5px 8px; font-size:0.8rem; border-radius:6px; background:rgba(0,0,0,0.35); color:#fff; border:1px solid rgba(255,255,255,0.18);">
+              <input id="overwatchScreenshotCaptionInput" type="text" placeholder="Título/descripción de tu captura (opcional)..." style="width:210px; padding:6px 8px; font-size:0.8rem;">
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+              <button id="btnInjectUcmScreenshot" type="button" class="btn-main sam-quick-btn" data-i18n="injectUcmScreenshotBtn">🚀 2. Registrar Captura con Fecha Elegida + Gabe Newell</button>
+              <button id="btnPatchWorkshopHex21" type="button" class="btn-purple sam-quick-btn" data-i18n="patchWorkshopHex21Btn">⬇️ 3. Descargar Mi Foto Parcheada (0x21)</button>
+              <a href="https://steamcommunity.com/sharedfiles/edititem/767/3/" target="_blank" rel="noopener noreferrer" class="btn-action-sm sam-quick-btn" style="text-decoration:none; display:inline-flex; align-items:center;">🌐 Abrir Subidor de Steam</a>
+            </div>
+            <div id="overwatchSelectedPhotoPreviewBox" style="margin-top:8px; display:none; align-items:center; gap:10px; background:rgba(0,0,0,0.28); padding:8px; border-radius:6px; border:1px solid rgba(74,222,128,0.35);">
+              <img id="overwatchScreenshotPreviewImg" alt="Tu foto elegida" style="width:88px; height:52px; object-fit:cover; border-radius:4px; border:1px solid rgba(255,255,255,0.2);">
+              <div id="overwatchSelectedPhotoInfo" style="font-size:0.75rem; color:#a7f3d0;">Foto lista para inyectar.</div>
             </div>
           </div>
         </div>
