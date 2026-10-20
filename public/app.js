@@ -2871,7 +2871,7 @@ async function runPioneerExploitMotor5() {
     badgeId = 0;
   }
 
-  if (!["animated_gif_screenshot", "create_impossible_guide_202352", "wishlist_impossible_valve_apps"].includes(exploitType) && !activeAccountId) {
+  if (!["animated_gif_screenshot", "create_impossible_guide_202352", "wishlist_impossible_valve_apps", "steam_chat_special_fx_injector", "profile_comment_wall_graffiti", "profile_comment_invisible_tower"].includes(exploitType) && !activeAccountId) {
     notice(t("liveActionNotice"));
     openAddAccModal();
     return;

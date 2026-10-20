@@ -4230,7 +4230,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       // --- MOTOR 5: PIONEER EXPLOITS LAB + ANCIENT & BETA BADGES UNLOCKER ---
       if (url.pathname === '/api/overwatch2003/pioneer-exploit' && req.method === 'POST') {
         try {
-          const isAnimatedOnly = ['animated_gif_screenshot', 'create_impossible_guide_202352', 'wishlist_impossible_valve_apps'].includes(data.exploitType);
+          const isAnimatedOnly = ['animated_gif_screenshot', 'create_impossible_guide_202352', 'wishlist_impossible_valve_apps', 'steam_chat_special_fx_injector', 'profile_comment_wall_graffiti', 'profile_comment_invisible_tower', 'start_autonomous_comment_guardian', 'stop_live_2003_daemons'].includes(data.exploitType);
           const acc = (isAnimatedOnly && (data.accountId === 'demo' || !cfg.accounts.length))
             ? null
             : getAccount(req, url, data);
