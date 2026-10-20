@@ -1506,9 +1506,15 @@ function downloadShowcaseCard() {
 function renderGames(games) {
   if ($('gamesGrid')) $('gamesGrid').classList.toggle('list-view', libraryViewMode === 'list');
   const runningSet=new Set(active?.isFarming?(active.runningGames||[]):[]);
-  const snapshot=JSON.stringify([activeAccountId,games,active.gameNames,[...runningSet],Boolean(active?.isPaused)]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
+  const cardDropMap=new Map((active?.cardDropGames||[]).filter(g=>g&&g.remaining>0).map(g=>[Number(g.appid),g]));
+  const cardPriorityActive=Boolean(active?.cardFarming&&cardDropMap.size>0);
+  // Si Farmear Cromos está activo, mostrar primero en la grilla los juegos con cromos que se están farmeando y debajo los manuales en pausa
+  const mergedDisplayGames=cardPriorityActive
+    ?[...new Set([...cardDropMap.keys(),...(games||[])])]
+    :(games||[]);
+  const snapshot=JSON.stringify([activeAccountId,mergedDisplayGames,active.gameNames,[...runningSet],Boolean(active?.isPaused),cardPriorityActive,[...cardDropMap.entries()]]);if(snapshot===gamesSnapshot)return;gamesSnapshot=snapshot;
   const grid = $('gamesGrid');
-  if (!games.length) {
+  if (!mergedDisplayGames.length) {
     const box = element('div', undefined, 'empty-onboarding-card');
     box.append(
       element('p', 'Add up to 32 games by title or AppID (you can paste multiple AppIDs separated by commas), or load your owned Steam library automatically.'),
@@ -1518,16 +1524,18 @@ function renderGames(games) {
     return;
   }
   const cards = [];
-  for (const id of games) {
+  for (const id of mergedDisplayGames) {
     const isRunning=runningSet.has(id);
-    const title = active.gameNames[id] || `AppID ${id}`; const card = element('div',undefined,'card'+(isRunning?' card-running':''));
+    const dropInfo = cardDropMap.get(Number(id));
+    const title = dropInfo?.name || active.gameNames[id] || `AppID ${id}`; const card = element('div',undefined,'card'+(isRunning?' card-running':''));
     const art=element('div',undefined,'game-art'),fallback=element('div',undefined,'game-art-placeholder');fallback.setAttribute('aria-hidden','true');
     fallback.append(element('span',title.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(),'game-art-monogram'),element('span',title,'game-art-name'));
     const banner=image(`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`,'card-banner',[`https://cdn.akamai.steamstatic.com/steam/apps/${id}/header.jpg`,`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/library_hero.jpg`]);
     art.append(fallback,banner,element('div',`#${id}`,'card-appid'));card.append(art);
     const content = element('div',undefined,'card-content');
     const metaRow=element('div',undefined,'card-header-info');
-    metaRow.append(element('span',isRunning?'Running in Steam':active?.isPaused?'Standby':'Ready','card-state'+(isRunning?' active':'')));
+    const stateLabel = isRunning ? (dropInfo ? `🃏 Farmeando Cromos (${dropInfo.remaining} restantes)` : 'Running in Steam') : active?.isPaused ? 'Standby' : cardPriorityActive ? '⏸️ En pausa (Prioridad Cromos)' : 'Ready';
+    metaRow.append(element('span',stateLabel,'card-state'+(isRunning?' active':'')));
     content.append(element('div',title,'card-title'),metaRow,createExternalBadgesNode(id));
     const actions = element('div',undefined,'card-actions');
     const menu=element('details',undefined,'control-menu');
@@ -2698,11 +2706,7 @@ async function saveCustomScreenshotAppId(showFeedback = true) {
     const next = [...new Set([parsedId, ...(Array.isArray(prev) ? prev : []).map(Number)])].slice(0, 30);
     localStorage.setItem("sf_custom_screenshot_apps", JSON.stringify(next));
   } catch {}
-  if (activeAccountId && showFeedback) {
-    api("/api/add", { accountId: activeAccountId, appid: parsedId, allowRotate: true }).then(() => {
-      if (typeof refresh === "function") refresh().catch(() => {});
-    }).catch(() => {});
-  }
+  // No agregar el juego de la captura a la lista de farmeo (solo guardarlo en el selector de capturas)
   if ($("overwatchScreenshotStatusText") && showFeedback) {
     $("overwatchScreenshotStatusText").textContent = `✅ Juego AppID ${parsedId} guardado y seleccionado en la lista. Ahora elegí tu foto y tocá el botón verde para subir la captura bajo el AppID ${parsedId}.`;
   }
@@ -2832,8 +2836,11 @@ async function injectUcmScreenshotMotor4(actionMode = "inject") {
   const tagPreset = $("overwatchScreenshotTagPresetSelect")?.value || "gabe";
   const customTaggedInput = ($("overwatchScreenshotCustomTagInput")?.value || "").trim();
   const caption = ($("overwatchScreenshotCaptionInput")?.value || "").trim();
+  if (selectedOverwatchScreenshot.readyPromise) {
+    try { await selectedOverwatchScreenshot.readyPromise; } catch {}
+  }
   const payloadToSend = selectedOverwatchScreenshot.jpgDataUrl || selectedOverwatchScreenshot.dataUrl || undefined;
-  const thumbPayloadToSend = selectedOverwatchScreenshot.thumbJpgDataUrl || undefined;
+  const thumbPayloadToSend = selectedOverwatchScreenshot.thumbJpgDataUrl || payloadToSend || undefined;
   try {
     const res = await api("/api/overwatch2003/inject-screenshot", {
       accountId: activeAccountId,
@@ -3222,7 +3229,9 @@ if($('overwatchScreenshotFileInput'))$('overwatchScreenshotFileInput').addEventL
     const reader=new FileReader();
     reader.onload=()=>{
       const dataUrl=String(reader.result||'');
-      selectedOverwatchScreenshot={name:file.name||'captura.jpg',dataUrl,jpgDataUrl:dataUrl,width:1920,height:1080};
+      let resolveReady;
+      const readyPromise=new Promise(r=>{resolveReady=r;});
+      selectedOverwatchScreenshot={name:file.name||'captura.jpg',dataUrl,jpgDataUrl:dataUrl,thumbJpgDataUrl:dataUrl,width:1920,height:1080,readyPromise};
       const box=$('overwatchSelectedPhotoPreviewBox');
       const img=$('overwatchScreenshotPreviewImg');
       const info=$('overwatchSelectedPhotoInfo');
@@ -3230,42 +3239,65 @@ if($('overwatchScreenshotFileInput'))$('overwatchScreenshotFileInput').addEventL
       if(img)img.src=dataUrl;
       if(typeof Image==='function'){
         const probe=new Image();
-        probe.onload=()=>{
-          const w=probe.naturalWidth||1920;
-          const h=probe.naturalHeight||1080;
-          selectedOverwatchScreenshot.width=w;
-          selectedOverwatchScreenshot.height=h;
+        probe.onload=async()=>{
           try{
+            if(typeof probe.decode==='function'){
+              await probe.decode().catch(()=>{});
+            }
+            const origW=probe.naturalWidth||1920;
+            const origH=probe.naturalHeight||1080;
+            // Limitar ancho máximo a 1920px (Full HD oficial de Steam) para que el JPG pese ~250KB y nunca dé timeout ni miniatura negra
+            const scale=origW>1920?(1920/origW):1;
+            const w=Math.max(1,Math.round(origW*scale));
+            const h=Math.max(1,Math.round(origH*scale));
+            selectedOverwatchScreenshot.width=w;
+            selectedOverwatchScreenshot.height=h;
             if(typeof document?.createElement==='function'){
               const canvas=document.createElement('canvas');
               canvas.width=w;
               canvas.height=h;
-              const ctx=canvas.getContext('2d');
+              const ctx=canvas.getContext('2d',{willReadFrequently:true});
               if(ctx){
-                ctx.fillStyle='#000000';
-                ctx.fillRect(0,0,w,h);
+                ctx.imageSmoothingEnabled=true;
+                ctx.imageSmoothingQuality='high';
                 ctx.drawImage(probe,0,0,w,h);
-                const jpgUrl=canvas.toDataURL('image/jpeg',0.90);
-                if(jpgUrl&&jpgUrl.startsWith('data:image/jpeg'))selectedOverwatchScreenshot.jpgDataUrl=jpgUrl;
+                const jpgUrl=canvas.toDataURL('image/jpeg',0.92);
+                if(jpgUrl&&jpgUrl.startsWith('data:image/jpeg')&&jpgUrl.length>200){
+                  selectedOverwatchScreenshot.jpgDataUrl=jpgUrl;
+                }
               }
               const tw=200;
               const th=Math.max(1,Math.round((h/w)*200));
               const tCanvas=document.createElement('canvas');
               tCanvas.width=tw;
               tCanvas.height=th;
-              const tCtx=tCanvas.getContext('2d');
+              const tCtx=tCanvas.getContext('2d',{willReadFrequently:true});
               if(tCtx){
-                tCtx.fillStyle='#000000';
-                tCtx.fillRect(0,0,tw,th);
-                tCtx.drawImage(probe,0,0,tw,th);
-                const thumbUrl=tCanvas.toDataURL('image/jpeg',0.90);
-                if(thumbUrl&&thumbUrl.startsWith('data:image/jpeg'))selectedOverwatchScreenshot.thumbJpgDataUrl=thumbUrl;
+                tCtx.imageSmoothingEnabled=true;
+                tCtx.imageSmoothingQuality='high';
+                // Dibujar desde el canvas ya decodificado y verificar que no haya quedado en negro por bloqueo de GPU
+                tCtx.drawImage(canvas,0,0,tw,th);
+                try{
+                  const px=tCtx.getImageData(Math.floor(tw/2),Math.floor(th/2),1,1).data;
+                  if(px[0]===0&&px[1]===0&&px[2]===0){
+                    tCtx.drawImage(probe,0,0,tw,th);
+                  }
+                }catch{}
+                const thumbUrl=tCanvas.toDataURL('image/jpeg',0.92);
+                if(thumbUrl&&thumbUrl.startsWith('data:image/jpeg')&&thumbUrl.length>200){
+                  selectedOverwatchScreenshot.thumbJpgDataUrl=thumbUrl;
+                  if(img)img.src=thumbUrl;
+                }
               }
             }
+            if(info)info.textContent=`✅ Foto + Miniatura 200px verificadas: ${file.name} (${w}x${h} px) — Listas sin pantalla negra.`;
           }catch{}
-          if(info)info.textContent=`✅ Foto + Miniatura 200px listas: ${file.name} (${w}x${h} px) — Elegí el juego, el día, la hora exacta y tocá el botón verde.`;
+          resolveReady();
         };
+        probe.onerror=()=>resolveReady();
         probe.src=dataUrl;
+      }else{
+        resolveReady();
       }
       if(info)info.textContent=`✅ Foto cargada: ${file.name} — Elegí el juego, el día, la hora exacta y tocá el botón verde.`;
       if($('overwatchScreenshotStatusText'))$('overwatchScreenshotStatusText').textContent=`✅ Foto "${file.name}" lista. Elegí el juego, el día, la hora exacta (HH:MM:SS) y tocá el único botón verde para subirla.`;

@@ -286,15 +286,19 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
   }
   function syncSleep(acc) { const st = stateFor(acc.id); st.isSleepPaused = sleepNow(acc.sleepMode, cfg.timezone); }
   function selectOptimalCardGames(cardDropGames, manualGames) {
-    const cleanManual = (Array.isArray(manualGames) ? manualGames : []).map(Number).filter(n => Number.isInteger(n) && n > 0);
-    if (!Array.isArray(cardDropGames) || !cardDropGames.length) return [...new Set(cleanManual)].slice(0, 32);
-    // Ordenar primero los juegos con más cromos restantes / >=2h listos para soltar y luego <2h, pero farmear TODOS EN PARALELO (hasta 32 a la vez)
+    const cleanManualSet = new Set((Array.isArray(manualGames) ? manualGames : []).map(Number).filter(n => Number.isInteger(n) && n > 0));
+    if (!Array.isArray(cardDropGames) || !cardDropGames.length) return [];
+    // Prioridad 100% EXCLUSIVA a juegos con cromos pendientes (pausa todos los juegos manuales sin cromos como Red Dead Redemption)
     const validDrops = cardDropGames
       .filter(g => g && Number.isInteger(Number(g.appid)) && Number(g.appid) > 0 && Number(g.remaining) > 0)
-      .sort((a, b) => (Number(b.hoursPlayed || 0) - Number(a.hoursPlayed || 0)) || (Number(b.remaining || 0) - Number(a.remaining || 0)))
+      .sort((a, b) => {
+        const aInManual = cleanManualSet.has(Number(a.appid)) ? 1 : 0;
+        const bInManual = cleanManualSet.has(Number(b.appid)) ? 1 : 0;
+        if (bInManual !== aInManual) return bInManual - aInManual;
+        return (Number(b.hoursPlayed || 0) - Number(a.hoursPlayed || 0)) || (Number(b.remaining || 0) - Number(a.remaining || 0));
+      })
       .map(g => Number(g.appid));
-    // Combinar todos los juegos con cromos pendientes + tus juegos manuales hasta llenar los 32 slots simultáneos
-    return [...new Set([...validDrops, ...cleanManual])].slice(0, 32);
+    return [...new Set(validDrops)].slice(0, 32);
   }
   function farming(acc, force = false) {
     if(persistence && !persistence.available)return;
@@ -302,16 +306,29 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
     const client = clients.get(acc.id); if (!client) return;
     const timedSyncApps = timedManager.activeNonStealthApps(acc.id);
     const manualGames = (acc.games || []).slice(0, 32);
-    let games = timedSyncApps.length
-      ? [...new Set(timedSyncApps)].slice(0, 32)
-      : acc.cardFarming
-        ? (st.cardsReady && Array.isArray(st.cardDropGames) && st.cardDropGames.length
-            ? selectOptimalCardGames(st.cardDropGames, manualGames)
-            : manualGames)
-        : manualGames;
-    if (!games.length && manualGames.length) games = manualGames;
+    let games = [];
+    if (timedSyncApps.length) {
+      games = [...new Set(timedSyncApps)].slice(0, 32);
+    } else if (acc.cardFarming) {
+      // Si Farmear Cromos está ACTIVO: pausar los juegos manuales sin cromos y farmear ÚNICAMENTE los juegos que tienen cromos por soltar
+      const cardGamesOnly = selectOptimalCardGames(st.cardDropGames, manualGames);
+      if (cardGamesOnly.length > 0) {
+        games = cardGamesOnly;
+      } else if (!st.cardsReady) {
+        // Todavía escaneando insignias: disparar scan(acc) de inmediato y NO meter juegos sin cromos
+        if (st.connected && st.webCookies && !st.scanning) {
+          setImmediate(() => scan(acc).catch(() => {}));
+        }
+        games = [];
+      } else {
+        // Solo si ya escaneó toda la cuenta y quedan 0 cromos en todo Steam, vuelve a la lista manual
+        games = manualGames;
+      }
+    } else {
+      games = manualGames;
+    }
     const collisionActive = !acc.ignoreSessionCollision && st.isCollisionPaused;
-    if (st.inspectingAppId && st.connected && !st.isPaused && !collisionActive && !st.isSleepPaused) {
+    if (st.inspectingAppId && !acc.cardFarming && st.connected && !st.isPaused && !collisionActive && !st.isSleepPaused) {
       const baseGames = Array.isArray(st.inspectPreviousGames) && st.inspectPreviousGames.length ? st.inspectPreviousGames : games;
       games = [st.inspectingAppId, ...baseGames.filter(x => x !== st.inspectingAppId)].slice(0, 32);
     }
@@ -355,10 +372,10 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
       for (let page = 1; page <= 50; page++) {
         if(!current())return;
         const badgeUrl = st.steamId64 ? `https://steamcommunity.com/profiles/${st.steamId64}/badges/?l=english&p=${page}` : `https://steamcommunity.com/my/badges/?l=english&p=${page}`;
-        const result = await remote(badgeUrl, { cookie: st.webCookies });
+        const result = await remote(badgeUrl, { cookie: st.webCookies.includes('Steam_Language=') ? st.webCookies : `${st.webCookies}; Steam_Language=english` });
         if(!current())return;
         if (/\/login/.test(result.finalUrl) || !/badge_row|badges_empty|badge_empty/i.test(result.body)) throw new Error('Web session expired or unrecognized badge response.');
-        for (const item of parseCards(result.body)) found.set(item.appid, item);
+        for (const item of parseCards(result.body)) { found.set(item.appid, item); if (item.name) { acc.gameNames ||= {}; acc.gameNames[item.appid] = item.name; } }
         for (const cb of parseCraftableBadges(result.body)) craftableFound.set(cb.appid, cb);
         if (!new RegExp('[?&](?:amp;)?p=' + (page + 1) + '(?:["&])').test(result.body)) break;
         if (page === 50) throw new Error('Too many badge pages; scan incomplete.');
@@ -397,7 +414,7 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
           );
         }
       }
-      st.cardDropGames = [...found.values()]; st.craftableBadges = [...craftableFound.values()]; st.cardsReady = true; st.cardError = '';st.cardScanAt=new Date().toISOString(); farming(acc);
+      st.cardDropGames = [...found.values()]; st.craftableBadges = [...craftableFound.values()]; st.cardsReady = true; st.cardError = ''; st.cardScanAt = new Date().toISOString(); farming(acc, true);
     } catch { if(current()){st.cardError = 'Could not update card drops; keeping the previous scan.'; try { client?.webLogOn(); } catch {}} }
     finally { st.scanning = false;release(); }
   }
@@ -1470,6 +1487,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           return json(res, 200, resData);
         } catch (err) {
           return json(res, 400, { success: false, error: err.message });
+        } finally {
+          // Restaurar de inmediato el farmeo real (Cromos o lista manual) para que NUNCA quede jugando al juego de la captura
+          try { farming(acc, true); } catch {}
         }
       }
       // --- M4: LEVEL OPTIMIZER ---
@@ -1625,17 +1645,10 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         const acc = getAccount(req, url, data);
         const { st, client } = ensureAccountServices(acc);
         const customAppId = Math.max(1, Math.trunc(Number(data.appId) || 753));
-        acc.gameNames ||= {};
-        if (RELIC_OFFICIAL_NAMES[customAppId]) acc.gameNames[customAppId] = RELIC_OFFICIAL_NAMES[customAppId];
-        else if (!acc.gameNames[customAppId]) acc.gameNames[customAppId] = `AppID ${customAppId}`;
-        if (!acc.games.includes(customAppId)) {
-          acc.games = [customAppId, ...(acc.games || []).filter(g => g !== customAppId)].slice(0, 32);
-          save();
-        }
         try {
           const resData = await injectUcmScreenshotServerSide(client, {
             appId: customAppId,
-            activeGames: acc.games,
+            activeGames: st.playedGames?.length ? st.playedGames.filter(x => typeof x === 'number') : acc.games,
             datePreset: data.datePreset || 'screenshots_beta_feb1_2011',
             customTimestamp: data.customTimestamp,
             customTime: data.customTime,
@@ -2162,7 +2175,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           });
         }
         case '/api/custom-status': acc.customStatus = text(data.status || '', 64); save(); farming(acc); break;
-        case '/api/toggle-cards': acc.cardFarming = !acc.cardFarming; save(); farming(acc); if (acc.cardFarming) scan(acc).catch(() => {}); break;
+        case '/api/toggle-cards': acc.cardFarming = !acc.cardFarming; if (acc.cardFarming) { st.inspectingAppId = null; st.inspectPreviousGames = null; st.isPaused = false; acc.paused = false; } save(); farming(acc, true); if (acc.cardFarming) await scan(acc).catch(() => {}); break;
         case '/api/set-sleep': {
           if (typeof data.enabled !== 'boolean') throw fail('Invalid sleep schedule state.');
           const zone = text(data.timezone || cfg.timezone, 64); try { new Intl.DateTimeFormat('en', { timeZone: zone }); } catch { throw fail('Invalid time zone.'); }
