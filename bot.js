@@ -225,7 +225,7 @@ function createApp(options = {}) {
   const startupDiagnostics=options.startupDiagnostics??(process.env.STEAM_STARTUP_DIAGNOSTICS==='1');
   const namePending=new Map();
   const percentageCache=new ResultCache({maxBytes:256*1024,maxEntries:16,ttl:3600000}),percentagePending=new Map();
-const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-live.js': ['achievement-live.js','text/javascript'], '/draft-settings.js': ['draft-settings.js','text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/achievement-rarity.js': ['achievement-rarity.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'] }).map(([route, [file, type]]) => {
+const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/achievement-live.js': ['achievement-live.js','text/javascript'], '/draft-settings.js': ['draft-settings.js','text/javascript'], '/achievement-availability.js': ['achievement-availability.js', 'text/javascript'], '/achievement-rarity.js': ['achievement-rarity.js', 'text/javascript'], '/manifest.json': ['manifest.json', 'application/json'], '/style.css': ['style.css', 'text/css'], '/logo.svg': ['logo.svg', 'image/svg+xml'], '/favicon.ico': ['logo.svg', 'image/svg+xml'] }).map(([route, [file, type]]) => {
     const body = fs.readFileSync(path.join(__dirname, 'public', file));
     return [route, { body, type, etag: '"' + crypto.createHash('sha256').update(body).digest('hex') + '"' }];
   }));
@@ -753,7 +753,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       }
       // Public GET pages may be reached from bookmarks, search engines or external links.
       // All API requests and mutations continue to enforce origin/Fetch Metadata checks.
-      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-live.js', '/draft-settings.js', '/achievement-availability.js', '/achievement-rarity.js', '/manifest.json', '/style.css'].includes(url.pathname));
+      checkOrigin(req, req.method === 'GET' && ['/', '/app.js', '/achievement-live.js', '/draft-settings.js', '/achievement-availability.js', '/achievement-rarity.js', '/manifest.json', '/style.css', '/logo.svg', '/favicon.ico'].includes(url.pathname));
       if (!['GET', 'POST'].includes(req.method)) throw fail('Method not allowed.', 405);
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET') throw fail('Route not found.', 404);
@@ -1907,19 +1907,61 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Timed modifications require the available connected main Steam account.',409);
         rate(`ach-timed:${acc.id}`,15,60000);
         const [snapshot,receipts]=await Promise.all([progressSnapshotRead(client,id,{skipLibrarySummary:true}),operations.latest(identity,id)]);
+        const parsedView = (() => { try { return parseSnapshot(snapshot, id); } catch { return { achievements: [] }; } })();
+        const nameByApi = new Map((parsedView.achievements || []).map(a => [a.apiname, a]));
         const bulkAction=data.bulkAction?text(String(data.bulkAction),32):null;
-        const items=Array.isArray(data.selection)&&data.selection.length
+        const rawItems=Array.isArray(data.selection)&&data.selection.length
           ?changeSelection(data.selection,{bulk:true})
           :buildBulkSelection(snapshot,id,bulkAction||'unlock_all',receipts,{allowRetoggle:true});
         const stealth=Boolean(data.stealth);
         const spacing=['even','random','natural','platinum'].includes(data.spacing)?data.spacing:'even';
         const order=spacing==='platinum'?'progression':(['random','progression'].includes(data.order)?data.order:'selection');
         let percentagesMap=data.percentages&&typeof data.percentages==='object'?data.percentages:null;
-        if((spacing==='platinum'||order==='progression')&&(!percentagesMap||!Object.keys(percentagesMap).length)){
+        if((spacing==='platinum'||order==='progression'||data.action==='preview')&&(!percentagesMap||!Object.keys(percentagesMap).length)){
           try{
             const pctRes=await percentagesRead(id,{includeTitles:false});
             if(pctRes?.percentages&&typeof pctRes.percentages==='object')percentagesMap=pctRes.percentages;
           }catch{}
+        }
+        const items=rawItems.map(it=>{
+          const meta=nameByApi.get(it.apiname);
+          const pctVal=percentagesMap?.[it.apiname]??meta?.percent??null;
+          return {
+            ...it,
+            name:meta?.name||it.apiname,
+            description:meta?.description||'',
+            percent:typeof pctVal==='number'&&Number.isFinite(pctVal)?pctVal:null
+          };
+        });
+        const maxItems=Math.max(0,Math.min(500,Math.trunc(Number(data.maxItems)||0)));
+        if(data.action==='preview'){
+          const nowMs=Date.now();
+          const pace=typeof data.pacingMode==='string'?data.pacingMode:'steamhunters';
+          const plat=require('./lib/steam-protocol').buildRealisticPlatinumSchedule(
+            maxItems>0?require('./lib/steam-protocol').sortAchievementsByProgression(items,percentagesMap).slice(0,maxItems):items,
+            {percentagesMap,pacingMode:pace}
+          );
+          const previewQueue=plat.items.map((it,idx)=>({
+            step:idx+1,
+            apiname:it.apiname,
+            name:it.name||it.apiname,
+            percent:it.percent??null,
+            phase:it.phase||1,
+            phaseLabel:it.phaseLabel||'Progreso',
+            offsetMs:plat.offsetsMs[idx]||0,
+            estimatedAt:new Date(nowMs+(plat.offsetsMs[idx]||0)).toISOString()
+          }));
+          return json(res,200,{
+            preview:true,
+            appid:id,
+            totalGameAchievements:(parsedView.achievements||[]).length,
+            alreadyUnlockedCount:(parsedView.achievements||[]).filter(a=>a.unlocked===true).length,
+            pendingCount:rawItems.length,
+            scheduledCount:previewQueue.length,
+            pacingMode:plat.pacingMode,
+            summaryTextEs:plat.summaryTextEs,
+            queue:previewQueue
+          });
         }
         let hltbData = null;
         if (spacing === 'platinum') {
@@ -1935,6 +1977,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           hltbData,
           pacingMode:typeof data.pacingMode==='string'?data.pacingMode:null,
           currentFarmedHours:Number(data.currentFarmedHours)||0,
+          maxItems,
           amount:Number(data.amount)||5,
           units:['seconds','minutes','hours'].includes(data.units)?data.units:'minutes',
           spacing,
@@ -1945,7 +1988,7 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         });
         const msg=spacing==='platinum'&&status.summaryTextEs
           ?status.summaryTextEs
-          :`Scheduled ${items.length} achievement${items.length===1?'':'s'} (${status.order} order, ${status.spacing} spacing).`;
+          :`Scheduled ${status.totalCount||items.length} achievement${(status.totalCount||items.length)===1?'':'s'} (${status.order} order, ${status.spacing} spacing).`;
         return json(res,200,{...status,...(hltbData?{hltb:hltbData}:{}),message:msg});
       }
       if(url.pathname==='/api/achievement/shared-progress-preview'&&req.method==='GET'){

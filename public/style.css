@@ -4200,3 +4200,433 @@ textarea:focus {
     width: 100% !important;
   }
 }
+
+
+/* ==========================================================================
+   v63 — PROJECT LOGO, SLIDING HERO CAROUSEL & STEAMHUNTERS SCHEDULER MENU
+   ========================================================================== */
+
+.brand-logo-nav {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.brand-with-logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brand-logo-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.brand-logo-main {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: block;
+}
+
+.brand-copy {
+  min-width: 0;
+}
+
+/* Sliding Hero Game Carousel — Dark Translucent Glass Banner */
+.hero-carousel-section {
+  margin-bottom: 18px;
+}
+
+.hero-carousel-viewport {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(14, 14, 20, 0.72);
+  backdrop-filter: blur(44px) saturate(190%);
+  -webkit-backdrop-filter: blur(44px) saturate(190%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  min-height: 225px;
+}
+
+.hero-carousel-track {
+  display: flex;
+  width: 100%;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.hero-slide {
+  position: relative;
+  flex: 0 0 100%;
+  min-width: 100%;
+  min-height: 225px;
+  display: flex;
+  align-items: center;
+  padding: 26px 56px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.hero-slide-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+  opacity: 0.44;
+  filter: saturate(1.15) contrast(1.06);
+  transform: scale(1.03);
+  transition: transform 6s ease;
+  pointer-events: none;
+}
+
+.hero-slide:hover .hero-slide-bg {
+  transform: scale(1.07);
+}
+
+.hero-slide-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(6, 6, 10, 0.94) 0%, rgba(8, 8, 14, 0.78) 52%, rgba(8, 8, 14, 0.32) 100%),
+    linear-gradient(180deg, rgba(6, 6, 10, 0.25) 0%, rgba(6, 6, 10, 0.85) 100%);
+  pointer-events: none;
+}
+
+.hero-slide-content {
+  position: relative;
+  z-index: 2;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hero-slide-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hero-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f5f5f7;
+  backdrop-filter: blur(16px);
+}
+
+.hero-status-pill.active {
+  background: rgba(48, 209, 88, 0.18);
+  border-color: rgba(48, 209, 88, 0.45);
+  color: #4ae06d;
+}
+
+.hero-appid-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #b4b4bc;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-slide-title {
+  margin: 0;
+  font-size: clamp(20px, 2.3vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.65);
+}
+
+.hero-slide-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.8);
+  max-width: 580px;
+}
+
+.hero-slide-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.hero-carousel-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  background: rgba(14, 14, 20, 0.68) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  cursor: pointer;
+}
+
+.hero-carousel-nav.prev {
+  left: 12px;
+}
+
+.hero-carousel-nav.next {
+  right: 12px;
+}
+
+.hero-carousel-nav:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.hero-carousel-dots {
+  position: absolute;
+  bottom: 12px;
+  right: 20px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hero-carousel-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: rgba(255, 255, 255, 0.32) !important;
+  cursor: pointer;
+  transition: all 0.22s ease !important;
+}
+
+.hero-carousel-dot.active {
+  width: 20px;
+  background: #ffffff !important;
+}
+
+/* Dedicated SteamHunters Scheduled Achievements Menu */
+.sched-panel-body {
+  margin-top: 12px;
+}
+
+.sched-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sched-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.sched-active-jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sched-empty-state {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.sched-job-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(10, 132, 255, 0.08);
+  border: 1px solid rgba(10, 132, 255, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sched-job-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sched-job-progress-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sched-job-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(48, 209, 88, 0.16);
+  border: 1px solid rgba(48, 209, 88, 0.4);
+  color: #4ae06d;
+}
+
+.sched-job-pill.paused {
+  background: rgba(255, 159, 10, 0.16);
+  border-color: rgba(255, 159, 10, 0.4);
+  color: #ffb340;
+}
+
+.sched-job-next {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e5e5ea;
+}
+
+.sched-upcoming-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sched-queue-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+}
+
+.sched-preview-box {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sched-preview-summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64b5f6;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(10, 132, 255, 0.1);
+  border: 1px solid rgba(10, 132, 255, 0.24);
+}
+
+.sched-preview-list {
+  max-height: 230px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.sched-preview-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 58px 115px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+
+.sched-step-num {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sched-step-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f5f5f7;
+}
+
+.sched-step-pct {
+  text-align: right;
+  font-weight: 600;
+  color: #4ae06d;
+  font-variant-numeric: tabular-nums;
+}
+
+.sched-step-time {
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-center-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 960px) {
+  .sched-config-grid,
+  .task-center-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-slide {
+    padding: 20px 18px 40px;
+    min-height: 200px;
+  }
+  .hero-carousel-nav {
+    display: none;
+  }
+  .sched-preview-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+  .sched-step-pct {
+    display: none;
+  }
+}

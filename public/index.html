@@ -10,14 +10,16 @@
   <meta property="og:image" content="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <title>SteamFarmer · Control room</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="shortcut icon" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/logo.svg">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#070a13">
+  <meta name="theme-color" content="#050507">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="dns-prefetch" href="https://community.cloudflare.steamstatic.com">
-  <link rel="apple-touch-icon" href="https://community.cloudflare.steamstatic.com/public/shared/images/responsive/share_steam_logo.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=62">
+  <link rel="stylesheet" href="/style.css?v=63">
 </head>
 <body><div id="networkStatusBanner" class="network-status-banner" role="status" aria-live="polite" hidden></div><div id="achToastContainer" class="ach-toast-container" aria-live="polite"></div><div id="notice" role="status" hidden style="position:fixed;bottom:20px;left:20px;right:20px;padding:16px;background:#182237;border:1px solid #38bdf8;border-radius:12px;z-index:2000;overflow-wrap:anywhere"></div>
   <div id="lockModal" role="dialog" aria-modal="true" aria-label="Dashboard sign in" class="modal-overlay" style="display:none;">
@@ -172,41 +174,53 @@
       <div id="achToolsPanel" hidden>
         <div class="sam-tools-grid">
           <section class="ach-impact-review">
-            <h3>Timed Achievement Modifications</h3>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Unlock or lock achievements gradually across a custom period (runs on the server even if you close this tab).</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+              <h3>🎯 Programador de Logros · Motor SteamHunters &amp; AStats</h3>
+              <span class="pioneer-badge">ORDEN DE OBTENCIÓN + CURVA DE RAREZA REAL</span>
+            </div>
+            <p style="font-size:0.83rem; color:var(--text-dim); margin-bottom:12px;">Desbloquea tus logros solos en segundo plano respetando el orden natural de obtención (del más común al más raro y árbol de historia) con intervalos dinámicos reconocibles en SteamHunters, AStats y TrueSteamAchievements.</p>
+            <div class="platinum-pace-selector" role="group" aria-label="Platinum Pacing Mode" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+              <button id="platinumPaceSteamHuntersBtn" type="button" class="btn-action-sm platinum-pace-btn active" data-pace="steamhunters">🎯 Curva SteamHunters (8–90m según % global)</button>
+              <button id="platinumPaceSprintBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="campaign_session">📖 Sesión Continua Hoy (5–45m en partida)</button>
+              <button id="platinumPaceFastBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="fast" data-i18n="platinumPaceFastBtn">🚀 Rápido (~1–2 semanas)</button>
+              <button id="platinumPaceHumanBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="realistic_human" data-i18n="platinumPaceHumanBtn">🎮 Natural / Humano (~1–2 meses)</button>
+              <button id="platinumPaceMonthsBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="ultra_long_months" data-i18n="platinumPaceMonthsBtn">🏆 Juego Completo (~3–6 meses)</button>
+            </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-              <select id="timedActionSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-                <option value="unlock_all">Unlock all locked</option>
-                <option value="selected">Use current checkbox selection</option>
-                <option value="lock_all">Lock all unlocked</option>
+              <select id="timedActionSelect" style="padding:8px 12px; border-radius:10px;">
+                <option value="unlock_all">Desbloquear pendientes (en orden)</option>
+                <option value="selected">Usar casillas seleccionadas</option>
+                <option value="lock_all">Bloquear desbloqueados</option>
               </select>
-              <input type="number" id="timedAmountInput" value="30" min="1" max="1440" style="width:90px; padding:8px 12px;">
-              <select id="timedUnitsSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
+              <select id="timedMaxItemsSelect" style="padding:8px 12px; border-radius:10px;">
+                <option value="0">Cantidad: Todos los pendientes</option>
+                <option value="3">Próximos 3 logros</option>
+                <option value="5">Próximos 5 logros</option>
+                <option value="10">Próximos 10 logros</option>
+                <option value="15">Próximos 15 logros</option>
+              </select>
+              <input type="number" id="timedAmountInput" value="30" min="1" max="1440" style="width:90px; padding:8px 12px;" title="Duración manual">
+              <select id="timedUnitsSelect" style="padding:8px 12px; border-radius:10px;">
                 <option value="seconds">Seconds</option>
                 <option value="minutes" selected>Minutes</option>
                 <option value="hours">Hours</option>
               </select>
-              <select id="timedSpacingSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-                <option value="platinum">Realistic Platinum (1–3h sessions + 10–20h rest)</option>
-                <option value="natural" selected>Natural (Gaussian + breaks)</option>
+              <select id="timedSpacingSelect" style="padding:8px 12px; border-radius:10px;">
+                <option value="platinum" selected>Realistic Platinum / SteamHunters</option>
+                <option value="natural">Natural (Gaussian + breaks)</option>
                 <option value="random">Random (Gaussian)</option>
                 <option value="even">Even spacing</option>
               </select>
-              <select id="timedOrderSelect" style="padding:8px 12px; border-radius:10px; background:#131b2e; border:1px solid var(--card-border); color:#fff;">
-                <option value="progression">Progression by Rarity (&gt;60% → &lt;10%)</option>
-                <option value="selection">In order</option>
-                <option value="random" selected>Random order</option>
+              <select id="timedOrderSelect" style="padding:8px 12px; border-radius:10px;">
+                <option value="progression" selected>Orden de obtención (% mayor → menor)</option>
+                <option value="selection">En orden de lista</option>
+                <option value="random">Orden aleatorio</option>
               </select>
             </div>
-            <div class="platinum-pace-selector" role="group" aria-label="Platinum Pacing Mode" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-              <button id="platinumPaceFastBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="fast" data-i18n="platinumPaceFastBtn">🚀 Fast (~1–2 weeks)</button>
-              <button id="platinumPaceHumanBtn" type="button" class="btn-action-sm platinum-pace-btn active" data-pace="realistic_human" data-i18n="platinumPaceHumanBtn">🎮 Natural / Human (~1–2 months)</button>
-              <button id="platinumPaceMonthsBtn" type="button" class="btn-action-sm platinum-pace-btn" data-pace="ultra_long_months" data-i18n="platinumPaceMonthsBtn">🏆 Ultra Realistic / Full Game (~3–6 months)</button>
-            </div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-              <button id="startTimedBtn" type="button" class="btn-main">Start timed schedule</button>
-              <button id="startPlatinumBtn" type="button" class="btn-purple" data-i18n="startPlatinumBtn">Realistic Platinum Mode</button>
-              <button id="stopTimedBtn" type="button" class="btn-clear" hidden>Stop schedule</button>
+              <button id="startPlatinumBtn" type="button" class="btn-main" data-i18n="startPlatinumBtn">🎯 Activar Programación SteamHunters</button>
+              <button id="startTimedBtn" type="button" class="btn-action-sm">Iniciar con intervalo manual</button>
+              <button id="stopTimedBtn" type="button" class="btn-clear" hidden>⏹️ Detener programación</button>
             </div>
             <p id="timedStatusText" style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);"></p>
           </section>
@@ -291,15 +305,15 @@
 
   <nav class="utility-bar corner-toolbar apple-menubar" aria-label="Global utilities">
     <div class="apple-menubar-left">
-      <a href="#sessionOverviewPanel" class="apple-menu-brand" title="SteamFarmer · Apple Dark Glass">
-        <span class="apple-logo-dot" aria-hidden="true"></span>
+      <a href="#sessionOverviewPanel" class="apple-menu-brand" title="SteamFarmer · Control Room">
+        <img src="/logo.svg" alt="SteamFarmer Logo" class="brand-logo-nav" width="22" height="22">
         <strong>SteamFarmer</strong>
       </a>
       <div class="apple-menubar-links">
         <a href="#sessionOverviewPanel" class="apple-menu-link">Resumen</a>
+        <a href="#scheduledAchievementsPanel" class="apple-menu-link">⏱️ Programador</a>
         <a href="#librarySection" class="apple-menu-link">Biblioteca</a>
         <a href="#cardsPanel" class="apple-menu-link">Cromos</a>
-        <a href="#automationsPanel" class="apple-menu-link">Automatización</a>
         <a href="#overwatch2003Panel" class="apple-menu-link">Suite 2003</a>
       </div>
     </div>
@@ -348,9 +362,14 @@
     </div>
 
     <header>
-      <div class="brand">
-        <span class="eyebrow">YOUR STEAM CONTROL ROOM</span><h1>SteamFarmer<span class="brand-dot">.</span></h1>
-        <p id="userLabel">Connecting account...</p><p id="connectionDetails" style="font-size:.8rem;color:var(--text-muted);overflow-wrap:anywhere"></p>
+      <div class="brand brand-with-logo">
+        <div class="brand-logo-wrap">
+          <img src="/logo.svg" alt="SteamFarmer" class="brand-logo-main" width="54" height="54">
+        </div>
+        <div class="brand-copy">
+          <span class="eyebrow">YOUR STEAM CONTROL ROOM</span><h1>SteamFarmer<span class="brand-dot">.</span></h1>
+          <p id="userLabel">Connecting account...</p><p id="connectionDetails" style="font-size:.8rem;color:var(--text-muted);overflow-wrap:anywhere"></p>
+        </div>
       </div>
       <div class="header-actions">
         <button class="btn-main" id="headerGuestConnectBtn" type="button" data-i18n="landingConnectBtn" hidden>+ Connect Steam Account</button>
@@ -361,6 +380,16 @@
         <div class="badge-status" id="badgeStatus"><span class="dot"></span> <span id="statusText">Active</span></div>
       </div>
     </header>
+
+    <!-- Galería Deslizante de Juegos Activos y Destacados -->
+    <section id="heroCarouselSection" class="hero-carousel-section" aria-label="Juegos destacados en curso">
+      <div class="hero-carousel-viewport">
+        <div id="heroCarouselTrack" class="hero-carousel-track"></div>
+        <button id="heroCarouselPrev" type="button" class="hero-carousel-nav prev" aria-label="Anterior">‹</button>
+        <button id="heroCarouselNext" type="button" class="hero-carousel-nav next" aria-label="Siguiente">›</button>
+        <div id="heroCarouselDots" class="hero-carousel-dots"></div>
+      </div>
+    </section>
 
     <section id="sessionOverviewPanel" class="dashboard-panel" aria-label="Session overview">
       <div class="section-heading"><div><span class="eyebrow" data-i18n="liveActivityEyebrow">LIVE ACTIVITY</span><h2 data-i18n="sessionOverviewTitle">Session overview</h2></div><span class="section-note" data-i18n="sessionOverviewNote">Your current Steam session</span></div>
@@ -420,7 +449,7 @@
       </div></details>
 
       <details class="advanced-settings"><summary>Advanced settings <span>Status, notifications &amp; schedules</span></summary>
-        <section class="ach-impact-review"><h3>Panel, licenses &amp; Sale Discovery Queue</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button" data-i18n="exploreQueueBtn">Explore Discovery Queue (3x)</button><button class="btn-action-sm" id="claimDailyPointsBtn" type="button" data-i18n="claimDailyPointsBtn">Claim Daily Points</button><label style="font-size:0.82rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Requests Steam licenses for five supported free games, or explores 3 daily Steam Store Discovery Queues for event trading cards.</p></section>
+        <section class="ach-impact-review"><h3>Panel, licencias gratuitas y Tienda de Puntos</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;"><button class="btn-action-sm" data-event-22="" hidden>Change password</button><button class="btn-action-sm" data-event-20="">Claim supported free games</button><button class="btn-main" id="runDiscoveryQueueBtn" type="button" data-i18n="exploreQueueBtn" hidden>Explore Discovery Queue (3x)</button><button class="btn-action-sm" id="claimDailyPointsBtn" type="button" data-i18n="claimDailyPointsBtn">Claim Daily Points</button><label style="display:none;"><input type="checkbox" id="autoDiscoveryQueueToggle"> Daily Auto-Queue</label></div><p id="discoveryQueueStatus">Reclamá licencias gratuitas compatibles o recompensas diarias de la Tienda de Puntos de Steam.</p></section>
         <section class="ach-impact-review"><h3>Server resources</h3><p id="resourceUsage">Checking server memory…</p><small>Process RAM, not browser RAM. Memory protection can temporarily reject heavy operations; it is not a guarantee against every out-of-memory condition.</small></section>
         <section class="ach-impact-review"><h3>Achievement write history</h3><p id="historyStorage">Checking history storage…</p><button id="historyRefresh" class="btn-action-sm">Refresh history</button><div id="historyList"></div><small>Shows the most recent 100 recorded attempts. Live Steam readings remain the source of achievement state.</small></section>
         <div class="tools-grid">
@@ -481,6 +510,83 @@
         <small class="cards-footnote">Pending counts come from Steam badges (games &lt;2h farm in parallel; games &ge;2h farm 1 at a time for maximum drop rate). This automatic list does not replace your saved manual games.</small>
       </details>
 
+      <!-- Menú Dedicado: Programador de Logros con Curva Real SteamHunters / AStats -->
+      <details id="scheduledAchievementsPanel" class="cards-panel sched-panel" open aria-label="Programador de Logros SteamHunters">
+        <summary class="cards-panel-heading">
+          <div>
+            <span class="eyebrow">MOTOR STEAMHUNTERS &amp; ASTATS · ORDEN DE OBTENCIÓN Y TIEMPOS REALES</span>
+            <h3>⏱️ Programador Automático de Logros (Scheduled Achievements) <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+          </div>
+          <span id="schedPanelSummaryBadge" class="cards-summary">Listo para programar</span>
+        </summary>
+        <div class="sched-panel-body">
+          <div class="sched-config-grid">
+            <!-- Columna 1: Selección de Juego y Perfil de Tiempos -->
+            <div class="pioneer-card sched-card">
+              <div class="pioneer-card-header">
+                <span class="pioneer-badge">PASO 1 · CONFIGURAR</span>
+                <h4>Elegir Juego y Ritmo de Juego Real</h4>
+              </div>
+              <p class="pioneer-card-desc">Los logros se ordenan automáticamente del más común (% mayor) al más raro (% menor) respetando capítulos, jefes y dejando el Platino al final.</p>
+              <div class="pioneer-field-group">
+                <label class="sched-field-label" for="schedDashboardGameSelect">Juego a programar</label>
+                <div class="pioneer-row">
+                  <select id="schedDashboardGameSelect" style="flex:1;"></select>
+                  <button id="schedPreviewQueueBtn" type="button" class="btn-action-sm sam-quick-btn">🔍 Ver orden y tiempos</button>
+                </div>
+                <label class="sched-field-label" for="schedDashboardPaceSelect">Curva de tiempos (SteamHunters / AStats)</label>
+                <select id="schedDashboardPaceSelect">
+                  <option value="steamhunters" selected>🎯 Curva Real SteamHunters (Comunes 8–18m · Medios 18–38m · Raros 35–70m · Míticos 60–115m)</option>
+                  <option value="campaign_session">📖 Sesión Continua Hoy (5–12m comunes · 12–24m medios · 25–50m raros en una partida)</option>
+                  <option value="fast">⚡ Rápido Legítimo (Sesiones diarias · ~1 a 2 semanas)</option>
+                  <option value="realistic_human">🎮 Jugador Regular (Sesiones de 1–3h + descanso · ~1 a 2 meses)</option>
+                  <option value="ultra_long_months">🏆 Juego Largo / RPG (Sesiones pausadas · ~3 a 6 meses)</option>
+                </select>
+                <div class="pioneer-row">
+                  <div style="flex:1; min-width:140px;">
+                    <label class="sched-field-label" for="schedDashboardMaxItemsSelect">Cantidad a desbloquear</label>
+                    <select id="schedDashboardMaxItemsSelect">
+                      <option value="0" selected>Todos los logros pendientes</option>
+                      <option value="3">Próximos 3 logros (en orden)</option>
+                      <option value="5">Próximos 5 logros (en orden)</option>
+                      <option value="10">Próximos 10 logros (en orden)</option>
+                      <option value="15">Próximos 15 logros (en orden)</option>
+                    </select>
+                  </div>
+                  <div style="flex:1; min-width:140px;">
+                    <label class="sched-field-label" for="schedDashboardActionSelect">Acción</label>
+                    <select id="schedDashboardActionSelect">
+                      <option value="unlock_all" selected>Desbloquear con fecha actual</option>
+                      <option value="lock_all">Bloquear gradualmente</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="pioneer-row" style="margin-top:4px;">
+                  <button id="schedStartDashboardBtn" type="button" class="btn-main sam-quick-btn" style="flex:1; justify-content:center; padding:10px 14px;">🚀 Activar Programación Automática</button>
+                  <button id="schedOpenGameModalBtn" type="button" class="btn-action-sm sam-quick-btn">🏆 Ver todos los logros</button>
+                </div>
+                <p id="schedDashboardFeedback" class="pioneer-card-desc" style="color:#64b5f6;"></p>
+              </div>
+            </div>
+
+            <!-- Columna 2: Cola en Vivo / Vista Previa de Tiempos SteamHunters -->
+            <div class="pioneer-card sched-card">
+              <div class="pioneer-card-header" style="justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="pioneer-badge">PASO 2 · COLA Y PROGRESO</span>
+                  <h4>Orden de Obtención y Tiempos Estimados</h4>
+                </div>
+                <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancelar activas</button>
+              </div>
+              <div id="schedActiveJobsList" class="sched-active-jobs-list"></div>
+              <div id="schedPreviewBox" class="sched-preview-box">
+                <p class="pioneer-card-desc">Tocá <strong>🔍 Ver orden y tiempos</strong> o iniciá una programación para ver la secuencia exacta de logros ordenada según SteamHunters.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details id="automationsPanel" class="cards-panel automations-panel" aria-label="Active Automations &amp; Tasks">
         <summary class="cards-panel-heading">
           <div>
@@ -489,25 +595,20 @@
           </div>
           <span id="automationsSummary" class="cards-summary">Ready</span>
         </summary>
-        <div class="task-center-grid">
+        <div class="task-center-grid task-center-grid-3">
           <div id="taskCardFarming" class="task-center-box">
-            <span class="eyebrow"><span class="status-dot green"></span> 1. CURRENT FARMING PHASE</span>
+            <span class="eyebrow"><span class="status-dot green"></span> 1. FASE DE FARMEO EN CURSO</span>
             <div id="taskCenterFarming" class="task-center-body">Idle</div>
           </div>
           <div id="taskCardCards" class="task-center-box">
-            <span class="eyebrow"><span class="status-dot purple"></span> 2. CARDS &amp; BADGE CRAFTER</span>
+            <span class="eyebrow"><span class="status-dot purple"></span> 2. CROMOS E INSIGNIAS</span>
             <div id="taskCenterCards" class="task-center-body">Ready to scan card drops &amp; sets.</div>
           </div>
           <div id="taskCardTimed" class="task-center-box">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-              <span class="eyebrow"><span class="status-dot blue"></span> 3. SCHEDULED ACHIEVEMENTS</span>
-              <button id="cancelAllTimedBtn" type="button" class="btn-clear sam-quick-btn" data-i18n="cancelAllTimedBtn">Cancel all active schedules</button>
+              <span class="eyebrow"><span class="status-dot blue"></span> 3. LOGROS PROGRAMADOS (STEAMHUNTERS)</span>
             </div>
             <div id="taskCenterTimedList" class="task-center-body">No active timed schedules.</div>
-          </div>
-          <div id="taskCardDiscovery" class="task-center-box">
-            <span class="eyebrow">4. AUTO DISCOVERY QUEUE</span>
-            <div id="taskCenterDiscovery" class="task-center-body">Daily queue ready.</div>
           </div>
         </div>
         <div id="clusterPanelBox" class="cluster-panel-box" style="margin-top:14px;">

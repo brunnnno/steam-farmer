@@ -862,6 +862,7 @@ function setGuestModeLayout(isGuest) {
   if ($('collisionBypassBtn')) $('collisionBypassBtn').hidden = guest;
   if ($('badgeStatus')) $('badgeStatus').hidden = guest;
   if ($('accountsBarSection')) $('accountsBarSection').hidden = guest;
+  if ($('heroCarouselSection')) $('heroCarouselSection').hidden = guest;
   if ($('sessionOverviewPanel')) $('sessionOverviewPanel').hidden = guest;
   if ($('gameControlsSection')) $('gameControlsSection').hidden = guest;
   if ($('libraryEyebrow')) $('libraryEyebrow').textContent = t(guest ? 'libraryEyebrowGuest' : 'libraryEyebrowAuth');
@@ -995,6 +996,8 @@ function renderAutomationsPanel(account) {
     idle: 'Idle (no games running)'
   };
   const phaseText = phaseLabels[account.farmingPhase] || 'Active';
+  renderHeroCarousel(account);
+  renderScheduledAchievementsPanel(account);
   if ($('automationsSummary')) {
     $('automationsSummary').textContent = `${runningIds.length} running · ${timedJobs.length} timed task${timedJobs.length === 1 ? '' : 's'}`;
   }
@@ -3187,6 +3190,7 @@ async function startTimedModifications(overrideOptions={}){
       stealth,
       percentages,
       pacingMode:overrideOptions.pacingMode||selectedPlatinumPace,
+      maxItems:Number(overrideOptions.maxItems??$('timedMaxItemsSelect')?.value??0)||0,
       ...(mode==='selected'?{selection:[...achievementSelection.values()]}:{bulkAction:mode})
     };
     const res=await api('/api/achievement/timed',payload);
@@ -3198,9 +3202,9 @@ async function startTimedModifications(overrideOptions={}){
     notice(e.message);
   }
 }
-let selectedPlatinumPace = 'realistic_human';
+let selectedPlatinumPace = typeof window.testUI === 'undefined' ? 'steamhunters' : 'realistic_human';
 function setPlatinumPacingMode(pace) {
-  selectedPlatinumPace = ['fast', 'realistic_human', 'ultra_long_months'].includes(pace) ? pace : 'realistic_human';
+  selectedPlatinumPace = ['steamhunters', 'campaign_session', 'fast', 'realistic_human', 'ultra_long_months'].includes(pace) ? pace : 'steamhunters';
   for (const btn of document.querySelectorAll('.platinum-pace-btn')) {
     btn.classList.toggle('active', btn.dataset.pace === selectedPlatinumPace);
   }
@@ -3309,6 +3313,8 @@ if($('leaderboardSelect'))$('leaderboardSelect').addEventListener('change',e=>lo
 if($('leaderboardScopeSelect'))$('leaderboardScopeSelect').addEventListener('change',()=>loadLeaderboardEntries(currentLeaderboardId));
 if($('refreshLeaderboardsBtn'))$('refreshLeaderboardsBtn').addEventListener('click',()=>loadLeaderboardEntries(currentLeaderboardId));
 if($('btnDonorSchemaExplorer'))$('btnDonorSchemaExplorer').addEventListener('click',()=>exploreDonorSchema());
+if($('platinumPaceSteamHuntersBtn'))$('platinumPaceSteamHuntersBtn').addEventListener('click',()=>setPlatinumPacingMode('steamhunters'));
+if($('platinumPaceSprintBtn'))$('platinumPaceSprintBtn').addEventListener('click',()=>setPlatinumPacingMode('campaign_session'));
 if($('platinumPaceFastBtn'))$('platinumPaceFastBtn').addEventListener('click',()=>setPlatinumPacingMode('fast'));
 if($('platinumPaceHumanBtn'))$('platinumPaceHumanBtn').addEventListener('click',()=>setPlatinumPacingMode('realistic_human'));
 if($('platinumPaceMonthsBtn'))$('platinumPaceMonthsBtn').addEventListener('click',()=>setPlatinumPacingMode('ultra_long_months'));
@@ -4052,4 +4058,374 @@ if($('rescanCardsBtn'))$('rescanCardsBtn').addEventListener('click',async()=>{
   }catch(e){notice(e.message);}finally{
     if($('rescanCardsBtn')){$('rescanCardsBtn').disabled=false;$('rescanCardsBtn').textContent='🔄 Re-escanear insignias';}
   }
+});
+
+
+/* ==========================================================================
+   v63 — Sliding Hero Game Carousel & Dedicated SteamHunters Scheduler Menu
+   ========================================================================== */
+
+let heroCarouselIndex = 0;
+let heroCarouselSlideCount = 0;
+let heroCarouselSnapshot = '';
+let heroCarouselTimer = null;
+
+function stepHeroCarousel(delta) {
+  if (heroCarouselSlideCount <= 1) return;
+  heroCarouselIndex = (heroCarouselIndex + delta + heroCarouselSlideCount) % heroCarouselSlideCount;
+  updateHeroCarouselPosition();
+}
+
+function goToHeroCarouselSlide(idx) {
+  if (heroCarouselSlideCount <= 0) return;
+  heroCarouselIndex = Math.max(0, Math.min(heroCarouselSlideCount - 1, idx));
+  updateHeroCarouselPosition();
+}
+
+function updateHeroCarouselPosition() {
+  const track = $('heroCarouselTrack');
+  if (track) {
+    track.style.transform = `translate3d(-${heroCarouselIndex * 100}%, 0, 0)`;
+  }
+  const dotsWrap = $('heroCarouselDots');
+  if (dotsWrap) {
+    [...dotsWrap.children].forEach((dot, i) => {
+      dot.classList.toggle('active', i === heroCarouselIndex);
+    });
+  }
+}
+
+function openSchedulerForGame(appid) {
+  const panel = $('scheduledAchievementsPanel');
+  if (panel) {
+    panel.open = true;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  const sel = $('schedDashboardGameSelect');
+  if (sel && appid) {
+    sel.value = String(appid);
+    previewDashboardSchedule();
+  }
+}
+
+function renderHeroCarousel(account) {
+  const section = $('heroCarouselSection');
+  const track = $('heroCarouselTrack');
+  const dots = $('heroCarouselDots');
+  if (!section || !track || !dots) return;
+  if (!account) {
+    section.hidden = true;
+    return;
+  }
+  const runningSet = new Set(account.isFarming ? (account.runningGames || []) : []);
+  const timedMap = new Map((account.activeTimedJobs || []).map(j => [Number(j.appid), j]));
+  const dropMap = new Map((account.cardDropGames || []).filter(g => g && g.remaining > 0).map(g => [Number(g.appid), g]));
+  const allIds = [...new Set([
+    ...[...timedMap.keys()],
+    ...(account.runningGames || []),
+    ...(account.games || []),
+    ...[...dropMap.keys()]
+  ])].filter(id => Number.isInteger(Number(id)) && Number(id) > 0).slice(0, 8);
+
+  if (!allIds.length) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  const snap = JSON.stringify([account.id, allIds, account.gameNames, [...runningSet], [...timedMap.entries()], [...dropMap.entries()], currentLang]);
+  if (snap === heroCarouselSnapshot) return;
+  heroCarouselSnapshot = snap;
+
+  const slides = [];
+  const dotBtns = [];
+  allIds.forEach((id, idx) => {
+    const numId = Number(id);
+    const dropInfo = dropMap.get(numId);
+    const timedJob = timedMap.get(numId);
+    const title = dropInfo?.name || account.gameNames?.[numId] || `AppID ${numId}`;
+    const isRunning = runningSet.has(numId);
+
+    const slide = element('div', undefined, 'hero-slide');
+    const bgImg = image(
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${numId}/library_hero.jpg`,
+      'hero-slide-bg',
+      [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${numId}/header.jpg`,
+        `https://cdn.akamai.steamstatic.com/steam/apps/${numId}/header.jpg`
+      ]
+    );
+    const overlay = element('div', undefined, 'hero-slide-overlay');
+    const content = element('div', undefined, 'hero-slide-content');
+
+    const topBadges = element('div', undefined, 'hero-slide-badges');
+    const statusText = timedJob
+      ? `⏱️ SteamHunters Activo (${timedJob.completedCount}/${timedJob.totalCount})`
+      : isRunning
+        ? (dropInfo ? `🃏 Farmeando Cromos (${dropInfo.remaining} restantes)` : '🟢 Farmeando Horas en Vivo')
+        : '⚡ En Biblioteca Activa';
+    const statusBadge = element('span', statusText, 'hero-status-pill' + (isRunning || timedJob ? ' active' : ''));
+    const appBadge = element('span', `AppID #${numId}`, 'hero-appid-pill');
+    topBadges.append(statusBadge, appBadge);
+
+    const titleEl = element('h3', title, 'hero-slide-title');
+    const subEl = element(
+      'p',
+      timedJob
+        ? `Desbloqueando logros solos en orden de obtención · Próximo: ${timedJob.nextItem?.name || 'en cola'} (${timedJob.nextRunAt ? new Date(timedJob.nextRunAt).toLocaleTimeString('en-US') : 'pronto'})`
+        : 'Abrí sus logros ordenados por % de obtención o activá el programador automático con curva real de SteamHunters.',
+      'hero-slide-sub'
+    );
+
+    const actions = element('div', undefined, 'hero-slide-actions');
+    const achBtn = button('🏆 Logros (Orden de Obtención)', () => openAchModal(numId, title, false, account.connected ? 'auto' : 'web', 'achievements'), 'btn-main sam-quick-btn');
+    const schedBtn = button('⏱️ Programar Logros (SteamHunters)', () => openSchedulerForGame(numId), 'btn-action-sm sam-quick-btn');
+    actions.append(achBtn, schedBtn);
+
+    content.append(topBadges, titleEl, subEl, actions);
+    slide.append(bgImg, overlay, content);
+    slides.push(slide);
+
+    const dot = element('button', '', 'hero-carousel-dot' + (idx === heroCarouselIndex ? ' active' : ''));
+    dot.type = 'button';
+    dot.setAttribute('aria-label', `Ver ${title}`);
+    dot.addEventListener('click', () => goToHeroCarouselSlide(idx));
+    dotBtns.push(dot);
+  });
+
+  heroCarouselSlideCount = slides.length;
+  if (heroCarouselIndex >= heroCarouselSlideCount) heroCarouselIndex = 0;
+  track.replaceChildren(...slides);
+  dots.replaceChildren(...dotBtns);
+  updateHeroCarouselPosition();
+
+  if (!heroCarouselTimer && typeof window.testUI === 'undefined') {
+    heroCarouselTimer = setInterval(() => {
+      if (!document.hidden && heroCarouselSlideCount > 1) stepHeroCarousel(1);
+    }, 6500);
+  }
+}
+
+let schedGamesListSnapshot = '';
+function renderScheduledAchievementsPanel(account) {
+  const sel = $('schedDashboardGameSelect');
+  const activeBox = $('schedActiveJobsList');
+  const badge = $('schedPanelSummaryBadge');
+  if (!sel || !activeBox) return;
+
+  if (!account) {
+    if (badge) badge.textContent = 'Conecta tu cuenta';
+    activeBox.replaceChildren();
+    return;
+  }
+
+  const dropGames = (account.cardDropGames || []).map(g => Number(g.appid));
+  const timedGames = (account.activeTimedJobs || []).map(j => Number(j.appid));
+  const allGames = [...new Set([...(account.games || []), ...timedGames, ...dropGames])].filter(id => Number.isInteger(Number(id)) && Number(id) > 0);
+
+  const gamesSnap = JSON.stringify([account.id, allGames, account.gameNames]);
+  if (gamesSnap !== schedGamesListSnapshot) {
+    schedGamesListSnapshot = gamesSnap;
+    const prevVal = sel.value;
+    const opts = allGames.map(id => {
+      const title = account.gameNames?.[id] || (account.cardDropGames || []).find(g => Number(g.appid) === Number(id))?.name || `AppID ${id}`;
+      const opt = element('option', `${title} (#${id})`);
+      opt.value = String(id);
+      return opt;
+    });
+    if (!opts.length) {
+      const emptyOpt = element('option', 'Agregá un juego arriba en Controles de juegos...');
+      emptyOpt.value = '';
+      opts.push(emptyOpt);
+    }
+    sel.replaceChildren(...opts);
+    if (prevVal && allGames.includes(Number(prevVal))) sel.value = prevVal;
+  }
+
+  const timedJobs = Array.isArray(account.activeTimedJobs) ? account.activeTimedJobs : [];
+  if (badge) {
+    badge.textContent = timedJobs.length
+      ? `🟢 ${timedJobs.length} programación${timedJobs.length === 1 ? '' : 'es'} activa${timedJobs.length === 1 ? '' : 's'}`
+      : 'Listo para programar';
+  }
+
+  activeBox.replaceChildren();
+  if (!timedJobs.length) {
+    const emptyMsg = element('div', 'No hay juegos desbloqueando logros en automático en este momento.', 'sched-empty-state');
+    activeBox.append(emptyMsg);
+    return;
+  }
+
+  for (const job of timedJobs) {
+    const gTitle = account.gameNames?.[job.appid] || `AppID ${job.appid}`;
+    const pct = job.totalCount ? Math.round((job.completedCount / job.totalCount) * 100) : 0;
+    const card = element('div', undefined, 'sched-job-card');
+
+    const head = element('div', undefined, 'sched-job-head');
+    const titleWrap = element('div');
+    titleWrap.append(
+      element('strong', `${gTitle} (#${job.appid})`),
+      element('span', ` · ${job.completedCount}/${job.totalCount} logros (${pct}%)`, 'sched-job-progress-label')
+    );
+    const isPaused = job.pausedManually || job.pausedByCollision;
+    const statePill = element(
+      'span',
+      job.pausedByCollision ? '⏸️ Pausa por juego en PC' : job.pausedManually ? '⏸️ En Pausa' : '🟢 Activo en Steam',
+      'sched-job-pill' + (isPaused ? ' paused' : ' active')
+    );
+    head.append(titleWrap, statePill);
+
+    const barBg = element('div', undefined, 'progress-bar-bg');
+    const barFill = element('div', undefined, 'progress-bar-fill');
+    barFill.style.width = `${pct}%`;
+    barBg.append(barFill);
+
+    const nextInfo = element('div', undefined, 'sched-job-next');
+    if (job.nextItem) {
+      const nextTimeStr = job.nextRunAt ? new Date(job.nextRunAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+      const pctBadge = typeof job.nextItem.percent === 'number' ? ` (${job.nextItem.percent.toFixed(1)}% global)` : '';
+      nextInfo.textContent = `🎯 Próximo en desbloquear: "${job.nextItem.name}"${pctBadge} a las ${nextTimeStr}`;
+    } else if (job.nextRunAt) {
+      nextInfo.textContent = `🎯 Próximo desbloqueo a las ${new Date(job.nextRunAt).toLocaleTimeString('en-US')}`;
+    }
+
+    const upcomingWrap = element('div', undefined, 'sched-upcoming-chips');
+    if (Array.isArray(job.upcomingQueue) && job.upcomingQueue.length > 0) {
+      job.upcomingQueue.slice(0, 5).forEach((q, idx) => {
+        const tStr = q.runAt ? new Date(q.runAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+        const pStr = typeof q.percent === 'number' ? ` · ${q.percent.toFixed(1)}%` : '';
+        const chip = element('span', `#${job.completedCount + idx + 1} ${q.name}${pStr} (${tStr})`, 'sched-queue-chip');
+        upcomingWrap.append(chip);
+      });
+    }
+
+    const actionsRow = element('div', undefined, 'sam-row-actions');
+    const pauseResumeBtn = button(
+      isPaused ? '▶️ Reanudar' : '⏸️ Pausar',
+      async () => {
+        try {
+          await api('/api/achievement/timed', { accountId: account.id, appid: job.appid, action: isPaused ? 'resume' : 'pause' });
+          await loadStatus();
+        } catch (e) { notice(e.message); }
+      },
+      'btn-action-sm sam-quick-btn'
+    );
+    const openModalBtn = button(
+      '🏆 Ver logros',
+      () => openAchModal(job.appid, gTitle, false, account.connected ? 'auto' : 'web', 'achievements'),
+      'btn-action-sm sam-quick-btn'
+    );
+    const cancelBtn = button(
+      '✕ Cancelar',
+      async () => {
+        try {
+          await api('/api/achievement/timed', { accountId: account.id, appid: job.appid, action: 'cancel' });
+          await loadStatus();
+        } catch (e) { notice(e.message); }
+      },
+      'btn-clear sam-quick-btn'
+    );
+    actionsRow.append(pauseResumeBtn, openModalBtn, cancelBtn);
+
+    card.append(head, barBg, nextInfo);
+    if (upcomingWrap.childNodes.length) card.append(upcomingWrap);
+    card.append(actionsRow);
+    activeBox.append(card);
+  }
+}
+
+async function previewDashboardSchedule() {
+  const appid = Number($('schedDashboardGameSelect')?.value || 0);
+  const pace = $('schedDashboardPaceSelect')?.value || 'steamhunters';
+  const maxItems = Number($('schedDashboardMaxItemsSelect')?.value || 0);
+  const bulkAction = $('schedDashboardActionSelect')?.value || 'unlock_all';
+  const box = $('schedPreviewBox');
+  if (!box) return;
+  if (!activeAccountId) return notice(t('liveActionNotice'));
+  if (!appid) return notice('Elegí un juego de la lista primero.');
+
+  box.replaceChildren(element('p', '⏳ Analizando logros de Steam y calculando curva real de tiempos SteamHunters…', 'pioneer-card-desc'));
+  try {
+    const res = await api('/api/achievement/timed', {
+      accountId: activeAccountId,
+      appid,
+      action: 'preview',
+      spacing: 'platinum',
+      order: 'progression',
+      pacingMode: pace,
+      maxItems,
+      bulkAction
+    });
+    box.replaceChildren();
+    const summary = element('div', undefined, 'sched-preview-summary');
+    summary.textContent = `📊 ${res.alreadyUnlockedCount}/${res.totalGameAchievements} ya desbloqueados · ${res.pendingCount} pendientes · Se programarán ${res.scheduledCount} logros en orden de obtención.`;
+    box.append(summary);
+
+    if (!res.queue?.length) {
+      box.append(element('p', '✅ Todos los logros elegibles de este juego ya están en el estado deseado.', 'pioneer-card-desc'));
+      return;
+    }
+
+    const listWrap = element('div', undefined, 'sched-preview-list');
+    res.queue.slice(0, 25).forEach(item => {
+      const row = element('div', undefined, 'sched-preview-row');
+      const mins = Math.max(1, Math.round((item.offsetMs || 0) / 60000));
+      const timeLabel = mins < 60 ? `+${mins} min` : `+${(mins / 60).toFixed(1)} h`;
+      const clockStr = item.estimatedAt ? new Date(item.estimatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+      const pctStr = typeof item.percent === 'number' ? `${item.percent.toFixed(1)}%` : '—';
+      row.append(
+        element('span', `#${item.step}`, 'sched-step-num'),
+        element('strong', item.name, 'sched-step-name'),
+        element('span', pctStr, 'sched-step-pct'),
+        element('span', `${timeLabel} (${clockStr})`, 'sched-step-time')
+      );
+      listWrap.append(row);
+    });
+    box.append(listWrap);
+  } catch (e) {
+    box.replaceChildren(element('p', e.message, 'pioneer-card-desc'));
+  }
+}
+
+async function startDashboardSchedule() {
+  const appid = Number($('schedDashboardGameSelect')?.value || 0);
+  const pace = $('schedDashboardPaceSelect')?.value || 'steamhunters';
+  const maxItems = Number($('schedDashboardMaxItemsSelect')?.value || 0);
+  const bulkAction = $('schedDashboardActionSelect')?.value || 'unlock_all';
+  if (!activeAccountId) return notice(t('liveActionNotice'));
+  if (!appid) return notice('Elegí un juego de la lista primero.');
+
+  const btn = $('schedStartDashboardBtn');
+  const fb = $('schedDashboardFeedback');
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Iniciando programación…'; }
+    const res = await api('/api/achievement/timed', {
+      accountId: activeAccountId,
+      appid,
+      spacing: 'platinum',
+      order: 'progression',
+      pacingMode: pace,
+      maxItems,
+      bulkAction
+    });
+    if (fb && res?.message) fb.textContent = `✅ ${res.message}`;
+    notice(res?.message || 'Programación automática SteamHunters iniciada.');
+    await loadStatus();
+    await previewDashboardSchedule();
+  } catch (e) {
+    if (fb) fb.textContent = `⚠️ ${e.message}`;
+    notice(e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🚀 Activar Programación Automática'; }
+  }
+}
+
+if ($('heroCarouselPrev')) $('heroCarouselPrev').addEventListener('click', () => stepHeroCarousel(-1));
+if ($('heroCarouselNext')) $('heroCarouselNext').addEventListener('click', () => stepHeroCarousel(1));
+if ($('schedPreviewQueueBtn')) $('schedPreviewQueueBtn').addEventListener('click', () => previewDashboardSchedule());
+if ($('schedStartDashboardBtn')) $('schedStartDashboardBtn').addEventListener('click', () => startDashboardSchedule());
+if ($('schedOpenGameModalBtn')) $('schedOpenGameModalBtn').addEventListener('click', () => {
+  const appid = Number($('schedDashboardGameSelect')?.value || 0);
+  if (!appid) return notice('Elegí un juego primero.');
+  const title = active?.gameNames?.[appid] || `AppID ${appid}`;
+  openAchModal(appid, title, false, active?.connected ? 'auto' : 'web', 'achievements');
 });
