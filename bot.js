@@ -50,6 +50,11 @@ const {revisionFor,changesBetween}=require('./lib/achievement-sync');
 const { remote, achievements, parseCards, parseCraftableBadges, craftSteamBadge, estimateCardBatchNet, DEMO_CATALOG, fetchPublicDemoAchievements, exploreDiscoveryQueue, fetchSellableCards, quickSellCards, fetchHowLongToBeat } = require('./lib/steam-data');
 const {
   RELIC_OFFICIAL_NAMES,
+  VETERAN_COLLECTOR_CS2_LOADOUT,
+  buildVeteranCollectorCs2ReviewBbcode,
+  buildVeteranCollectorInfoBoxBbcode,
+  publishVeteranCollectorCs2ShowcaseServerSide,
+  lockInventoryPrivacyOnly,
   safeSteamFetch,
   setProfileShowcaseSlotServerSide,
   fillCollectorShowcaseWithRelics,
@@ -471,12 +476,14 @@ const staticFiles = new Map(Object.entries({ '/': ['index.html', 'text/html'], '
   function connect(acc) {
     if (closing || clients.has(acc.id) || (persistence && !persistence.available)) return;
     if(clients.size>=3){stateFor(acc.id).error='Free-plan memory protection allows up to 3 simultaneous Steam connections. Your saved profile has not been removed.';return;}
-    const st = stateFor(acc.id); const token = isEnvironmentAccount(acc) ? environmentToken : vault.get(acc.id);
+    const st = stateFor(acc.id);
+    const useVaultOverride = Boolean(acc.preferVaultToken && vault.get(acc.id));
+    const token = useVaultOverride ? vault.get(acc.id) : (isEnvironmentAccount(acc) ? environmentToken : vault.get(acc.id));
     if (!token || !validClientToken(token)) { st.error = 'Please sign in again.'; return; }
-    const client = new User({ renewRefreshTokens: !isEnvironmentAccount(acc), autoRelogin: false, dataDirectory: path.join(directory, 'steam-cache') });
+    const client = new User({ renewRefreshTokens: useVaultOverride || !isEnvironmentAccount(acc), autoRelogin: false, dataDirectory: path.join(directory, 'steam-cache') });
     clients.set(acc.id, client); st.error = 'Connecting to Steam…';
     const isCurrent = () => !closing && clients.get(acc.id) === client && cfg.accounts.includes(acc);
-    client.on('refreshToken', token => { if (isCurrent() && !isEnvironmentAccount(acc)) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
+    client.on('refreshToken', token => { if (isCurrent() && (useVaultOverride || !isEnvironmentAccount(acc))) { try { vault.set(acc.id, token); } catch { st.error = 'Could not save the renewed session.'; } } });
     client.on('loggedOn', () => {
       if (!isCurrent()) return;
       if(st.reconnectTimer){clearTimeout(st.reconnectTimer);st.reconnectTimer=null;}
@@ -731,13 +738,25 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     try { a.login.cancelLoginAttempt(); } catch {}a.login.removeAllListeners();a.login.on('error',()=>{}); attempts.delete(id);
   }
   function findAttempt(id, owner) {
-    const a = attempts.get(id); if (!a || a.owner !== owner) throw fail('Login attempt not found.', 404); return a;
+    const a = attempts.get(id);
+    if (!a) throw fail('Login attempt not found.', 404);
+    if (a.owner !== owner && sessions.has(owner) && a.phase !== 'cancelled') {
+      a.owner = owner;
+    }
+    return a;
   }
   function attemptView(a) { return { attemptId: a.id, phase: a.phase, guards: a.guards, error: a.error || '', accountId: a.accountId || null }; }
   async function startLogin(data, owner) {
-    rate(`steam:${owner}`, 5, 5 * 60000);
-    for (const [id, a] of attempts) if (a.owner === owner) cancelAttempt(id);
-    if (attempts.size >= 4) throw fail('Too many pending login attempts.', 429);
+    rate(`steam:${owner}`, 10, 5 * 60000);
+    for (const [id, a] of attempts) if (a.owner === owner && ['starting', 'guard', 'waiting'].includes(a.phase)) cancelAttempt(id);
+    if (attempts.size >= 8) {
+      for (const [oldId, oldA] of attempts) {
+        if (!['starting', 'guard', 'waiting', 'saving'].includes(oldA.phase) || Date.now() - oldA.created > 300000) {
+          cancelAttempt(oldId);
+        }
+      }
+    }
+    if (attempts.size >= 8) throw fail('Too many pending login attempts.', 429);
     const user = text(data.user, 128); const name = text(data.name || user, 64);
     if (!user || typeof data.password !== 'string' || !data.password || data.password.length > 256) throw fail('Enter your Steam login name and password.');
     let existing;
@@ -745,38 +764,56 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
     if(!existing&&cfg.accounts.length>=8)throw fail('Maximum 8 saved profiles on the free-plan memory budget.',409);
     if (existing && isEnvironmentAccount(existing)) throw fail('This account uses STEAM_REFRESH_TOKEN in Render. Update that variable to replace its session.', 409);
     const login = new Session(EAuthTokenPlatformType.SteamClient, { machineFriendlyName: 'SteamFarmer personal', machineId: true });
-    login.loginTimeout = 120000;
+    login.loginTimeout = 300000;
     const a = { id: crypto.randomUUID(), login, owner, phase: 'starting', guards: [], error: '', created: Date.now(), targetId: existing?.id };
     attempts.set(a.id, a);
-    const alive = () => attempts.get(a.id) === a && ['starting', 'guard', 'waiting'].includes(a.phase) && sessions.has(owner) && !closing;
-    login.on('timeout', () => { if (alive()) { a.phase = 'expired'; a.error = 'Login attempt expired. Please try again.'; } });
-    login.on('error', () => { if (alive()) { a.phase = 'failed'; a.error = 'Steam rejected the login or is unavailable.'; } });
+    const alive = () => attempts.get(a.id) === a && ['starting', 'guard', 'waiting', 'saving'].includes(a.phase) && !closing;
+    login.on('timeout', () => { if (alive() && a.phase !== 'authenticated') { a.phase = 'expired'; a.error = 'Login attempt expired. Please try again.'; } });
+    login.on('error', err => {
+      if (!alive() || a.phase === 'authenticated' || a.phase === 'saving') return;
+      const msg = String(err?.message || '');
+      if ((a.phase === 'guard' || a.phase === 'waiting') && /network|timeout|ECONNRESET|ETIMEDOUT|socket|fetch/i.test(msg)) {
+        return;
+      }
+      a.phase = 'failed';
+      a.error = 'Steam rejected the login or is unavailable.';
+    });
     login.on('authenticated', async () => {
       if (!alive()) return;
       try {
         const steamid = login.steamID.toString();
-        let acc = a.targetId ? cfg.accounts.find(acc => acc.id === a.targetId) : cfg.accounts.find(acc => acc.mySteamID === steamid || String(acc.user||'').toLowerCase() === login.accountName.toLowerCase());
+        let acc = a.targetId
+          ? cfg.accounts.find(acc => acc.id === a.targetId)
+          : (cfg.accounts.find(acc => !isEnvironmentAccount(acc) && (acc.mySteamID === steamid || String(acc.user||'').toLowerCase() === login.accountName.toLowerCase()))
+            || cfg.accounts.find(acc => acc.mySteamID === steamid || String(acc.user||'').toLowerCase() === login.accountName.toLowerCase()));
         if (a.targetId && (!acc || (acc.mySteamID && acc.mySteamID !== steamid))) throw Error('Account identity mismatch');
-        if (acc && isEnvironmentAccount(acc)) throw Error('Account managed through an environment variable');
-        if (acc && [...attempts.values()].some(other => other !== a && other.targetId === acc.id && ['starting', 'guard', 'waiting'].includes(other.phase))) throw Error('Concurrent login attempt');
+        if (a.targetId && acc && isEnvironmentAccount(acc)) throw Error('Account managed through an environment variable');
         const fresh = !acc;
         acc ||= { id: crypto.randomUUID(), name, user: login.accountName, games: [], gameNames: {}, personaState: SteamUser.EPersonaState.Online, cardFarming: false, sleepMode: { enabled: false, start: 3, end: 8 }, customStatus: '', chatAdmins: [] };
         if(fresh&&cfg.accounts.length>=8)throw Error('Profile limit reached while authenticating');
         const oldAccount=fresh?null:structuredClone(acc),oldTokenRecord=vault.records[acc.id];
         a.phase='saving';
         vault.set(acc.id, login.refreshToken);
+        if (isEnvironmentAccount(acc)) acc.preferVaultToken = true;
         acc.mySteamID = steamid; acc.user = login.accountName;
+        if (name && (!acc.name || acc.name === 'Main account')) acc.name = name;
         if (fresh) cfg.accounts.push(acc); save();if(persistence)await persistence.flush();
-        if(attempts.get(a.id)!==a||!sessions.has(owner)||sessions.get(owner).expires<=Date.now()||closing){
+        if(attempts.get(a.id)!==a||a.phase==='cancelled'||closing){
           if(!closing){if(fresh)cfg.accounts=cfg.accounts.filter(x=>x!==acc);else Object.assign(acc,oldAccount);if(oldTokenRecord)vault.records[acc.id]=oldTokenRecord;else delete vault.records[acc.id];atomicWrite(vault.file,vault.records);save();if(persistence)await persistence.flush();}return;
         }
-        const ownerSess = sessions.get(owner);
+        const ownerSess = sessions.get(a.owner);
         if (ownerSess) {
           ownerSess.ownedAccounts ||= new Set();
           ownerSess.ownedAccounts.add(acc.id);
         }
-        disconnect(acc.id); connect(acc);
+        disconnect(acc.id);
+        if (clients.size >= 3) {
+          const idleId = [...clients.keys()].find(cid => cid !== acc.id);
+          if (idleId) disconnect(idleId);
+        }
+        connect(acc);
         a.accountId = acc.id; a.phase = 'authenticated';
+        emitStatusChange();
       } catch { a.phase = 'failed'; a.error = 'Could not save the session or the account does not match the selected profile.'; }
     });
     try {
@@ -838,8 +875,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           return json(res, 200, { csrf: session.csrf, isAdmin: Boolean(session.isAdmin) });
         } catch {
           for (const [id, s] of sessions) if (s.expires <= Date.now()) sessions.delete(id);
-          if (sessions.size >= 16) {
-            const oldest = sessions.keys().next().value;
+          if (sessions.size >= 256) {
+            const guestKey = [...sessions.entries()].find(([k, v]) => !v.isAdmin && (!v.ownedAccounts || v.ownedAccounts.size === 0))?.[0];
+            const oldest = guestKey || sessions.keys().next().value;
             if (oldest) sessions.delete(oldest);
           }
           const token = crypto.randomBytes(32).toString('hex'), csrf = crypto.randomBytes(32).toString('hex');
@@ -1891,6 +1929,64 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
         }
       }
       // --- MOTOR 3: SERVER-SIDE SHOWCASE INJECTOR & APPID 753 REVIEW + CS2 WIDGETS + EXPLOIT #3 ---
+      if (url.pathname === '/api/overwatch2003/cs2-collector-showcase' && req.method === 'POST') {
+        const reviewObj = buildVeteranCollectorCs2ReviewBbcode();
+        const infoBoxObj = buildVeteranCollectorInfoBoxBbcode();
+        if (data.action === 'bbcode_only' || (!data.accountId && !cfg.accounts.length)) {
+          return json(res, 200, {
+            success: true,
+            loadout: VETERAN_COLLECTOR_CS2_LOADOUT,
+            reviewBbcode: reviewObj.bbcode,
+            infoBoxBbcode: infoBoxObj.bbcode,
+            brailleBlankTitle: reviewObj.brailleBlankTitle,
+            message: '✅ Código BBCode del Loadout Coleccionista Veterano listo.'
+          });
+        }
+        const acc = getAccount(req, url, data);
+        const { st } = ensureAccountServices(acc);
+        const sid64 = st.steamId64 || acc.mySteamID || '';
+        const targetAppId = Number(data.appId) || 730;
+        if (!acc.games.includes(targetAppId)) {
+          acc.games = [targetAppId, ...(acc.games || [])].slice(0, 32);
+          acc.gameNames ||= {};
+          if (targetAppId === 730) acc.gameNames[730] = 'Counter-Strike 2';
+          else if (targetAppId === 10) acc.gameNames[10] = 'Counter-Strike';
+          else if (RELIC_OFFICIAL_NAMES[targetAppId]) acc.gameNames[targetAppId] = RELIC_OFFICIAL_NAMES[targetAppId];
+          save();
+          farming(acc, true);
+        }
+        if (data.action === 'lock_inventory_only') {
+          try {
+            const pRes = await lockInventoryPrivacyOnly({ steamId64: sid64, cookieString: st.webCookies });
+            return json(res, 200, {
+              ...pRes,
+              loadout: VETERAN_COLLECTOR_CS2_LOADOUT,
+              reviewBbcode: reviewObj.bbcode,
+              infoBoxBbcode: infoBoxObj.bbcode,
+              brailleBlankTitle: reviewObj.brailleBlankTitle
+            });
+          } catch (e) {
+            return json(res, 400, { success: false, error: e.message });
+          }
+        }
+        try {
+          const pubRes = await publishVeteranCollectorCs2ShowcaseServerSide({
+            steamId64: sid64,
+            cookieString: st.webCookies,
+            appId: targetAppId,
+            lockInventoryFirst: data.lockInventoryFirst !== false
+          });
+          return json(res, 200, pubRes);
+        } catch (e) {
+          return json(res, 400, {
+            success: false,
+            error: e.message,
+            loadout: VETERAN_COLLECTOR_CS2_LOADOUT,
+            reviewBbcode: reviewObj.bbcode,
+            infoBoxBbcode: infoBoxObj.bbcode
+          });
+        }
+      }
       if (url.pathname === '/api/overwatch2003/farm-relics' && req.method === 'POST') {
         const acc = getAccount(req, url, data);
         const { st, client } = ensureAccountServices(acc);

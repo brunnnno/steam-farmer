@@ -1582,12 +1582,14 @@ function renderGames(games) {
   }
   grid.replaceChildren(...cards);
 }
-function stopLoginPoll() { clearTimeout(loginTimer); loginTimer = null; }
-function openAddAccModal() { loginTarget = active && !active.user ? active.id : null; $('newAccUser').value = ''; $('newAccName').value = ''; $('newAccPassword').value = ''; $('steamGuardCode').value = ''; $('steamLoginMessage').textContent = ''; $('guardControls').hidden = true; $('connectSteamBtn').disabled = false; $('addAccModal').style.display = 'flex'; }
+let loginPollTransientErrors = 0;
+function stopLoginPoll() { clearTimeout(loginTimer); loginTimer = null; loginPollTransientErrors = 0; }
+function openAddAccModal() { loginTarget = active && !active.user && active.tokenSource !== 'environment' ? active.id : null; loginPollTransientErrors = 0; $('newAccUser').value = ''; $('newAccName').value = ''; $('newAccPassword').value = ''; $('steamGuardCode').value = ''; $('steamLoginMessage').textContent = ''; $('guardControls').hidden = true; $('connectSteamBtn').disabled = false; $('addAccModal').style.display = 'flex'; }
 async function closeAddAccModal() { loginSerial++; stopLoginPoll(); if (loginAttempt) { const id = loginAttempt; loginAttempt = null; try { await api('/api/steam/cancel', { attemptId:id }); } catch {} } $('newAccPassword').value = ''; $('steamGuardCode').value = ''; $('addAccModal').style.display = 'none'; }
-function reloginAccount() { if (!active) return notice('Select an account.'); if (active.tokenSource === 'environment') return action('/api/steam/web-session',{},'Refreshing the Steam connection with the saved token.'); openAddAccModal(); loginTarget = active.id; $('newAccUser').value = active.user; $('newAccName').value = active.name; }
+function reloginAccount() { if (!active) return notice('Select an account.'); if (active.tokenSource === 'environment' && active.connected) return action('/api/steam/web-session',{},'Refreshing the Steam connection with the saved token.'); openAddAccModal(); loginTarget = active.tokenSource === 'environment' ? null : active.id; $('newAccUser').value = active.user || ''; $('newAccName').value = active.name || ''; }
 async function submitAddAccount() {
   const serial = ++loginSerial;
+  loginPollTransientErrors = 0;
   $('connectSteamBtn').disabled = true; $('steamLoginMessage').textContent = 'Connecting to Steam…';
   try {
     const payload = { name: $('newAccName').value.trim(), user: $('newAccUser').value.trim(), password: $('newAccPassword').value, accountId: loginTarget };
@@ -1599,13 +1601,56 @@ async function submitAddAccount() {
 }
 function handleLogin(data) {
   if (data.attemptId !== loginAttempt) return;
-  $('guardControls').hidden = !(data.phase === 'guard' && data.guards.some(g => /Code/.test(g.label)));
-  if (data.phase === 'authenticated') { activeAccountId = data.accountId; loginAttempt = null; stopLoginPoll(); $('addAccModal').style.display = 'none'; notice('Session saved automatically. No token copying is required.'); loadStatus(); return; }
-  if (['failed','expired','cancelled'].includes(data.phase)) { $('steamLoginMessage').textContent = data.error || 'Login attempt cancelled.'; $('connectSteamBtn').disabled = false; stopLoginPoll(); return; }
-  $('steamLoginMessage').textContent = data.phase === 'guard' ? ('Steam Guard: ' + data.guards.map(g => /DeviceConfirmation/.test(g.label) ? 'approve the sign-in in the Steam mobile app' : /EmailCode/.test(g.label) ? 'enter the code sent by email' : /DeviceCode/.test(g.label) ? 'enter your authenticator code' : 'complete the Steam confirmation').join(' or ')) : 'Waiting for Steam confirmation…';
-  stopLoginPoll(); loginTimer = setTimeout(pollLogin, 1500);
+  loginPollTransientErrors = 0;
+  $('guardControls').hidden = !(data.phase === 'guard' && Array.isArray(data.guards) && data.guards.some(g => /Code/.test(g.label)));
+  if (data.phase === 'authenticated') {
+    activeAccountId = data.accountId;
+    loginAttempt = null;
+    stopLoginPoll();
+    $('addAccModal').style.display = 'none';
+    notice('Session saved automatically. No token copying is required.');
+    loadStatus();
+    return;
+  }
+  if (['failed','expired','cancelled'].includes(data.phase)) {
+    $('steamLoginMessage').textContent = data.error || 'Login attempt cancelled.';
+    $('connectSteamBtn').disabled = false;
+    stopLoginPoll();
+    return;
+  }
+  $('steamLoginMessage').textContent = data.phase === 'saving'
+    ? 'Guardando sesión aprobada y conectando cuenta…'
+    : data.phase === 'guard'
+      ? ('Steam Guard: ' + (data.guards || []).map(g => /DeviceConfirmation/.test(g.label) ? 'approve the sign-in in the Steam mobile app' : /EmailCode/.test(g.label) ? 'enter the code sent by email' : /DeviceCode/.test(g.label) ? 'enter your authenticator code' : 'complete the Steam confirmation').join(' or '))
+      : 'Waiting for Steam confirmation…';
+  stopLoginPoll();
+  loginTimer = setTimeout(pollLogin, data.phase === 'saving' ? 750 : 1400);
 }
-async function pollLogin() { const id = loginAttempt; if (!id || !csrf) return; try { handleLogin(await api('/api/steam/login-status?attemptId=' + encodeURIComponent(id))); } catch(e) { if (id !== loginAttempt) return; $('steamLoginMessage').textContent = e.message; $('connectSteamBtn').disabled = false; stopLoginPoll(); } }
+async function pollLogin() {
+  const id = loginAttempt;
+  if (!id || !csrf) return;
+  try {
+    handleLogin(await api('/api/steam/login-status?attemptId=' + encodeURIComponent(id)));
+  } catch(e) {
+    if (id !== loginAttempt) return;
+    if (e?.status !== 404 && ++loginPollTransientErrors <= 20) {
+      stopLoginPoll();
+      loginTimer = setTimeout(pollLogin, 1500);
+      return;
+    }
+    $('steamLoginMessage').textContent = e.message;
+    $('connectSteamBtn').disabled = false;
+    stopLoginPoll();
+  }
+}
+if (typeof document?.addEventListener === 'function' && typeof window.testUI === 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && loginAttempt && csrf) {
+      stopLoginPoll();
+      pollLogin();
+    }
+  });
+}
 async function submitGuard() { const id = loginAttempt; if (!id) return; try { const code = $('steamGuardCode').value.trim(); $('steamGuardCode').value=''; handleLogin(await api('/api/steam/guard',{attemptId:id,code})); } catch(e) { notice(e.message); } }
 async function deleteCurrentAccount() { if (!active || !confirm('Delete this profile and its saved session?')) return; if (await action('/api/account/remove')) { activeAccountId=''; closeAchModal(); await loadStatus(); } }
 async function logoutSteam() { if (active && confirm('Sign out of Steam and remove the saved session?')) await action('/api/steam/logout',{},'Steam session removed.'); }
@@ -4892,4 +4937,299 @@ if ($('modalSkipDateSpecificToggle')) {
   $('modalSkipDateSpecificToggle').addEventListener('change', () => {
     if (typeof window.testUI === 'undefined') previewModalSchedule();
   });
+}
+
+
+/* ==========================================================================
+   v67 — Realistic CS2 Veteran Collector Showcase (6-Skin Loadout + 3D Inspect)
+   ========================================================================== */
+const VETERAN_CS2_LOADOUT_CLIENT = [
+  {
+    slot: 0,
+    name: "★ Butterfly Knife | Doppler (Factory New)",
+    shortTitle: "★ Butterfly | Doppler",
+    subTitle: "Phase 2 (Pink Galaxy)",
+    wearShort: "FN",
+    float: "0.0084120",
+    meta: "Counter-Strike 2 • Phase 2 (Pink Galaxy) • Seed #416 • Wear Rating: 0.0084120",
+    borderColor: "#8650ac",
+    nameColor: "#c084fc",
+    badgeText: "PHASE 2 PINK",
+    inspectLink: "steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611"
+  },
+  {
+    slot: 1,
+    name: "M4A4 | Howl (Factory New)",
+    shortTitle: "M4A4 | Howl",
+    subTitle: "Contraband • Howling Dawn",
+    wearShort: "FN",
+    float: "0.0342189",
+    meta: "Counter-Strike 2 • Contraband Rifle (2014) • Sticker: Howling Dawn • Wear Rating: 0.0342189",
+    borderColor: "#e4ae39",
+    nameColor: "#e4ae39",
+    badgeText: "CONTRABAND FN",
+    inspectLink: "steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198019283746A19283746512D1627384950192837465"
+  },
+  {
+    slot: 2,
+    name: "★ Sport Gloves | Pandora's Box (Field-Tested)",
+    shortTitle: "★ Pandora's Box",
+    subTitle: "Clean Purple Knuckles",
+    wearShort: "FT",
+    float: "0.2140851",
+    meta: "Counter-Strike 2 • Extraordinary Gloves • Clean Knuckles • Wear Rating: 0.2140851",
+    borderColor: "#8650ac",
+    nameColor: "#c084fc",
+    badgeText: "FT 0.214",
+    inspectLink: "steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198023512965A28761239912D9244972541062093545"
+  },
+  {
+    slot: 3,
+    name: "StatTrak™ AK-47 | Fire Serpent (Minimal Wear)",
+    shortTitle: "ST™ AK-47 | Fire Serpent",
+    subTitle: "Crown (Foil) on Wood",
+    wearShort: "MW",
+    float: "0.0812405",
+    meta: "Counter-Strike 2 • Operation Bravo (2013) • Sticker: Crown (Foil) • Wear Rating: 0.0812405",
+    borderColor: "#eb4b4b",
+    nameColor: "#cf6a32",
+    badgeText: "StatTrak™ MW",
+    inspectLink: "steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198165821922A35481920114D7812390412894012567"
+  },
+  {
+    slot: 4,
+    name: "AWP | Fade (Factory New)",
+    shortTitle: "AWP | Fade",
+    subTitle: "99.2% Full Fade",
+    wearShort: "FN",
+    float: "0.0091842",
+    meta: "Counter-Strike 2 • Covert Sniper Rifle • 99.2% Full Fade (Pink/Violet) • Wear Rating: 0.0091842",
+    borderColor: "#eb4b4b",
+    nameColor: "#f87171",
+    badgeText: "99.2% FADE",
+    inspectLink: "steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611"
+  },
+  {
+    slot: 5,
+    name: "Desert Eagle | Blaze (Factory New)",
+    shortTitle: "Desert Eagle | Blaze",
+    subTitle: "Dust Collection (2013)",
+    wearShort: "FN",
+    float: "0.0074129",
+    meta: "Counter-Strike 2 • The Dust Collection • Clean Back (No Backflames) • Wear Rating: 0.0074129",
+    borderColor: "#8847ff",
+    nameColor: "#a78bfa",
+    badgeText: "FN 0.007",
+    inspectLink: "steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198023512965A28761239912D9244972541062093545"
+  }
+];
+
+let activeCs2ShowcaseSlot = 0;
+
+function selectCs2ShowcaseSlot(slotIdx) {
+  const item = VETERAN_CS2_LOADOUT_CLIENT[slotIdx] || VETERAN_CS2_LOADOUT_CLIENT[0];
+  activeCs2ShowcaseSlot = item.slot;
+  for (const btn of document.querySelectorAll(".steam-item-slot[data-slot]")) {
+    btn.classList.toggle("active", Number(btn.dataset.slot) === item.slot);
+  }
+  const nameEl = $("cs2ShowcaseActiveName");
+  const metaEl = $("cs2ShowcaseActiveMeta");
+  const linkEl = $("cs2ShowcaseActiveInspectLink");
+  if (nameEl) {
+    nameEl.textContent = item.name;
+    nameEl.style.color = item.nameColor;
+  }
+  if (metaEl) metaEl.textContent = item.meta;
+  if (linkEl) linkEl.href = item.inspectLink;
+}
+
+for (const slotBtn of document.querySelectorAll(".steam-item-slot[data-slot]")) {
+  slotBtn.addEventListener("click", () => {
+    selectCs2ShowcaseSlot(Number(slotBtn.dataset.slot || 0));
+  });
+}
+
+async function publishCs2CollectorReviewShowcase() {
+  if (!activeAccountId) {
+    notice(t("liveActionNotice"));
+    openAddAccModal();
+    return;
+  }
+  const appId = Number($("cs2CollectorTargetAppSelect")?.value || 730) || 730;
+  const btn = $("btnPublishCs2CollectorReview");
+  const stText = $("cs2CollectorStatusText");
+  const outBox = $("cs2CollectorBbcodeOutput");
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⏳ Protegiendo inventario y publicando Loadout CS2…";
+    }
+    const res = await api("/api/overwatch2003/cs2-collector-showcase", {
+      accountId: activeAccountId,
+      appId,
+      action: "publish_review",
+      lockInventoryFirst: true
+    });
+    if (stText && res?.message) stText.textContent = res.message;
+    if (outBox && res?.reviewBbcode) {
+      outBox.style.display = "block";
+      outBox.value = res.reviewBbcode;
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(res.reviewBbcode).catch(() => {});
+      }
+    }
+    notice(res?.message || "Loadout CS2 publicado y protegido.");
+    await loadStatus();
+  } catch (e) {
+    if (stText) stText.textContent = `⚠️ ${e.message}`;
+    notice(e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "🚀 1. Publicar en Expositor de Reseña + Ocultar Inventario";
+    }
+  }
+}
+
+async function copyCs2InfoBoxBbcode() {
+  const outBox = $("cs2CollectorBbcodeOutput");
+  const stText = $("cs2CollectorStatusText");
+  const lines = [
+    "[b]CS2 Active Collector Loadout (CT / T Side)[/b]",
+    "[i]Inventory set to private to prevent trade-bot spam.[/i]",
+    ""
+  ];
+  for (const it of VETERAN_CS2_LOADOUT_CLIENT) {
+    lines.push(`• [b]${it.name}[/b] — [code]Float: ${it.float} | ${it.subTitle}[/code]  [url=${it.inspectLink}][b][🔍 Inspeccionar en CS2][/b][/url]`);
+  }
+  const bbcode = lines.join("\n");
+  if (outBox) {
+    outBox.style.display = "block";
+    outBox.value = bbcode;
+  }
+  if (navigator?.clipboard?.writeText) {
+    try { await navigator.clipboard.writeText(bbcode); } catch {}
+  }
+  if (stText) {
+    stText.textContent = "✅ BBCode para Cuadro de Información copiado al portapapeles (sin etiquetas [table] para que se vea limpio en cualquier caja de texto del perfil).";
+  }
+  notice("✅ Código copiado al portapapeles listo para pegar en tu Cuadro de Información.");
+}
+
+async function renderAndPrepareCs2ShowcaseCloudImage() {
+  if (typeof document?.createElement !== "function") return;
+  const w = 636;
+  const h = 190;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  // Fondo nativo de Steam Showcase
+  ctx.fillStyle = "#0b0f16";
+  ctx.fillRect(0, 0, w, h);
+
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, "#17202d");
+  grad.addColorStop(1, "#0d121a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, 34);
+
+  ctx.fillStyle = "#66c0f4";
+  ctx.font = "14px Arial, sans-serif";
+  ctx.fillText("Expositor de objetos", 14, 22);
+
+  const slotButtons = [...document.querySelectorAll(".steam-item-slot[data-slot]")];
+  for (let i = 0; i < VETERAN_CS2_LOADOUT_CLIENT.length; i++) {
+    const item = VETERAN_CS2_LOADOUT_CLIENT[i];
+    const x = 14 + i * 102;
+    const y = 44;
+    const sw = 92;
+    const sh = 82;
+
+    ctx.fillStyle = "#10151d";
+    ctx.fillRect(x, y, sw, sh);
+    ctx.strokeStyle = item.borderColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, sw, sh);
+
+    const imgEl = slotButtons[i]?.querySelector("img");
+    let drewImg = false;
+    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+      try {
+        ctx.drawImage(imgEl, x + 10, y + 2, 72, 56);
+        drewImg = true;
+      } catch {}
+    }
+    if (!drewImg) {
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 9px Arial, sans-serif";
+      ctx.fillText(item.shortTitle.slice(0, 16), x + 6, y + 30);
+      ctx.fillStyle = "#9fb4c7";
+      ctx.font = "8px Arial, sans-serif";
+      ctx.fillText(item.subTitle.slice(0, 18), x + 6, y + 44);
+    }
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
+    ctx.fillRect(x + 4, y + 62, sw - 8, 15);
+    ctx.fillStyle = item.nameColor;
+    ctx.font = "bold 8.5px Consolas, monospace";
+    ctx.fillText(item.badgeText, x + 10, y + 73);
+  }
+
+  const featured = VETERAN_CS2_LOADOUT_CLIENT[activeCs2ShowcaseSlot] || VETERAN_CS2_LOADOUT_CLIENT[0];
+  ctx.fillStyle = "#121822";
+  ctx.fillRect(14, 136, 608, 44);
+  ctx.strokeStyle = "#263345";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(14, 136, 608, 44);
+
+  ctx.fillStyle = featured.nameColor;
+  ctx.font = "bold 12px Arial, sans-serif";
+  ctx.fillText(featured.name, 26, 154);
+
+  ctx.fillStyle = "#8f98a0";
+  ctx.font = "10.5px Consolas, monospace";
+  ctx.fillText(featured.meta, 26, 171);
+
+  let dataUrl = "";
+  try {
+    dataUrl = canvas.toDataURL("image/jpeg", 0.94);
+  } catch {
+    return copyCs2InfoBoxBbcode();
+  }
+
+  selectedOverwatchScreenshot = {
+    name: "cs2_collector_showcase.jpg",
+    dataUrl,
+    jpgDataUrl: dataUrl,
+    thumbJpgDataUrl: dataUrl,
+    width: w,
+    height: h
+  };
+  const box = $("overwatchSelectedPhotoPreviewBox");
+  const prevImg = $("overwatchScreenshotPreviewImg");
+  const info = $("overwatchSelectedPhotoInfo");
+  if (box) box.style.display = "flex";
+  if (prevImg) prevImg.src = dataUrl;
+  if (info) info.textContent = "✅ Vitrina CS2 (636x190 px) generada y cargada en el subidor de Steam Cloud.";
+  if ($("overwatchScreenshotAppSelect")) $("overwatchScreenshotAppSelect").value = "730";
+  if ($("overwatchScreenshotCaptionInput") && !$("overwatchScreenshotCaptionInput").value) {
+    $("overwatchScreenshotCaptionInput").value = "CS2 Active Collector Loadout — ★ Butterfly Knife | Doppler Phase 2 + M4A4 | Howl (FN)";
+  }
+  if ($("cs2CollectorStatusText")) {
+    $("cs2CollectorStatusText").textContent = "✅ Imagen de Vitrina CS2 (636x190 px) cargada en el subidor de al lado. Tocá '📤 2. Subir Captura a Steam Cloud' para enviarla a tu perfil.";
+  }
+  notice("✅ Vitrina gráfica CS2 (636x190 px) lista en el Subidor de Steam Cloud.");
+}
+
+if ($("btnPublishCs2CollectorReview")) {
+  $("btnPublishCs2CollectorReview").addEventListener("click", () => publishCs2CollectorReviewShowcase());
+}
+if ($("btnCopyCs2InfoBoxBbcode")) {
+  $("btnCopyCs2InfoBoxBbcode").addEventListener("click", () => copyCs2InfoBoxBbcode());
+}
+if ($("btnUploadCs2ShowcaseToCloud")) {
+  $("btnUploadCs2ShowcaseToCloud").addEventListener("click", () => renderAndPrepareCs2ShowcaseCloudImage());
 }

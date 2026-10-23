@@ -701,15 +701,87 @@
         </div>
       </details>
 
-      <details id="overwatch2003Panel" class="cards-panel pioneer-panel" aria-label="Subir Captura a Steam Cloud">
+      <details id="overwatch2003Panel" class="cards-panel pioneer-panel" open aria-label="Vitrina Realista CS2 &amp; Steam Cloud">
         <summary class="cards-panel-heading">
           <div>
-            <span class="eyebrow" data-i18n="overwatch2003Eyebrow">STEAM CLOUD UPLOADER</span>
-            <h3><span data-i18n="overwatch2003PanelTitle">📸 Subir Captura Personalizada a Steam Cloud</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
+            <span class="eyebrow" data-i18n="overwatch2003Eyebrow">COLECCIONISTA CS2 &amp; STEAM CLOUD</span>
+            <h3><span data-i18n="overwatch2003PanelTitle">💎 Expositor Realista de Loadout CS2 &amp; Subidor Steam Cloud</span> <span class="cards-disclosure" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h3>
           </div>
-          <span class="cards-summary" data-i18n="overwatch2003SummaryBadge">Steam Cloud</span>
+          <span class="cards-summary" data-i18n="overwatch2003SummaryBadge">Loadout + Cloud</span>
         </summary>
-        <div class="pioneer-suite-grid pioneer-suite-single">
+        <div class="pioneer-suite-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:16px;">
+          <!-- TARJETA 1: EXPOSITOR REALISTA DE LOADOUT CS2 (COLECCIONISTA VETERANO) -->
+          <div class="pioneer-card cs2-collector-card">
+            <div class="pioneer-card-header" style="justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="pioneer-badge accent-purple">LOADOUT VETERANO (~$20,000 USD)</span>
+                <h4>💎 Expositor Realista de Objetos CS2 + Inspección 3D</h4>
+              </div>
+              <span class="cards-summary" style="font-size:11px;">Inventario Privado Activo</span>
+            </div>
+            <p id="cs2CollectorStatusText" class="pioneer-card-desc">Combo creíble de coleccionista veterano (Butterfly Doppler Phase 2 Pink/Violet, M4A4 Howl FN, Guantes Pandora's Box, AK Fire Serpent ST, AWP Fade 99% y Deagle Blaze). Tocá cualquier arma para ver su detalle o inspeccionarla en 3D en CS2.</p>
+
+            <!-- Réplica Nativa del Expositor de Objetos de Steam Community -->
+            <div id="cs2NativeShowcasePreview" class="steam-native-item-showcase">
+              <div class="steam-showcase-header">Expositor de objetos</div>
+              <div id="cs2ShowcaseSlotsGrid" class="steam-showcase-slots-row">
+                <button type="button" class="steam-item-slot active" data-slot="0" style="--slot-border:#8650ac;">
+                  <img src="https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpovbSsLQJf0ebcZThQ6tCvq4GGqPD1PrbQqW9e-NV9j_v-5YT0m1HllB81NDG3Oo6cdlU_N1zV_1m9xO_p1J65tZ_Mn3Rk7nUl4CvD30vgW-4K9A/360fx360f" alt="★ Butterfly Knife | Doppler" crossorigin="anonymous">
+                  <span class="steam-slot-tag" style="color:#d8b4fe; border-color:#8650ac;">P2 PINK</span>
+                </button>
+                <button type="button" class="steam-item-slot" data-slot="1" style="--slot-border:#e4ae39;">
+                  <img src="https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpou-6kejhjxszFJTwW09izh4-HluPxDKjBl2hU18l4jeHVu9Tw2Q218xA6MWz3Jo6ddQE8ZVrU_1K9wO_p1pO7v53LzWwj5HeA02_94Q/360fx360f" alt="M4A4 | Howl" crossorigin="anonymous">
+                  <span class="steam-slot-tag" style="color:#e4ae39; border-color:#e4ae39;">HOWL FN</span>
+                </button>
+                <button type="button" class="steam-item-slot" data-slot="2" style="--slot-border:#8650ac;">
+                  <img src="https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpovbSsLQJfwObaZzRU7dCJlo-cnvLLMrfummpD78A_3rmZoo7zig218xA4Zzr3I46ddwM8N1zR-Vm9wO3q1pO7tM7LzWwj5HeA82_85g/360fx360f" alt="★ Sport Gloves | Pandora's Box" crossorigin="anonymous">
+                  <span class="steam-slot-tag" style="color:#d8b4fe; border-color:#8650ac;">PANDORA</span>
+                </button>
+                <button type="button" class="steam-item-slot" data-slot="3" style="--slot-border:#eb4b4b;">
+                  <img src="https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot7HxfDhjxszJemkV08-jhIWZlP_1IbzUklRd4cJ5nqfA9J7x2wK1_Us4Z2rzI4OSdQE9ZVrU-1C9wO3s0Z-7vM7LzHBl6ygi7WGdwUI8eb7L8A/360fx360f" alt="StatTrak™ AK-47 | Fire Serpent" crossorigin="anonymous">
+                  <span class="steam-slot-tag" style="color:#cf6a32; border-color:#cf6a32;">ST™ MW</span>
+                </button>
+                <button type="button" class="steam-item-slot" data-slot="4" style="--slot-border:#eb4b4b;">
+                  <img src="https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot621FAR17PLfYQJS5927m5a0mvLwOq7c2DMBupQn2eqV8d6m2wXn-kU4Z2qnI9SWdgFsN1zR_1K6wO_p1J65tZ_Mn3Rk7nUl4CvD30vgN4c_0vI/360fx360f" alt="AWP | Fade" crossorigin="anonymous">
+                  <span class="steam-slot-tag" style="color:#fca5a5; border-color:#eb4b4b;">99% FADE</span>
+                </button>
+                <button type="button" class="steam-item-slot" data-slot="5" style="--slot-border:#8847ff;">
+                  <img src="https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgposr-kLAtl7PLZTjlH7du6kb-HnvD8J_XVkjoFuJ0g27zE9tzz3lCx-ks5ZGH6I4XEdlA4M1nTqVm8wO3s0Z-7vM7LzHBl6ygi7WGdwUJqz1_b9g/360fx360f" alt="Desert Eagle | Blaze" crossorigin="anonymous">
+                  <span class="steam-slot-tag" style="color:#c4b5fd; border-color:#8847ff;">FN 0.007</span>
+                </button>
+              </div>
+              <div class="steam-showcase-detail-bar">
+                <div class="steam-showcase-detail-text">
+                  <strong id="cs2ShowcaseActiveName" style="color:#a855f7;">★ Butterfly Knife | Doppler (Factory New)</strong>
+                  <small id="cs2ShowcaseActiveMeta">Counter-Strike 2 • Phase 2 (Pink Galaxy) • Seed #416 • Wear Rating: 0.0084120</small>
+                </div>
+                <a id="cs2ShowcaseActiveInspectLink" href="steam://rungame/730/76561120225523302/+csgo_econ_action_preview%20S76561198084852298A9946351222D14440407685094987611" class="steam-inspect-btn">🔍 Inspeccionar en CS2</a>
+              </div>
+            </div>
+
+            <!-- Controles de Publicación Realista en 1 Clic -->
+            <div class="pioneer-field-group" style="margin-top:10px;">
+              <div class="pioneer-row">
+                <label class="sched-field-label" for="cs2CollectorTargetAppSelect" style="margin:0;">Juego donde publicar / actualizar tu Reseña:</label>
+                <select id="cs2CollectorTargetAppSelect" style="flex:1; min-width:190px;">
+                  <option value="730" selected>Counter-Strike 2 (AppID #730)</option>
+                  <option value="10">Counter-Strike 1.6 (AppID #10)</option>
+                  <option value="753">Steam Client / Ecosystem (AppID #753)</option>
+                  <option value="240">Counter-Strike: Source (AppID #240)</option>
+                </select>
+              </div>
+              <div class="pioneer-row">
+                <button id="btnPublishCs2CollectorReview" type="button" class="pioneer-primary-btn sam-quick-btn" style="flex:1; justify-content:center;">🚀 1. Publicar en Expositor de Reseña + Ocultar Inventario</button>
+              </div>
+              <div class="pioneer-row">
+                <button id="btnUploadCs2ShowcaseToCloud" type="button" class="btn-action-sm sam-quick-btn" style="flex:1; justify-content:center;">🖼️ 2. Enviar Vitrina Gráfica (636x190) al Subidor Cloud</button>
+                <button id="btnCopyCs2InfoBoxBbcode" type="button" class="btn-action-sm sam-quick-btn" style="flex:1; justify-content:center;">📋 3. Copiar para Cuadro de Info (Sin etiquetas rotas)</button>
+              </div>
+              <textarea id="cs2CollectorBbcodeOutput" readonly rows="3" placeholder="Acá aparecerá el código BBCode limpio si querés copiarlo manualmente..." style="width:100%; display:none; font-family:monospace; font-size:0.74rem; margin-top:6px;"></textarea>
+            </div>
+          </div>
+
+          <!-- TARJETA 2: SUBIDOR DE CAPTURAS A STEAM CLOUD -->
           <div class="pioneer-card">
             <div class="pioneer-card-header">
               <span class="pioneer-badge accent-cyan">STEAM CLOUD (APPID 760)</span>

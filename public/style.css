@@ -5204,3 +5204,130 @@ body {
   color: #cbd5e1;
   cursor: pointer;
 }
+
+
+/* ==========================================================================
+   v67 — Authentic Steam Community Item Showcase Replica (CS2 Veteran Loadout)
+   ========================================================================== */
+
+.steam-native-item-showcase {
+  background: rgba(11, 15, 22, 0.94);
+  border: 1px solid rgba(102, 192, 244, 0.22);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  margin: 10px 0;
+}
+
+.steam-showcase-header {
+  background: linear-gradient(90deg, rgba(23, 32, 45, 0.95) 0%, rgba(13, 18, 26, 0.95) 100%);
+  padding: 7px 14px;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  color: #66c0f4;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.steam-showcase-slots-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  padding: 12px 14px 10px;
+}
+
+.steam-item-slot {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: radial-gradient(circle at 50% 45%, rgba(58, 90, 140, 0.32) 0%, #10151d 75%);
+  border: 2px solid var(--slot-border, #8650ac);
+  border-radius: 3px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.steam-item-slot:hover,
+.steam-item-slot.active {
+  transform: translateY(-2px);
+  box-shadow: 0 0 14px var(--slot-border, #8650ac);
+  background: radial-gradient(circle at 50% 45%, rgba(134, 80, 172, 0.38) 0%, #141b26 80%);
+}
+
+.steam-item-slot img {
+  width: 100%;
+  height: 76%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.65));
+}
+
+.steam-slot-tag {
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.steam-showcase-detail-bar {
+  margin: 0 14px 12px;
+  padding: 9px 12px;
+  background: #121822;
+  border: 1px solid #263345;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.steam-showcase-detail-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.steam-showcase-detail-text strong {
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+}
+
+.steam-showcase-detail-text small {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: #8f98a0;
+}
+
+.steam-inspect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(102, 192, 244, 0.22) 0%, rgba(42, 71, 94, 0.48) 100%);
+  border: 1px solid rgba(102, 192, 244, 0.45);
+  color: #c7d5e0;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.steam-inspect-btn:hover {
+  background: linear-gradient(180deg, #66c0f4 0%, #2a475e 100%);
+  color: #ffffff;
+}
+
+@media (max-width: 600px) {
+  .steam-showcase-slots-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
