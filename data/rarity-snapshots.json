@@ -1,0 +1,415 @@
+[
+  {
+    "appid": 550,
+    "capturedAt": "2026-10-14",
+    "sourceUrl": "https://steamcommunity.com/stats/L4D2/achievements/?l=english",
+    "sourceNote": "Steam Community indexed copy; reported crawl: last week. Exact observation date is unavailable.",
+    "expiresAt": "2026-11-04T00:00:00Z",
+    "rows": [
+      {
+        "name": "GNOME ALONE",
+        "percent": 69.6
+      },
+      {
+        "name": "ACID REFLEX",
+        "percent": 67
+      },
+      {
+        "name": "A RIDE DENIED",
+        "percent": 65.4
+      },
+      {
+        "name": "ARMORY OF ONE",
+        "percent": 51.2
+      },
+      {
+        "name": "PRICE CHOPPER",
+        "percent": 41.2
+      },
+      {
+        "name": "CRASS MENAGERIE",
+        "percent": 39.2
+      },
+      {
+        "name": "ELEPHANT IN THE ROOM",
+        "percent": 33.6
+      },
+      {
+        "name": "SEPTIC TANK",
+        "percent": 32.8
+      },
+      {
+        "name": "TORCH BEARER",
+        "percent": 30.2
+      },
+      {
+        "name": "MIDNIGHT RIDER",
+        "percent": 27.3
+      },
+      {
+        "name": "CHAIN OF COMMAND",
+        "percent": 25.7
+      },
+      {
+        "name": "HEAD HONCHO",
+        "percent": 23.8
+      },
+      {
+        "name": "BURNING SENSATION",
+        "percent": 22.8
+      },
+      {
+        "name": "WEATHERMAN",
+        "percent": 22.6
+      },
+      {
+        "name": "BRIDGE BURNER",
+        "percent": 20.6
+      },
+      {
+        "name": "RAGIN' CAJUN",
+        "percent": 20.5
+      },
+      {
+        "name": "SUPREME SACRIFICE",
+        "percent": 20.4
+      },
+      {
+        "name": "CLUB DEAD",
+        "percent": 18.4
+      },
+      {
+        "name": "GREAT EXPECTORATIONS",
+        "percent": 18.2
+      },
+      {
+        "name": "GET SKEETED ON",
+        "percent": 17.1
+      },
+      {
+        "name": "DEAD IN THE WATER",
+        "percent": 17
+      },
+      {
+        "name": "ROCKY HORROR PICTURE THROW",
+        "percent": 16.3
+      },
+      {
+        "name": "FRIED PIPER",
+        "percent": 15.7
+      },
+      {
+        "name": "STREAM CROSSER",
+        "percent": 15.6
+      },
+      {
+        "name": "GRAVE ROBBER",
+        "percent": 15.2
+      },
+      {
+        "name": "QUALIFIED RIDE",
+        "percent": 15
+      },
+      {
+        "name": "ROBBED ZOMBIE",
+        "percent": 14.6
+      },
+      {
+        "name": "KILL BILL",
+        "percent": 14.4
+      },
+      {
+        "name": "BACK IN THE SADDLE",
+        "percent": 14.2
+      },
+      {
+        "name": "MEAT TENDERIZER",
+        "percent": 12.6
+      },
+      {
+        "name": "DISMEMBERMENT PLAN",
+        "percent": 12.3
+      },
+      {
+        "name": "RODE HARD, PUT AWAY WET",
+        "percent": 12.3
+      },
+      {
+        "name": "CACHE GRAB",
+        "percent": 12.2
+      },
+      {
+        "name": "FORE!",
+        "percent": 12.1
+      },
+      {
+        "name": "STILL STANDING",
+        "percent": 11.9
+      },
+      {
+        "name": "KITE LIKE A MAN",
+        "percent": 11.5
+      },
+      {
+        "name": "LICKETY-SPLIT",
+        "percent": 11.3
+      },
+      {
+        "name": "GETTING STARTED",
+        "percent": 10.9
+      },
+      {
+        "name": "KILLING THEM SWIFTLY TO THIS SONG",
+        "percent": 10.8
+      },
+      {
+        "name": "GHOST OF CHRISTMAS PRESENT",
+        "percent": 10.3
+      },
+      {
+        "name": "A SPITTLE HELP FROM MY FRIENDS",
+        "percent": 10
+      },
+      {
+        "name": "CL0WND",
+        "percent": 9.8
+      },
+      {
+        "name": "LONG DISTANCE CARRIER",
+        "percent": 9.7
+      },
+      {
+        "name": "VIOLENCE IN SILENCE",
+        "percent": 9.1
+      },
+      {
+        "name": "TANK BURGER",
+        "percent": 8.3
+      },
+      {
+        "name": "LEVEL A CHARGE",
+        "percent": 8.2
+      },
+      {
+        "name": "SCATTERING RAM",
+        "percent": 7.6
+      },
+      {
+        "name": "FAT NINJA",
+        "percent": 7.5
+      },
+      {
+        "name": "Valve Gift Grab 2011 – L4D2",
+        "percent": 6.9
+      },
+      {
+        "name": "TIL IT GOES CLICK",
+        "percent": 6.5
+      },
+      {
+        "name": "ACID BATH",
+        "percent": 6.5
+      },
+      {
+        "name": "SOB STORY",
+        "percent": 6.4
+      },
+      {
+        "name": "GUARDIN' GNOME",
+        "percent": 6.3
+      },
+      {
+        "name": "BARREL ROLLED",
+        "percent": 6
+      },
+      {
+        "name": "CHAOS GENERATOR",
+        "percent": 6
+      },
+      {
+        "name": "SHOCK JOCK",
+        "percent": 5.5
+      },
+      {
+        "name": "NEW HAIRCUT",
+        "percent": 5.5
+      },
+      {
+        "name": "HUNTING PARTY",
+        "percent": 5.4
+      },
+      {
+        "name": "SCAVENGE HUNT",
+        "percent": 5.1
+      },
+      {
+        "name": "ON OUR WAY",
+        "percent": 5.1
+      },
+      {
+        "name": "I SPIT ON YOUR GRAVE",
+        "percent": 5.1
+      },
+      {
+        "name": "STACHE WHACKER",
+        "percent": 5
+      },
+      {
+        "name": "GONG SHOW",
+        "percent": 4.6
+      },
+      {
+        "name": "BRIDGE OVER TREBLED SLAUGHTER",
+        "percent": 4.4
+      },
+      {
+        "name": "WING AND A PRAYER",
+        "percent": 4.4
+      },
+      {
+        "name": "CACHE AND CARRY",
+        "percent": 4.2
+      },
+      {
+        "name": "THE QUICK AND THE DEAD",
+        "percent": 4
+      },
+      {
+        "name": "FLIGHT DECK",
+        "percent": 3.8
+      },
+      {
+        "name": "CONNECTING FIGHTS",
+        "percent": 3.7
+      },
+      {
+        "name": "THIS IS WHERE THE FUN BEGINS",
+        "percent": 3.7
+      },
+      {
+        "name": "POLE POSITION",
+        "percent": 3.6
+      },
+      {
+        "name": "CONFEDERACY OF CRUNCHES",
+        "percent": 3.5
+      },
+      {
+        "name": "MUTANT OVERLORD",
+        "percent": 3.3
+      },
+      {
+        "name": "THREE’S A CROWD",
+        "percent": 3.3
+      },
+      {
+        "name": "FUEL CRISIS",
+        "percent": 2.9
+      },
+      {
+        "name": "HOUSEHOLD NAMES",
+        "percent": 2.9
+      },
+      {
+        "name": "THE REAL DEAL",
+        "percent": 2.5
+      },
+      {
+        "name": "Z-GENOCIDEST 2: EPISODE 2",
+        "percent": 2.3
+      },
+      {
+        "name": "STILL SOMETHING TO PROVE",
+        "percent": 2.2
+      },
+      {
+        "name": "GOOD GUY NICK",
+        "percent": 2.2
+      },
+      {
+        "name": "THE MAIN ATTRACTION",
+        "percent": 2.2
+      },
+      {
+        "name": "GAS GUZZLER",
+        "percent": 2
+      },
+      {
+        "name": "BEAT THE RUSH",
+        "percent": 1.9
+      },
+      {
+        "name": "GAS SHORTAGE",
+        "percent": 1.8
+      },
+      {
+        "name": "HEARTWARMER",
+        "percent": 1.6
+      },
+      {
+        "name": "STRENGTH IN NUMBERS",
+        "percent": 1.5
+      },
+      {
+        "name": "WEDDING CRASHER",
+        "percent": 1.5
+      },
+      {
+        "name": "PORT OF SCAVENGE",
+        "percent": 1.5
+      },
+      {
+        "name": "SACRIFIZZLE",
+        "percent": 1.5
+      },
+      {
+        "name": "ONE HIT WONDER",
+        "percent": 1.5
+      },
+      {
+        "name": "SHOTGUN WEDDING",
+        "percent": 1.2
+      },
+      {
+        "name": "SUPREME SURVIVALIST",
+        "percent": 1.2
+      },
+      {
+        "name": "PURE SATISFACTION",
+        "percent": 1.1
+      },
+      {
+        "name": "THE LAST FRONTIER",
+        "percent": 1
+      },
+      {
+        "name": "SPITFIRE",
+        "percent": 1
+      },
+      {
+        "name": "THE LAST DASH",
+        "percent": 1
+      },
+      {
+        "name": "GOLDEN FREEMAN",
+        "percent": 0.9
+      },
+      {
+        "name": "THE BIG TEN",
+        "percent": 0.8
+      },
+      {
+        "name": "A LITTLE HACK AND SLASH",
+        "percent": 0.7
+      },
+      {
+        "name": "LIKE LAMBS TO THE SLAUGHTER",
+        "percent": 0.7
+      },
+      {
+        "name": "KILLING SPREE",
+        "percent": 0.7
+      }
+    ]
+  }
+]
