@@ -3327,6 +3327,7 @@ async function copyUserTimings(previewOnly=false){
   const maxMinutes=Number($('copyTimingsMaxMinutesInput')?.value||60);
   const stealth=Boolean($('stealthModeToggle')?.checked);
   const skipDateSpecific=$('modalSkipDateSpecificToggle')?Boolean($('modalSkipDateSpecificToggle').checked):true;
+  const includeAlreadyUnlocked=Boolean($('modalIncludeUnlockedToggle')?.checked);
   const isLiveBrowser=typeof window.testUI==='undefined';
   const box=$('modalSchedulePreviewBox');
   if(box&&isLiveBrowser){
@@ -3342,6 +3343,7 @@ async function copyUserTimings(previewOnly=false){
       ...(isLiveBrowser?{
         realisticDonor:true,
         skipDateSpecific,
+        includeAlreadyUnlocked,
         percentages:buildCurrentPercentagesMap(),
         ...(previewOnly?{action:'preview'}:{})
       }:{})
@@ -4716,35 +4718,94 @@ function updateSchedBannerForApp(appid) {
   }
 }
 
+function extractAppIdFromDonorUrl(rawUrl) {
+  const m = String(rawUrl || '').match(/\/(?:apps|stats)\/(\d{1,10})(?:\b|\/|$)/i);
+  return m ? Number(m[1]) : 0;
+}
+
+function ensureSchedGameSelectAppId(appid) {
+  const num = Number(appid || 0);
+  if (!num) return 0;
+  const sel = $('schedDashboardGameSelect');
+  if (!sel) return num;
+  let opt = [...sel.options].find(o => Number(o.value) === num);
+  if (!opt) {
+    const title = active?.gameNames?.[num] || `AppID #${num}`;
+    opt = new Option(`${title} (#${num})`, String(num));
+    sel.prepend(opt);
+  }
+  if (Number(sel.value) !== num) {
+    sel.value = String(num);
+    updateSchedBannerForApp(num);
+  }
+  return num;
+}
+
 function formatHumanScheduleDate(isoStr, offsetMs) {
   if (!isoStr) return '';
   const d = new Date(isoStr);
-  const days = Math.round((offsetMs || 0) / (24 * 3600000));
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const targetMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const calDays = Math.max(0, Math.round((targetMidnight - todayMidnight) / 86400000));
   const timePart = d.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit', hour12: false }) + ' hs';
-  if (days < 1) {
+  if (calDays === 0) {
     return `Hoy · ${timePart}`;
   }
-  if (days === 1) {
+  if (calDays === 1) {
     return `Mañana · ${timePart}`;
   }
+  if (calDays === 2) {
+    return `Pasado mañana (+2d) · ${timePart}`;
+  }
   const datePart = d.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' });
-  return `${datePart} (+${days}d) · ${timePart}`;
+  return `${datePart} (+${calDays}d) · ${timePart}`;
 }
 
 function renderSchedulePreviewBox(res, box, isDonor = false) {
   if (!box || !res) return;
   box.replaceChildren();
-  const estDays = Number(res.estimatedDays || 1);
-  const estMonths = Number(res.estimatedMonths || (estDays / 30).toFixed(1));
-  const spanText = estDays >= 45
-    ? `~${estMonths} meses (${estDays} días)`
-    : estDays > 1
-      ? `~${estDays} días`
-      : 'sesión de hoy';
-  const summary = element('div', undefined, 'sched-preview-summary');
-  const donorTag = isDonor && res.donorSteamId ? `🧬 Perfil clonado (${res.donorSteamId}) · ` : '📊 ';
-  summary.textContent = `${donorTag}${res.alreadyUnlockedCount ?? 0}/${res.totalGameAchievements ?? res.scheduledCount ?? 0} ya desbloqueados · ${res.scheduledCount ?? (res.queue?.length || 0)} logros en orden real a lo largo de ${spanText} (horario humano 16:00–23:30 hs).`;
-  box.append(summary);
+  const isDonorMode = Boolean(isDonor || res.donorMode);
+
+  if (isDonorMode) {
+    const donorCard = element('div', undefined, 'sched-donor-telemetry-card');
+    const donorTitleRow = element('div', undefined, 'sched-donor-telemetry-head');
+    const donorIdentity = `🧬 Donante reconocido: ${res.donorName || res.donorLabel || 'Jugador Verificado'}${res.donorSteamId ? ` (${res.donorSteamId})` : ''}`;
+    donorTitleRow.append(element('strong', donorIdentity, 'sched-donor-name'));
+    if (res.donorHoursPlayed !== null && res.donorHoursPlayed !== undefined) {
+      donorTitleRow.append(element('span', `🎮 ${res.donorHoursPlayed} h jugadas en Steam`, 'sched-donor-hours-pill'));
+    }
+    donorCard.append(donorTitleRow);
+
+    const fullRangeStr = res.donorFirstUnlockAt && res.donorLastUnlockAt
+      ? ` (${new Date(res.donorFirstUnlockAt).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} → ${new Date(res.donorLastUnlockAt).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})`
+      : '';
+    const fullDonorLine = element('div', `🏆 Platino real del donante: ${res.donorTotalUnlockedCount ?? res.scheduledCount}/${res.totalGameAchievements ?? res.scheduledCount} logros completados en ${res.donorFullDurationTextEs || res.durationTextEs || `${res.estimatedDays} días`}${fullRangeStr}`, 'sched-donor-meta-line');
+    donorCard.append(fullDonorLine);
+
+    const queueSpanLabel = res.durationTextEs || `${res.estimatedDays} días`;
+    const userQueueLine = element('div', undefined, 'sched-donor-queue-line');
+    if ((res.alreadyUnlockedCount || 0) > 0 && !res.includeAlreadyUnlocked) {
+      userQueueLine.textContent = `⏱️ Tu cola exacta 1:1: ${res.scheduledCount} logros faltantes (${res.alreadyUnlockedCount}/${res.totalGameAchievements} ya desbloqueados en tu cuenta) · Duración real: ${queueSpanLabel} (respetando al 100% los minutos, horas y días del donante).`;
+    } else {
+      userQueueLine.textContent = `⏱️ Tu cola exacta 1:1 (Platino completo desde cero): ${res.scheduledCount}/${res.totalGameAchievements ?? res.scheduledCount} logros en orden real a lo largo de ${queueSpanLabel} (copia 1:1 exacta del donante).`;
+    }
+    donorCard.append(userQueueLine);
+    box.append(donorCard);
+  } else {
+    const estDays = Number(res.estimatedDays || 1);
+    const estMonths = Number(res.estimatedMonths || (estDays / 30).toFixed(1));
+    const spanText = res.durationTextEs
+      ? res.durationTextEs
+      : estDays >= 45
+        ? `~${estMonths} meses (${estDays} días)`
+        : estDays > 1
+          ? `~${estDays} días`
+          : 'sesión de hoy';
+    const summary = element('div', undefined, 'sched-preview-summary');
+    summary.textContent = `📊 ${res.alreadyUnlockedCount ?? 0}/${res.totalGameAchievements ?? res.scheduledCount ?? 0} ya desbloqueados · ${res.scheduledCount ?? (res.queue?.length || 0)} logros en orden progresivo a lo largo de ${spanText}.`;
+    box.append(summary);
+  }
 
   if (Array.isArray(res.skippedSpecial) && res.skippedSpecial.length > 0) {
     const alertBox = element('div', undefined, 'sched-skipped-alert');
@@ -4765,13 +4826,25 @@ function renderSchedulePreviewBox(res, box, isDonor = false) {
   }
 
   const listWrap = element('div', undefined, 'sched-preview-list');
-  res.queue.slice(0, 35).forEach(item => {
+  res.queue.slice(0, 80).forEach(item => {
     const row = element('div', undefined, 'sched-preview-row');
     const pctNum = typeof item.percent === 'number' ? item.percent : null;
     const pctStr = pctNum !== null ? `${pctNum.toFixed(1)}%` : '—';
-    const tierBadgeText = item.donorUnlockedAt
-      ? `Donante (${new Date(item.donorUnlockedAt).toLocaleDateString('es-UY')})`
-      : (pctNum === null ? 'Progreso' : pctNum >= 45 ? 'Común' : pctNum >= 15 ? 'Campaña' : pctNum >= 4 ? 'Raro' : 'Grind Largo');
+    let tierBadgeText;
+    if (item.donorUnlockedAt) {
+      const dtStr = new Date(item.donorUnlockedAt).toLocaleString('es-UY', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const deltaStr = item.donorDeltaLabelEs ? ` · ${item.donorDeltaLabelEs}` : '';
+      tierBadgeText = `Donante (${dtStr}${deltaStr})`;
+    } else {
+      tierBadgeText = pctNum === null ? 'Progreso' : pctNum >= 45 ? 'Común' : pctNum >= 15 ? 'Campaña' : pctNum >= 4 ? 'Raro' : 'Grind Largo';
+    }
     const tierKindClass = item.donorUnlockedAt
       ? ' tier-donor'
       : (pctNum === null ? ' tier-campaign' : pctNum >= 45 ? ' tier-common' : pctNum >= 15 ? ' tier-campaign' : pctNum >= 4 ? ' tier-rare' : ' tier-grind rare');
@@ -4820,17 +4893,20 @@ async function previewModalSchedule() {
 }
 
 async function previewDashboardSchedule() {
-  const appid = Number($('schedDashboardGameSelect')?.value || 0);
+  const donorSource = ($('schedDonorProfileInput')?.value || '').trim();
+  const urlAppId = extractAppIdFromDonorUrl(donorSource);
+  if (urlAppId) ensureSchedGameSelectAppId(urlAppId);
+  const appid = Number($('schedDashboardGameSelect')?.value || urlAppId || 0);
   const pace = $('schedDashboardPaceSelect')?.value || 'legal_completionist';
   const skipDateSpecific = $('schedSkipDateSpecificToggle') ? Boolean($('schedSkipDateSpecificToggle').checked) : true;
-  const donorSource = ($('schedDonorProfileInput')?.value || '').trim();
+  const includeAlreadyUnlocked = Boolean($('schedIncludeUnlockedToggle')?.checked);
   const box = $('schedPreviewBox');
   if (!box) return;
   if (!activeAccountId || !appid) return;
   updateSchedBannerForApp(appid);
 
   if (donorSource) {
-    box.replaceChildren(element('p', '⏳ Analizando perfil del platinador donante y sus intervalos reales…', 'pioneer-card-desc'));
+    box.replaceChildren(element('p', '⏳ Reconociendo datos exactos del donante (fechas, intervalos 1:1 y duración real del platino)…', 'pioneer-card-desc'));
     try {
       const res = await api('/api/achievement/copy-timings', {
         accountId: activeAccountId,
@@ -4838,7 +4914,8 @@ async function previewDashboardSchedule() {
         source: donorSource,
         action: 'preview',
         realisticDonor: true,
-        skipDateSpecific
+        skipDateSpecific,
+        includeAlreadyUnlocked
       });
       renderSchedulePreviewBox(res, box, true);
       return;
@@ -4867,9 +4944,12 @@ async function previewDashboardSchedule() {
 }
 
 async function cloneDashboardDonorProfile() {
-  const appid = Number($('schedDashboardGameSelect')?.value || 0);
   const source = ($('schedDonorProfileInput')?.value || '').trim();
+  const urlAppId = extractAppIdFromDonorUrl(source);
+  if (urlAppId) ensureSchedGameSelectAppId(urlAppId);
+  const appid = Number($('schedDashboardGameSelect')?.value || urlAppId || 0);
   const skipDateSpecific = $('schedSkipDateSpecificToggle') ? Boolean($('schedSkipDateSpecificToggle').checked) : true;
+  const includeAlreadyUnlocked = Boolean($('schedIncludeUnlockedToggle')?.checked);
   if (!activeAccountId) return notice(t('liveActionNotice'));
   if (!appid) return notice('Elegí un juego de la lista primero.');
   if (!source) return notice('Pegá el link del perfil de SteamHunters, SteamCommunity o SteamID64 arriba, o tocá Auto-Programar con IA Legal.');
@@ -4878,13 +4958,14 @@ async function cloneDashboardDonorProfile() {
   const fb = $('schedDashboardFeedback');
   const box = $('schedPreviewBox');
   try {
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Clonando perfil legal…'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Clonando perfil 1:1 del donante…'; }
     const res = await api('/api/achievement/copy-timings', {
       accountId: activeAccountId,
       appid,
       source,
       realisticDonor: true,
-      skipDateSpecific
+      skipDateSpecific,
+      includeAlreadyUnlocked
     });
     if (fb && res?.message) fb.textContent = `✅ ${res.message}`;
     if (box) renderSchedulePreviewBox(res, box, true);
@@ -4894,7 +4975,7 @@ async function cloneDashboardDonorProfile() {
     if (fb) fb.textContent = `⚠️ ${e.message}`;
     notice(e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🧬 Clonar Perfil y Programar'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🧬 Clonar Perfil Pegado'; }
   }
 }
 
@@ -4926,7 +5007,7 @@ async function startDashboardSchedule() {
     if (fb) fb.textContent = `⚠️ ${e.message}`;
     notice(e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🤖 Auto-Programar con IA Legal (Sin link)'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 Auto-Programar sin Link (IA Legal)'; }
   }
 }
 
@@ -4934,6 +5015,27 @@ if ($('heroCarouselPrev')) $('heroCarouselPrev').addEventListener('click', () =>
 if ($('heroCarouselNext')) $('heroCarouselNext').addEventListener('click', () => stepHeroCarousel(1));
 if ($('schedPreviewQueueBtn')) $('schedPreviewQueueBtn').addEventListener('click', () => previewDashboardSchedule());
 if ($('schedStartDashboardBtn')) $('schedStartDashboardBtn').addEventListener('click', () => startDashboardSchedule());
+if ($('schedDonorProfileInput')) {
+  $('schedDonorProfileInput').addEventListener('paste', () => {
+    setTimeout(() => previewDashboardSchedule(), 40);
+  });
+  $('schedDonorProfileInput').addEventListener('change', () => previewDashboardSchedule());
+}
+if ($('schedIncludeUnlockedToggle')) {
+  $('schedIncludeUnlockedToggle').addEventListener('change', () => previewDashboardSchedule());
+}
+if ($('modalIncludeUnlockedToggle')) {
+  $('modalIncludeUnlockedToggle').addEventListener('change', () => {
+    if (($('copyTimingsSourceInput')?.value || '').trim()) copyUserTimings(true);
+  });
+}
+if ($('copyTimingsSourceInput')) {
+  $('copyTimingsSourceInput').addEventListener('paste', () => {
+    setTimeout(() => {
+      if (typeof window.testUI === 'undefined' && ($('copyTimingsSourceInput')?.value || '').trim()) copyUserTimings(true);
+    }, 40);
+  });
+}
 if ($('schedOpenGameModalBtn')) $('schedOpenGameModalBtn').addEventListener('click', () => {
   const appid = Number($('schedDashboardGameSelect')?.value || 0);
   if (!appid) return notice('Elegí un juego primero.');

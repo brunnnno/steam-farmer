@@ -2080,5 +2080,44 @@ test('5 simultaneous accounts farm trading cards without evicting each other and
     assert.equal(res.status, 200);
     assert.deepEqual(st.playedGames, [uniqueAppId, uniqueAppId + 1]);
   }
-});
 
+  // Verify 1:1 Exact Donor Timing Engine (_John_Doe_ 2.5-day GTA III #1546970 platinum):
+  // Never inflates 2.5 days into 5 days, preserves short intervals (+2m, +7m) and overnight breaks 1:1
+  const { parseDonorProfileReport, buildDonorRealisticSchedule } = require("../lib/steam-protocol");
+  const johnDoeStart = 1758300000; // 19/09/2025
+  const johnDoeXml = `<playerstats>
+    <steamID64>76561198012345678</steamID64>
+    <steamID><![CDATA[_John_Doe_]]></steamID>
+    <stats><hoursOnRecord>28.5</hoursOnRecord></stats>
+    <achievements>
+      <achievement closed="1"><apiname>GTA_ALREADY</apiname><name>First Steps</name><unlockTimestamp>${johnDoeStart}</unlockTimestamp></achievement>
+      <achievement closed="1"><apiname>GTA_1</apiname><name>Street Sweeper</name><unlockTimestamp>${johnDoeStart + 3600}</unlockTimestamp></achievement>
+      <achievement closed="1"><apiname>GTA_2</apiname><name>Liberty City Minute</name><unlockTimestamp>${johnDoeStart + 3600 + 420}</unlockTimestamp></achievement>
+      <achievement closed="1"><apiname>GTA_3</apiname><name>Dirty Money</name><unlockTimestamp>${johnDoeStart + 3600 + 48000}</unlockTimestamp></achievement>
+      <achievement closed="1"><apiname>GTA_FINAL</apiname><name>King of Liberty City</name><unlockTimestamp>${johnDoeStart + 216000}</unlockTimestamp></achievement>
+    </achievements>
+  </playerstats>`;
+  const userCurrentAchs = [
+    { apiname: "GTA_ALREADY", name: "First Steps", unlocked: true },
+    { apiname: "GTA_1", name: "Street Sweeper", unlocked: false },
+    { apiname: "GTA_2", name: "Liberty City Minute", unlocked: false },
+    { apiname: "GTA_3", name: "Dirty Money", unlocked: false },
+    { apiname: "GTA_FINAL", name: "King of Liberty City", unlocked: false }
+  ];
+  const fullReport = parseDonorProfileReport(johnDoeXml, userCurrentAchs, { includeAlreadyUnlocked: true });
+  assert.equal(fullReport.donorName, "_John_Doe_");
+  assert.equal(fullReport.donorSteamId64, "76561198012345678");
+  assert.equal(fullReport.donorHoursPlayed, 28.5);
+  assert.equal(fullReport.donorTotalUnlockedCount, 5);
+  assert.equal(fullReport.donorFullDaysExact, 2.5, "Donor full platinum span must be recognized as exactly 2.5 days");
+  assert.equal(fullReport.donorFullHoursExact, 60, "Donor full platinum span must be 60 hours");
+
+  const fullSched = buildDonorRealisticSchedule(fullReport.timings, {
+    achievementsByApi: new Map(userCurrentAchs.map(a => [a.apiname, a])),
+    donorReport: fullReport
+  });
+  assert.equal(fullSched.estimatedDays, 2.5, "Schedule must take exactly 2.5 days, never 5 days");
+  assert.equal(fullSched.estimatedHours, 60);
+  // Check that the 7-minute (420s) gap between Street Sweeper and Liberty City Minute is preserved 1:1 (420,000 ms)
+  assert.equal(fullSched.customDelaysMs[2] - fullSched.customDelaysMs[1], 420 * 1000, "7-minute donor interval must be preserved 1:1 without fake 45-minute padding");
+});

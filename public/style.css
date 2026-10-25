@@ -6173,3 +6173,49 @@ body:not(.test-ui-mode) [data-event-20] {
   display: none !important;
 }
 
+
+/* v65 — Donor Telemetry Card (1:1 Exact SteamHunters / SteamCommunity Recognition) */
+.sched-donor-telemetry-card {
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.10));
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.sched-donor-telemetry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sched-donor-name {
+  color: #34d399;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.sched-donor-hours-pill {
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #93c5fd;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.sched-donor-meta-line {
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.sched-donor-queue-line {
+  color: #93c5fd;
+  font-size: 0.81rem;
+  font-weight: 600;
+  line-height: 1.4;
+}

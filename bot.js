@@ -1504,14 +1504,17 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
       if(url.pathname==='/api/achievement/copy-timings'&&req.method==='POST'){
         const acc=getAccount(req,url,data),st=stateFor(acc.id),client=clients.get(acc.id),identity=client?.steamID?.toString();
         if(!isAuthorizedAccount(acc)||!st.connected||!st.tokenAccountMatches||st.isCollisionPaused||!identity||identity!==st.steamId64)throw fail('Copying user timings requires the available connected main Steam account.',409);
-        rate(`copy-timings:${acc.id}`,12,60000);
-        const id=appId(data.appid),stealth=Boolean(data.stealth);
+        rate(`copy-timings:${acc.id}`,18,60000);
         const sourceInput=String(data.source||'').trim();
         if(!sourceInput||sourceInput.length>262144)throw fail('Pegá el enlace de un perfil (SteamHunters, SteamCommunity o SteamID64).',400);
+        const urlAppMatch=sourceInput.match(/\/(?:apps|stats)\/(\d{1,10})(?:\b|\/|$)/i);
+        const detectedAppId=urlAppMatch?Number(urlAppMatch[1]):null;
+        const id=appId(data.appid||detectedAppId),stealth=Boolean(data.stealth);
         let rawPayload=sourceInput;
         let donorLabel=sourceInput.slice(0,64);
         if(!sourceInput.startsWith('<')&&!sourceInput.startsWith('{')&&!sourceInput.startsWith('[')){
           let targetUrl=null;
+          let fallbackSteamHuntersUrl=/^https?:\/\/(?:www\.)?steamhunters\.com\//i.test(sourceInput)?sourceInput:null;
           const sid64Match=sourceInput.match(/(7656119\d{10})/);
           const steamUrlMatch=sourceInput.match(/https?:\/\/(?:www\.)?(?:steamcommunity\.com|steamhunters\.com)\/(id|profiles)\/([^/?#]+)/i);
           if(sid64Match){
@@ -1522,9 +1525,9 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             const ident=steamUrlMatch[2];
             donorLabel=ident;
             targetUrl=`https://steamcommunity.com/${kind}/${encodeURIComponent(ident)}/stats/${id}/?xml=1`;
-          }else if(/^https?:\/\/(?:www\.)?steamhunters\.com\//i.test(sourceInput)){
+          }else if(fallbackSteamHuntersUrl){
             try{
-              const shPage=await remote(sourceInput,{maxBytes:512*1024});
+              const shPage=await remote(fallbackSteamHuntersUrl,{maxBytes:512*1024});
               const shSid=shPage.body.match(/(7656119\d{10})/);
               if(shSid){
                 donorLabel=`SteamHunters (${shSid[1]})`;
@@ -1538,16 +1541,49 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           }else{
             throw fail('Ingresá un enlace válido de SteamHunters, SteamCommunity, un SteamID64 de 17 dígitos o tu nombre personalizado.',400);
           }
-          const fetched=await remote(targetUrl,{maxBytes:512*1024});
+          let fetched=null;
+          try{
+            fetched=await remote(targetUrl,{maxBytes:512*1024});
+          }catch(fetchErr){
+            if(fallbackSteamHuntersUrl){
+              try{
+                const shPage=await remote(fallbackSteamHuntersUrl,{maxBytes:512*1024});
+                const shSid=shPage.body.match(/(7656119\d{10})/);
+                if(shSid){
+                  donorLabel=`${donorLabel} (${shSid[1]})`;
+                  fetched=await remote(`https://steamcommunity.com/profiles/${shSid[1]}/stats/${id}/?xml=1`,{maxBytes:512*1024});
+                }
+              }catch{}
+            }
+            if(!fetched)throw fetchErr;
+          }
           rawPayload=fetched.body;
+          if((/<error>/i.test(rawPayload)||!/<achievement\b/i.test(rawPayload))&&fallbackSteamHuntersUrl){
+            try{
+              const shPage=await remote(fallbackSteamHuntersUrl,{maxBytes:512*1024});
+              const shSid=shPage.body.match(/(7656119\d{10})/);
+              if(shSid){
+                const retryFetched=await remote(`https://steamcommunity.com/profiles/${shSid[1]}/stats/${id}/?xml=1`,{maxBytes:512*1024});
+                if(/<achievement\b/i.test(retryFetched.body))rawPayload=retryFetched.body;
+              }
+            }catch{}
+          }
           if(/<privacyState>\s*(private|friendsonly)\s*<\/privacyState>/i.test(rawPayload)){
             throw fail('Ese perfil de jugador tiene las estadísticas de juegos en privado en Steam. Elegí otro jugador de la lista de SteamHunters.',409);
           }
         }
         const snapshot=await progressSnapshotRead(client,id,{skipLibrarySummary:true});
         const view=parseSnapshot(snapshot,id);
-        const timings=parseExternalUserTimings(rawPayload,view.achievements);
-        if(!timings.length)throw fail('No se encontraron logros pendientes con fecha pública en ese perfil para este juego (verificá que el jugador tenga sus detalles de juego públicos en Steam).',409);
+        const includeAlreadyUnlockedReq=Boolean(data.includeAlreadyUnlocked);
+        const donorReport=require('./lib/steam-protocol').parseDonorProfileReport(rawPayload,view.achievements,{includeAlreadyUnlocked:includeAlreadyUnlockedReq});
+        let timings=donorReport.timings;
+        let autoIncludedUnlocked=false;
+        if(!timings.length&&donorReport.allDonorUnlocked.length){
+          timings=donorReport.allDonorUnlocked.filter(e=>!e.serverControlled).map(e=>({apiname:e.apiname,unlockTimestamp:e.unlockTimestamp,alreadyUnlockedByUser:e.alreadyUnlockedByUser}));
+          autoIncludedUnlocked=true;
+        }
+        if(!timings.length)throw fail('No se encontraron logros con fecha pública en ese perfil para este juego (verificá que el jugador tenga sus detalles de juego públicos en Steam).',409);
+        if(donorReport.donorName)donorLabel=donorReport.donorName;
 
         if(data.realisticDonor){
           let percentagesMap=null;
@@ -1558,10 +1594,13 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           const achievementsByApi=new Map((view.achievements||[]).map(a=>[a.apiname,a]));
           const nowMs=Date.now();
           const skipDateSpecific=data.skipDateSpecific!==false;
+          const compressHiatus=Boolean(data.compressHiatus);
           const donorSched=require('./lib/steam-protocol').buildDonorRealisticSchedule(timings,{
             achievementsByApi,
             percentagesMap,
             skipDateSpecific,
+            compressHiatus,
+            donorReport,
             baseNowMs:nowMs
           });
           const previewQueue=donorSched.items.map((it,idx)=>({
@@ -1570,6 +1609,10 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             name:it.name||it.apiname,
             percent:it.percent??null,
             donorUnlockedAt:it.donorUnlockTimestamp?new Date(it.donorUnlockTimestamp*1000).toISOString():null,
+            donorDeltaFromPrevSec:it.donorDeltaFromPrevSec??0,
+            donorDeltaFromStartSec:it.donorDeltaFromStartSec??0,
+            donorDeltaLabelEs:it.donorDeltaLabelEs||'',
+            alreadyUnlockedByUser:Boolean(it.alreadyUnlockedByUser),
             offsetMs:donorSched.customDelaysMs[idx]||0,
             estimatedAt:new Date(nowMs+(donorSched.customDelaysMs[idx]||0)).toISOString()
           }));
@@ -1580,25 +1623,50 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
             label:it.specialCondition?.label||'📅 Fecha/Evento Especial',
             reasonEs:it.specialCondition?.reasonEs||''
           }));
+          const commonDonorMeta={
+            donorMode:true,
+            donorLabel,
+            donorName:donorReport.donorName||donorLabel,
+            donorSteamId:donorReport.donorSteamId64||null,
+            donorHoursPlayed:donorReport.donorHoursPlayed??null,
+            donorHoursLast2Weeks:donorReport.donorHoursLast2Weeks??null,
+            donorTotalUnlockedCount:donorReport.donorTotalUnlockedCount,
+            donorFirstUnlockAt:donorReport.donorFirstUnlockAt,
+            donorLastUnlockAt:donorReport.donorLastUnlockAt,
+            donorFullDurationTextEs:donorReport.donorFullDurationTextEs,
+            donorFullDaysExact:donorReport.donorFullDaysExact,
+            donorFullHoursExact:donorReport.donorFullHoursExact,
+            durationTextEs:donorSched.durationTextEs,
+            estimatedHours:donorSched.estimatedHours,
+            estimatedDays:donorSched.estimatedDays,
+            estimatedMonths:donorSched.estimatedMonths,
+            includeAlreadyUnlocked:Boolean(includeAlreadyUnlockedReq||autoIncludedUnlocked),
+            detectedAppId:detectedAppId||id
+          };
           if(data.action==='preview'){
             return json(res,200,{
               preview:true,
-              donorMode:true,
-              donorLabel,
+              ...commonDonorMeta,
               appid:id,
               totalGameAchievements:(view.achievements||[]).length,
               alreadyUnlockedCount:(view.achievements||[]).filter(a=>a.unlocked===true).length,
-              pendingCount:timings.length,
+              pendingCount:donorReport.pendingTimings.length,
               scheduledCount:previewQueue.length,
               skippedSpecialCount:skippedList.length,
               skippedSpecial:skippedList,
-              estimatedDays:donorSched.estimatedDays,
-              estimatedMonths:donorSched.estimatedMonths,
               summaryTextEs:donorSched.summaryTextEs,
               queue:previewQueue
             });
           }
           if(!donorSched.items.length)throw fail('Todos los logros restantes en ese perfil corresponden a eventos de fecha específica protegidos.',409);
+          // Si el usuario activó incluir logros ya desbloqueados (platino 1:1 desde cero), bloquear primero los actuales
+          if((includeAlreadyUnlockedReq||autoIncludedUnlocked)&&(view.achievements||[]).some(a=>a.unlocked===true)){
+            try{
+              const receipts=await operations.latest(identity,id);
+              const lockSel=buildBulkSelection(snapshot,id,'lock_all',receipts,{allowRetoggle:true,forceLockAll:true});
+              await changesWrite(client,id,lockSel,{expectedRevision:undefined,bulk:true,resetCounters:true,wipeStats:true,allowRetoggle:true,overrideCooldown:true,stealth});
+            }catch{}
+          }
           const status=timedManager.start({
             accountId:acc.id,
             appid:id,
@@ -1612,15 +1680,13 @@ budget.run(()=>runReadOnlyProbes(client),'small').then(result=>{if(isCurrent()&&
           });
           return json(res,200,{
             ...status,
-            donorMode:true,
-            donorLabel,
+            ...commonDonorMeta,
             copiedCount:donorSched.items.length,
             totalGameAchievements:(view.achievements||[]).length,
             alreadyUnlockedCount:(view.achievements||[]).filter(a=>a.unlocked===true).length,
+            pendingCount:donorReport.pendingTimings.length,
             scheduledCount:previewQueue.length,
             skippedSpecial:skippedList,
-            estimatedDays:donorSched.estimatedDays,
-            estimatedMonths:donorSched.estimatedMonths,
             summaryTextEs:donorSched.summaryTextEs,
             queue:previewQueue,
             message:donorSched.summaryTextEs

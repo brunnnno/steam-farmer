@@ -252,6 +252,13 @@
                   <div class="pioneer-row apple-donor-input-row">
                     <input type="text" id="copyTimingsSourceInput" placeholder="Ej: https://steamhunters.com/profiles/7656119... o https://steamcommunity.com/id/...">
                   </div>
+                  <label class="sched-protection-inline apple-shield-label" style="margin-top:8px;">
+                    <input type="checkbox" id="modalIncludeUnlockedToggle">
+                    <div>
+                      <strong>🔄 Re-sincronizar platino completo 1:1 desde cero</strong>
+                      <small>Incluye también los logros ya desbloqueados para replicar el 100% de la duración del donante.</small>
+                    </div>
+                  </label>
                   <div class="pioneer-row apple-donor-btn-row">
                     <button id="btnPreviewDonorModal" type="button" class="btn-action-sm sam-quick-btn">🔍 Previsualizar Perfil</button>
                     <button id="copyTimingsBtn" type="button" class="btn-main sam-quick-btn">🧬 Clonar Perfil y Programar</button>
@@ -808,6 +815,15 @@
                   <button id="schedPreviewQueueBtn" type="button" class="btn-action-sm sam-quick-btn">🔍 Analizar</button>
                 </div>
               </div>
+
+              <!-- Opción de Re-sincronizar Platino Completo 1:1 desde cero -->
+              <label class="sched-protection-box" style="margin-bottom:6px;">
+                <input type="checkbox" id="schedIncludeUnlockedToggle">
+                <div>
+                  <strong>🔄 Clonar platino 100% desde cero (incluir también logros ya desbloqueados)</strong>
+                  <small>Si ya tenés algunos logros desbloqueados de antes, los reinicia y clona los 100% del donante con su tiempo total exacto (ej. 2.5 días).</small>
+                </div>
+              </label>
 
               <!-- Protección de Fechas Especiales -->
               <label class="sched-protection-box">
